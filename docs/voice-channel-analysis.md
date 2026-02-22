@@ -73,6 +73,7 @@ connection.playOpusPacket()
 3. `socket.send()` throws `ERR_SOCKET_DGRAM_NOT_RUNNING`
 
 **Evidence from @discordjs/voice source:**
+
 ```javascript
 keepAlive() {
   this.keepAliveBuffer.writeUInt32LE(this.keepAliveCounter, 0);
@@ -88,13 +89,15 @@ keepAlive() {
 **Potential Causes:**
 
 1. **Speaking session collision** - The code uses `speakingSessionCount` to prevent processing audio from older speaking sessions, but this might be too aggressive:
+
    ```typescript
    if (currentSessionCount !== speakingSessionCount) {
-     return  // Drops audio frames
+     return // Drops audio frames
    }
    ```
 
 2. **Stream error handling is passive** - Errors on streams are logged but not recovered:
+
    ```typescript
    decoder.on('error', (error) => {
      voiceLogger.error(`Opus decoder error for user ${userId}:`, error)
@@ -109,6 +112,7 @@ keepAlive() {
 ### Issue 3: Connection State Race Conditions
 
 The code checks connection state before sending:
+
 ```typescript
 if (connection.state.status !== VoiceConnectionStatus.Ready) {
   voiceLogger.log('Skipping packet: connection not ready')
@@ -149,7 +153,9 @@ function safePlayOpusPacket(connection: VoiceConnection, packet: Buffer) {
       connection.playOpusPacket(packet)
     }
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ERR_SOCKET_DGRAM_NOT_RUNNING') {
+    if (
+      (error as NodeJS.ErrnoException).code === 'ERR_SOCKET_DGRAM_NOT_RUNNING'
+    ) {
       voiceLogger.warn('Socket closed during packet send, ignoring')
     } else {
       throw error
@@ -161,9 +167,10 @@ function safePlayOpusPacket(connection: VoiceConnection, packet: Buffer) {
 ### Plan 3: Improve Audio Receive Robustness
 
 1. **Persistent subscription mode** - Use `EndBehaviorType.Manual` instead of `AfterSilence` for more control:
+
    ```typescript
    const audioStream = receiver.subscribe(userId, {
-     end: { behavior: EndBehaviorType.Manual }
+     end: { behavior: EndBehaviorType.Manual },
    })
    ```
 
@@ -185,19 +192,19 @@ Add a state wrapper that queues operations when connection is transitioning:
 class SafeVoiceConnection {
   private pendingPackets: Buffer[] = []
   private isTransitioning = false
-  
+
   constructor(private connection: VoiceConnection) {
     connection.on('stateChange', (oldState, newState) => {
-      this.isTransitioning = 
+      this.isTransitioning =
         newState.status === VoiceConnectionStatus.Connecting ||
         newState.status === VoiceConnectionStatus.Signalling
-      
+
       if (newState.status === VoiceConnectionStatus.Ready) {
         this.flushPendingPackets()
       }
     })
   }
-  
+
   playOpusPacket(packet: Buffer) {
     if (this.isTransitioning) {
       this.pendingPackets.push(packet)
@@ -211,6 +218,7 @@ class SafeVoiceConnection {
 ### Plan 5: Voice Connection Lifecycle Improvements
 
 1. **Add connection error listener in setupVoiceHandling:**
+
    ```typescript
    connection.on('error', (error) => {
      voiceLogger.error('Connection error:', error)
@@ -220,10 +228,11 @@ class SafeVoiceConnection {
    ```
 
 2. **Implement exponential backoff for reconnection:**
+
    ```typescript
    let reconnectAttempts = 0
    const maxAttempts = 5
-   
+
    connection.on(VoiceConnectionStatus.Disconnected, async () => {
      if (reconnectAttempts < maxAttempts) {
        const delay = Math.min(1000 * 2 ** reconnectAttempts, 30000)

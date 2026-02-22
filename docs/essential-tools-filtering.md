@@ -123,11 +123,11 @@ const sendPartMessage = async (part: Part) => {
 
 ### Verbosity Decision Logic
 
-| Verbosity Mode | Text Parts | Essential Tools | Non-Essential Tools | Other Parts |
-|---|---|---|---|---|
-| `text-only` | ✓ Show | ✗ Skip | ✗ Skip | ✗ Skip |
-| `text-and-essential-tools` | ✓ Show | ✓ Show | ✗ Skip | ? (reasoning, etc.) |
-| `tools-and-text` | ✓ Show | ✓ Show | ✓ Show | ✓ Show (all types) |
+| Verbosity Mode             | Text Parts | Essential Tools | Non-Essential Tools | Other Parts         |
+| -------------------------- | ---------- | --------------- | ------------------- | ------------------- |
+| `text-only`                | ✓ Show     | ✗ Skip          | ✗ Skip              | ✗ Skip              |
+| `text-and-essential-tools` | ✓ Show     | ✓ Show          | ✗ Skip              | ? (reasoning, etc.) |
+| `tools-and-text`           | ✓ Show     | ✓ Show          | ✓ Show              | ✓ Show (all types)  |
 
 ### Key Points
 
@@ -150,6 +150,7 @@ if (part.tool === 'skill') {
 ```
 
 Example Discord output:
+
 - Tool summary line: `┣ _skill-name_`
 - The skill name is italicized
 
@@ -181,7 +182,9 @@ Verbosity filtering is also used for:
 Verbosity settings are stored per-channel in SQLite:
 
 ```typescript
-export async function getChannelVerbosity(channelId: string): Promise<VerbosityLevel> {
+export async function getChannelVerbosity(
+  channelId: string,
+): Promise<VerbosityLevel> {
   const row = await prisma.channel_verbosity.findUnique({
     where: { channel_id: channelId },
   })
@@ -224,18 +227,21 @@ kimaki --verbosity text-and-essential-tools
 ## Summary
 
 **Essential tools are:**
+
 - File edits, writes, patches
 - Side-effect bash commands
 - Todo/task state changes
 - Any custom MCP tools (user-defined)
 
 **Non-essential tools are:**
+
 - File reading (`read`, `list`, `glob`, `grep`)
 - Skill tool invocations
 - User questions
 - Web fetching
 
 **Filtering happens at:**
+
 1. `isEssentialToolPart()` - Determines if a tool part is essential
 2. `sendPartMessage()` - Applies verbosity filter during streaming
 3. Large output notifications and context reporting - Also respect verbosity

@@ -22,21 +22,21 @@ The plugin hooks into `chat.message`, which fires when you send a message. If th
 Kimaki supports any OpenCode plugin. Create this file at `~/.config/opencode/plugins/abort-on-x.ts`:
 
 ```ts
-import type { Plugin } from "@opencode-ai/plugin";
+import type { Plugin } from '@opencode-ai/plugin'
 
 export const AbortOnXPlugin: Plugin = async ({ client }) => ({
-  "chat.message": async (input, output) => {
+  'chat.message': async (input, output) => {
     const text = output.parts
-      .filter((p) => p.type === "text")
+      .filter((p) => p.type === 'text')
       .map((p) => (p as { text: string }).text.trim())
-      .join("");
+      .join('')
 
-    if (text.toLowerCase() === "x") {
-      output.parts.length = 0;
-      await client.session.abort({ path: { id: input.sessionID } });
+    if (text.toLowerCase() === 'x') {
+      output.parts.length = 0
+      await client.session.abort({ path: { id: input.sessionID } })
     }
   },
-});
+})
 ```
 
 Plugins in `~/.config/opencode/plugins/` load automatically on startup. No config changes needed.

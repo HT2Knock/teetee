@@ -82,7 +82,7 @@ description: Build agent, no bash or external tools
 mode: primary
 model: anthropic/claude-sonnet-4-20250514
 variant: high
-color: "#E67E22"
+color: '#E67E22'
 steps: 50
 permission:
   bash: deny
@@ -93,25 +93,26 @@ permission:
 
 ### Frontmatter reference
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `model` | string | Model ID as `provider/model` (e.g. `anthropic/claude-sonnet-4-20250514`) |
-| `variant` | string | Thinking level: `low`, `high`, `max` (available values depend on model) |
-| `mode` | string | `primary` (top-level agent) or `all` (usable as both top-level and subagent) |
-| `description` | string | Shown in the `/agent` selector and agent autocomplete |
-| `permission` | object | Auto-allow/deny permissions: `question`, `plan_enter`, `bash`, `edit`, etc. |
-| `temperature` | number | Sampling temperature (e.g. `0.3` for deterministic, `1.0` for creative) |
-| `top_p` | number | Top-p nucleus sampling |
-| `steps` | number | Max agentic iterations before forcing a text-only response |
-| `hidden` | boolean | Hide from the agent selector UI |
-| `color` | string | Hex color (e.g. `"#FF5733"`) or theme color (`primary`, `warning`, etc.) |
-| `options` | object | Extra provider-specific parameters passed through to the model API |
+| Field         | Type    | Description                                                                  |
+| ------------- | ------- | ---------------------------------------------------------------------------- |
+| `model`       | string  | Model ID as `provider/model` (e.g. `anthropic/claude-sonnet-4-20250514`)     |
+| `variant`     | string  | Thinking level: `low`, `high`, `max` (available values depend on model)      |
+| `mode`        | string  | `primary` (top-level agent) or `all` (usable as both top-level and subagent) |
+| `description` | string  | Shown in the `/agent` selector and agent autocomplete                        |
+| `permission`  | object  | Auto-allow/deny permissions: `question`, `plan_enter`, `bash`, `edit`, etc.  |
+| `temperature` | number  | Sampling temperature (e.g. `0.3` for deterministic, `1.0` for creative)      |
+| `top_p`       | number  | Top-p nucleus sampling                                                       |
+| `steps`       | number  | Max agentic iterations before forcing a text-only response                   |
+| `hidden`      | boolean | Hide from the agent selector UI                                              |
+| `color`       | string  | Hex color (e.g. `"#FF5733"`) or theme color (`primary`, `warning`, etc.)     |
+| `options`     | object  | Extra provider-specific parameters passed through to the model API           |
 
 Any unknown frontmatter keys are automatically merged into `options` and forwarded to the provider, so you can pass provider-specific parameters directly in frontmatter without nesting them under `options`.
 
 ### Activating
 
 After creating or editing agent files, restart kimaki so it picks up the new slash commands. Then switch with:
+
 - `/agent` dropdown to pick from all available agents
 - `/<name>-agent` slash command for instant one-step switching (e.g. `/sonnet-high-agent`, `/opus-max-agent`, `/gpt5-agent`)
 

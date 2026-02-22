@@ -61,7 +61,7 @@ Semantic search across `MEMORY.md` + `memory/*.md` files.
 
 **Tool description (verbatim from source):**
 
-> Mandatory recall step: semantically search MEMORY.md + memory/*.md
+> Mandatory recall step: semantically search MEMORY.md + memory/\*.md
 > (and optional session transcripts) before answering questions about
 > prior work, decisions, dates, people, preferences, or todos; returns
 > top snippets with path + lines. If response has disabled=true, memory
@@ -95,7 +95,7 @@ Safe snippet read from a memory file after search.
 
 **Tool description (verbatim from source):**
 
-> Safe snippet read from MEMORY.md or memory/*.md with optional
+> Safe snippet read from MEMORY.md or memory/\*.md with optional
 > from/lines; use after memory_search to pull only the needed lines and
 > keep context small.
 
@@ -106,7 +106,7 @@ The system prompt injects a `## Memory Recall` section (only when
 skipped in subagent/minimal mode):
 
 > Before answering anything about prior work, decisions, dates, people,
-> preferences, or todos: run memory_search on MEMORY.md + memory/*.md;
+> preferences, or todos: run memory_search on MEMORY.md + memory/\*.md;
 > then use memory_get to pull only the needed lines. If low confidence
 > after search, say you checked.
 > Citations: include Source: <path#line> when it helps the user verify
@@ -173,7 +173,16 @@ per-action requirements.
   "properties": {
     "action": {
       "type": "string",
-      "enum": ["status", "list", "add", "update", "remove", "run", "runs", "wake"]
+      "enum": [
+        "status",
+        "list",
+        "add",
+        "update",
+        "remove",
+        "run",
+        "runs",
+        "wake"
+      ]
     },
     "gatewayUrl": {
       "type": "string"
@@ -228,6 +237,7 @@ per-action requirements.
 > send wake events.
 >
 > ACTIONS:
+>
 > - status: Check cron scheduler status
 > - list: List jobs (use includeDisabled:true to include disabled)
 > - add: Create job (requires job object, see schema below)
@@ -238,6 +248,7 @@ per-action requirements.
 > - wake: Send wake event (requires text, optional mode)
 >
 > JOB SCHEMA (for add action):
+>
 > ```
 > {
 >   "name": "string (optional)",
@@ -250,6 +261,7 @@ per-action requirements.
 > ```
 >
 > SCHEDULE TYPES (schedule.kind):
+>
 > - "at": One-shot at absolute time
 >   `{ "kind": "at", "at": "<ISO-8601 timestamp>" }`
 > - "every": Recurring interval
@@ -260,26 +272,30 @@ per-action requirements.
 > ISO timestamps without an explicit timezone are treated as UTC.
 >
 > PAYLOAD TYPES (payload.kind):
+>
 > - "systemEvent": Injects text as system event into session
 >   `{ "kind": "systemEvent", "text": "<message>" }`
 > - "agentTurn": Runs agent with message (isolated sessions only)
 >   `{ "kind": "agentTurn", "message": "<prompt>", "model": "<optional>",
->      "thinking": "<optional>", "timeoutSeconds": <optional> }`
+   "thinking": "<optional>", "timeoutSeconds": <optional> }`
 >
 > DELIVERY (top-level):
->   `{ "mode": "none|announce|webhook", "channel": "<optional>",
->      "to": "<optional>", "bestEffort": <optional-bool> }`
->   - Default for isolated agentTurn jobs (when delivery omitted): "announce"
->   - announce: send to chat channel
->   - webhook: send finished-run event as HTTP POST to delivery.to
+> `{ "mode": "none|announce|webhook", "channel": "<optional>",
+     "to": "<optional>", "bestEffort": <optional-bool> }`
+>
+> - Default for isolated agentTurn jobs (when delivery omitted): "announce"
+> - announce: send to chat channel
+> - webhook: send finished-run event as HTTP POST to delivery.to
 >
 > CRITICAL CONSTRAINTS:
+>
 > - sessionTarget="main" REQUIRES payload.kind="systemEvent"
 > - sessionTarget="isolated" REQUIRES payload.kind="agentTurn"
-> Default: prefer isolated agentTurn jobs unless user explicitly wants
-> main-session system event.
+>   Default: prefer isolated agentTurn jobs unless user explicitly wants
+>   main-session system event.
 >
 > WAKE MODES (for wake action):
+>
 > - "next-heartbeat" (default): Wake on next heartbeat
 > - "now": Wake immediately
 >
@@ -310,64 +326,64 @@ Full TypeScript type from `src/cron/types.ts`:
 
 ```typescript
 type CronSchedule =
-  | { kind: "at"; at: string }                     // one-shot ISO-8601
-  | { kind: "every"; everyMs: number; anchorMs?: number }  // recurring interval
-  | { kind: "cron"; expr: string; tz?: string; staggerMs?: number }  // cron expr
+  | { kind: 'at'; at: string } // one-shot ISO-8601
+  | { kind: 'every'; everyMs: number; anchorMs?: number } // recurring interval
+  | { kind: 'cron'; expr: string; tz?: string; staggerMs?: number } // cron expr
 
-type CronSessionTarget = "main" | "isolated";
-type CronWakeMode = "next-heartbeat" | "now";
+type CronSessionTarget = 'main' | 'isolated'
+type CronWakeMode = 'next-heartbeat' | 'now'
 
 type CronPayload =
-  | { kind: "systemEvent"; text: string }
+  | { kind: 'systemEvent'; text: string }
   | {
-      kind: "agentTurn";
-      message: string;
-      model?: string;
-      thinking?: string;
-      timeoutSeconds?: number;
-      allowUnsafeExternalContent?: boolean;
-      deliver?: boolean;
-      channel?: CronMessageChannel;
-      to?: string;
-      bestEffortDeliver?: boolean;
-    };
+      kind: 'agentTurn'
+      message: string
+      model?: string
+      thinking?: string
+      timeoutSeconds?: number
+      allowUnsafeExternalContent?: boolean
+      deliver?: boolean
+      channel?: CronMessageChannel
+      to?: string
+      bestEffortDeliver?: boolean
+    }
 
 type CronDelivery = {
-  mode: "none" | "announce" | "webhook";
-  channel?: CronMessageChannel;
-  to?: string;
-  bestEffort?: boolean;
-};
+  mode: 'none' | 'announce' | 'webhook'
+  channel?: CronMessageChannel
+  to?: string
+  bestEffort?: boolean
+}
 
 type CronJobState = {
-  nextRunAtMs?: number;
-  runningAtMs?: number;
-  lastRunAtMs?: number;
-  lastStatus?: "ok" | "error" | "skipped";
-  lastError?: string;
-  lastDurationMs?: number;
-  consecutiveErrors?: number;
-  scheduleErrorCount?: number;
-  lastDelivered?: boolean;
-};
+  nextRunAtMs?: number
+  runningAtMs?: number
+  lastRunAtMs?: number
+  lastStatus?: 'ok' | 'error' | 'skipped'
+  lastError?: string
+  lastDurationMs?: number
+  consecutiveErrors?: number
+  scheduleErrorCount?: number
+  lastDelivered?: boolean
+}
 
 type CronJob = {
-  id: string;
-  agentId?: string;
-  sessionKey?: string;
-  name: string;
-  description?: string;
-  enabled: boolean;
-  deleteAfterRun?: boolean;
-  createdAtMs: number;
-  updatedAtMs: number;
-  schedule: CronSchedule;
-  sessionTarget: CronSessionTarget;
-  wakeMode: CronWakeMode;
-  payload: CronPayload;
-  delivery?: CronDelivery;
-  state: CronJobState;
-};
+  id: string
+  agentId?: string
+  sessionKey?: string
+  name: string
+  description?: string
+  enabled: boolean
+  deleteAfterRun?: boolean
+  createdAtMs: number
+  updatedAtMs: number
+  schedule: CronSchedule
+  sessionTarget: CronSessionTarget
+  wakeMode: CronWakeMode
+  payload: CronPayload
+  delivery?: CronDelivery
+  state: CronJobState
+}
 ```
 
 ### Storage
@@ -390,6 +406,7 @@ from known field names (`schedule`, `payload`, `message`, `text`,
 ### Auto-inference
 
 The tool automatically:
+
 - Injects `agentId` and `sessionKey` from the calling session context
 - Infers `delivery` target from the session key when not specified
   (parses peer/channel/group from the key)
@@ -436,6 +453,7 @@ special prompt. The model either acks with `HEARTBEAT_OK` (nothing to
 do) or produces proactive output delivered to the target channel.
 
 Defined across:
+
 - `src/auto-reply/heartbeat.ts` (prompt, token stripping, empty check)
 - `src/auto-reply/tokens.ts` (token constants)
 - `src/infra/heartbeat-runner.ts` (orchestrator, ~1189 lines)
@@ -443,16 +461,16 @@ Defined across:
 
 ### Constants
 
-| Constant | Value | File |
-|---|---|---|
-| `HEARTBEAT_TOKEN` | `"HEARTBEAT_OK"` | `tokens.ts:3` |
-| `SILENT_REPLY_TOKEN` | `"NO_REPLY"` | `tokens.ts:4` |
-| `HEARTBEAT_PROMPT` | `"Read HEARTBEAT.md if it exists..."` | `heartbeat.ts:6-7` |
-| `DEFAULT_HEARTBEAT_EVERY` | `"30m"` | `heartbeat.ts:8` |
-| `DEFAULT_HEARTBEAT_ACK_MAX_CHARS` | `300` | `heartbeat.ts:9` |
-| `DEFAULT_HEARTBEAT_TARGET` | `"last"` | `heartbeat-runner.ts:98` |
-| Wake coalesce delay | `250ms` | `heartbeat-wake.ts:36` |
-| Retry delay | `1000ms` | `heartbeat-wake.ts:37` |
+| Constant                          | Value                                 | File                     |
+| --------------------------------- | ------------------------------------- | ------------------------ |
+| `HEARTBEAT_TOKEN`                 | `"HEARTBEAT_OK"`                      | `tokens.ts:3`            |
+| `SILENT_REPLY_TOKEN`              | `"NO_REPLY"`                          | `tokens.ts:4`            |
+| `HEARTBEAT_PROMPT`                | `"Read HEARTBEAT.md if it exists..."` | `heartbeat.ts:6-7`       |
+| `DEFAULT_HEARTBEAT_EVERY`         | `"30m"`                               | `heartbeat.ts:8`         |
+| `DEFAULT_HEARTBEAT_ACK_MAX_CHARS` | `300`                                 | `heartbeat.ts:9`         |
+| `DEFAULT_HEARTBEAT_TARGET`        | `"last"`                              | `heartbeat-runner.ts:98` |
+| Wake coalesce delay               | `250ms`                               | `heartbeat-wake.ts:36`   |
+| Retry delay                       | `1000ms`                              | `heartbeat-wake.ts:37`   |
 
 ### Default heartbeat prompt (verbatim)
 
@@ -489,14 +507,14 @@ no exec events), the entire API call is **skipped** to save tokens.
 
 All triggers go through the wake queue in `heartbeat-wake.ts`:
 
-| Reason | What fires it | Priority |
-|---|---|---|
-| `interval` | Periodic timer (default 30m) | 1 (INTERVAL) |
-| `cron:<jobId>` | Cron service enqueues a systemEvent | 2 (DEFAULT) |
-| `exec-event` | Async command finishes | 2 (DEFAULT) |
-| `wake` | Model calls `cron({action:"wake", text:"..."})` | 3 (ACTION) |
-| `hook` | External webhook / bootstrap hook | 3 (ACTION) |
-| `retry` | Auto-retry after "requests-in-flight" skip | 0 (RETRY) |
+| Reason         | What fires it                                   | Priority     |
+| -------------- | ----------------------------------------------- | ------------ |
+| `interval`     | Periodic timer (default 30m)                    | 1 (INTERVAL) |
+| `cron:<jobId>` | Cron service enqueues a systemEvent             | 2 (DEFAULT)  |
+| `exec-event`   | Async command finishes                          | 2 (DEFAULT)  |
+| `wake`         | Model calls `cron({action:"wake", text:"..."})` | 3 (ACTION)   |
+| `hook`         | External webhook / bootstrap hook               | 3 (ACTION)   |
+| `retry`        | Auto-retry after "requests-in-flight" skip      | 0 (RETRY)    |
 
 The wake queue coalesces multiple simultaneous requests with 250ms
 debounce. Higher-priority reasons win if two come in for the same

@@ -83,10 +83,12 @@ Recommended shape (names can be tweaked to match existing style):
   - `attempts`, `last_run_at`, `last_error`
 
 Indexes:
+
 - `(status, next_run_at)` for efficient polling.
 - `(thread_id, status)` for cancellation.
 
 Migration requirement:
+
 - Update `discord/src/db.ts` migration logic so existing users get the new table
   without breaking old DBs.
 
@@ -123,6 +125,7 @@ Add tools in `discord/src/opencode-plugin.ts`:
 - `kimaki_list_scheduled_tasks`
 
 Implementation detail:
+
 - Each tool resolves `thread_id` via `thread_sessions` using
   `context.sessionID` (pattern already used by other tools in this file).
 - Tools forward to the lock server over localhost HTTP.
@@ -157,18 +160,22 @@ This is the practical replacement for "user read but no response".
 ## Phased Delivery
 
 Phase 1 (MVP):
+
 - DB table + migration
 - scheduler loop
 - `kimaki_mark_unfinished`
 
 Phase 2:
+
 - `kimaki_schedule_once` + `kimaki_cancel_scheduled_tasks`
 
 Phase 3:
+
 - recurring interval (`everyMs`)
 - recurring cron (`expr` + `tz`)
 
 Phase 4 (nice-to-have):
+
 - list tasks UX + "run now" debugging
 - per-channel defaults, suppress duplicates, smarter cancel signals (reaction,
   button click)
