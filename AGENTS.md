@@ -142,6 +142,19 @@ for the log prefixes always use short names
 kimaki will also output logs to the file discord/kimaki.log
 for checkout validation requests, prefer non-recursive checks unless the user asks otherwise.
 
+## opencode plugin and env vars
+
+the opencode plugin (`discord/src/opencode-plugin.ts`) runs inside the **opencode server process**, not the kimaki bot process. this means `config.ts` state (like `getMemoryEnabled()`, `getDataDir()`, etc.) is not available there.
+
+to pass bot-process state to the plugin, use `KIMAKI_*` env vars set in `opencode.ts` when spawning the server process. current env vars:
+
+- `KIMAKI_DATA_DIR`: data directory path
+- `KIMAKI_BOT_TOKEN`: discord bot token
+- `KIMAKI_LOCK_PORT`: lock server port for bot communication
+- `KIMAKI_MEMORY_ENABLED`: `"1"` when memory is enabled via `--memory` flag
+
+when adding new bot-side config that the plugin needs, add it as a `KIMAKI_*` env var in `opencode.ts` spawn env and read `process.env.KIMAKI_*` in the plugin. never import config.ts getters in the plugin.
+
 ## skills folder
 
 skills is a symlink to discord/skills. this is a folder of skills for kimaki. loaded by all kimaki users. some skills are synced from github repos. see discord/scripts/sync-skills.ts. so never manually update them. instead if need to updaste them start kimaki threads on those project, found via kimaki cli.
@@ -220,36 +233,35 @@ you can open files when i ask me "open in zed the line where ..." using the comm
 - if you encounter typescript lint errors for an npm package, read the node_modules/package/\*.d.ts files to understand the typescript types of the package. if you cannot understand them, ask me to help you with it.
 
 - NEVER silently suppress errors in catch {} blocks if they contain more than one function call
-
 ```ts
 // BAD. DO NOT DO THIS
-let favicon: string | undefined
+let favicon: string | undefined;
 if (docsConfig?.favicon) {
-  if (typeof docsConfig.favicon === 'string') {
-    favicon = docsConfig.favicon
+  if (typeof docsConfig.favicon === "string") {
+    favicon = docsConfig.favicon;
   } else if (docsConfig.favicon?.light) {
     // Use light favicon as default, could be enhanced with theme detection
-    favicon = docsConfig.favicon.light
+    favicon = docsConfig.favicon.light;
   }
 }
 // DO THIS. use an iife. Immediately Invoked Function Expression
 const favicon: string = (() => {
   if (!docsConfig?.favicon) {
-    return ''
+    return "";
   }
-  if (typeof docsConfig.favicon === 'string') {
-    return docsConfig.favicon
+  if (typeof docsConfig.favicon === "string") {
+    return docsConfig.favicon;
   }
   if (docsConfig.favicon?.light) {
     // Use light favicon as default, could be enhanced with theme detection
-    return docsConfig.favicon.light
+    return docsConfig.favicon.light;
   }
-  return ''
-})()
+  return "";
+})();
 // if you already know the type use it:
 const favicon: string = () => {
   // ...
-}
+};
 ```
 
 - when a package has to import files from another packages in the workspace never add a new tsconfig path, instead add that package as a workspace dependency using `pnpm i "package@workspace:*"`
@@ -266,12 +278,12 @@ always specify the type when creating arrays, especially for empty arrays. if yo
 
 ```ts
 // BAD: Type will be never[]
-const items = []
+const items = [];
 
 // GOOD: Specify the expected type
-const items: string[] = []
-const numbers: number[] = []
-const users: User[] = []
+const items: string[] = [];
+const numbers: number[] = [];
+const users: User[] = [];
 ```
 
 remember to always add the explicit type to avoid unexpected type inference.
@@ -428,38 +440,38 @@ notice that
 - use the sentries npm package, this handles correctly every environment like Bun, Node, Browser, etc
 
 ```tsx
-import { captureException, flush, init } from 'sentries'
+import { captureException, flush, init } from "sentries";
 
 init({
-  dsn: 'https://e702f9c3dff49fd1aa16500c6056d0f7@o4509638447005696.ingest.de.sentry.io/4509638454476880',
+  dsn: "https://e702f9c3dff49fd1aa16500c6056d0f7@o4509638447005696.ingest.de.sentry.io/4509638454476880",
   integrations: [],
   tracesSampleRate: 0.01,
   profilesSampleRate: 0.01,
   beforeSend(event) {
-    if (process.env.NODE_ENV === 'development') {
-      return null
+    if (process.env.NODE_ENV === "development") {
+      return null;
     }
     if (process.env.BYTECODE_RUN) {
-      return null
+      return null;
     }
-    if (event?.['name'] === 'AbortError') {
-      return null
+    if (event?.["name"] === "AbortError") {
+      return null;
     }
 
-    return event
+    return event;
   },
-})
+});
 
 export async function notifyError(error: any, msg?: string) {
-  console.error(msg, error)
-  captureException(error, { extra: { msg } })
-  await flush(1000)
+  console.error(msg, error);
+  captureException(error, { extra: { msg } });
+  await flush(1000);
 }
 
 export class AppError extends Error {
   constructor(message: string) {
-    super(message)
-    this.name = 'AppError'
+    super(message);
+    this.name = "AppError";
   }
 }
 ```
@@ -495,7 +507,7 @@ to understand how the code you are writing works, you should add inline snapshot
 
 - for very long snapshots you should use `toMatchFileSnapshot(filename)` instead of `toMatchInlineSnapshot()`. put the snapshot files in a snapshots/ directory and use the appropriate extension for the file based on the content
 
-never test client react components. only React and browser independent code.
+never test client react components. only React and browser independent code. 
 
 most tests should be simple calls to functions with some expect calls, no mocks. test files should be called the same as the file where the tested function is being exported from.
 
@@ -513,12 +525,10 @@ never write tests yourself that call prisma or interact with database or emails.
 
 github.md
 changelogs.md
-
 # writing docs
 
 when generating a .md or .mdx file to document things, always add a frontmatter with title and description. also add a prompt field with the exact prompt used to generate the doc. use @ to reference files and urls and provide any context necessary to be able to recreate this file from scratch using a model. if you used urls also reference them. reference all files you had to read to create the doc. use yaml | syntax to add this prompt and never go over the column width of 80
 goke.md
-
 # styling
 
 - always use tailwind for styling. prefer using simple styles using flex and gap. margins should be avoided, instead use flexbox gaps, grid gaps, or separate spacing divs.
@@ -620,13 +630,11 @@ https://gitchamber.com/repos/vercel/ai/main/files
 use gitchamber to read the .md files using curl
 
 you can swap out the topic with text you want to search docs for. you can also limit the total results returned with the param token to limit the tokens that will be added to the context window
-
 # playwright
 
 you can control the browser using the playwright mcp tools. these tools let you control the browser to get information or accomplish actions
 
 if i ask you to test something in the browser, know that the website dev server is already running at http://localhost:7664 for website and :7777 for docs-website (but docs-website needs to use the website domain specifically, for example name-hash.localhost:7777)
-
 # zod
 
 when you need to create a complex type that comes from a prisma table, do not create a new schema that tries to recreate the prisma table structure. instead just use `z.any() as ZodType<PrismaTable>)` to get type safety but leave any in the schema. this gets most of the benefits of zod without having to define a new zod schema that can easily go out of sync.
@@ -636,38 +644,16 @@ when you need to create a complex type that comes from a prisma table, do not cr
 you MUST use the built in zod v4 toJSONSchema and not the npm package `zod-to-json-schema` which is outdated and does not support zod v4.
 
 ```ts
-import { toJSONSchema } from 'zod'
+import { toJSONSchema } from "zod";
 
 const mySchema = z.object({
   id: z.string().uuid(),
   name: z.string().min(3).max(100),
   age: z.number().min(0).optional(),
-})
+});
 
 const jsonSchema = toJSONSchema(mySchema, {
-  removeAdditionalStrategy: 'strict',
-})
+  removeAdditionalStrategy: "strict",
+});
 ```
 
-<!-- opensrc:start -->
-
-## Source Code Reference
-
-Source code for dependencies is available in `opensrc/` for deeper understanding of implementation details.
-
-See `opensrc/sources.json` for the list of available packages and their versions.
-
-Use this source code when you need to understand how a package works internally, not just its types/interface.
-
-### Fetching Additional Source Code
-
-To fetch source code for a package or repository you need to understand, run:
-
-```bash
-npx opensrc <package>           # npm package (e.g., npx opensrc zod)
-npx opensrc pypi:<package>      # Python package (e.g., npx opensrc pypi:requests)
-npx opensrc crates:<package>    # Rust crate (e.g., npx opensrc crates:serde)
-npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
-```
-
-<!-- opensrc:end -->
