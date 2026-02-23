@@ -3,11 +3,14 @@ title: OpenClaw Tools Reference
 description: |
   Documentation of OpenClaw's memory, cron, and heartbeat systems.
   Covers tool JSON schemas, descriptions, system prompt instructions,
-  storage mechanisms, and full execution flows.
+  storage mechanisms, full execution flows, and the five forcing
+  functions that ensure the model actually reads and writes memory.
 prompt: |
   opensrc openclaw. find and understand the memory and tasks tools.
   and heartbeat. explain how they behave, the tools json schema.
-  how the model interact with it.
+  how the model interact with it. also find the prompt that forces
+  the model to read from memory and write to it. find tool
+  descriptions, prompts, reminders, hooks.
   Source: opensrc/repos/github.com/openclaw/openclaw
   Files read:
     - src/agents/tools/memory-tool.ts
@@ -18,6 +21,16 @@ prompt: |
     - src/infra/heartbeat-runner.ts
     - src/infra/heartbeat-wake.ts
     - src/agents/system-prompt.ts
+    - src/auto-reply/reply/memory-flush.ts
+    - src/auto-reply/reply/agent-runner-memory.ts
+    - src/auto-reply/reply/post-compaction-audit.ts
+    - src/auto-reply/reply/post-compaction-context.ts
+    - src/hooks/bundled/session-memory/handler.ts
+    - src/hooks/bundled/session-memory/HOOK.md
+    - src/hooks/llm-slug-generator.ts
+    - src/plugins/types.ts
+    - src/plugins/slots.ts
+    - docs/reference/templates/AGENTS.md
 ---
 
 # OpenClaw Tools Reference
@@ -153,6 +166,191 @@ On error (quota/provider):
   -> returns { results: [], disabled: true, error, warning, action }
   -> never throws
 ```
+
+---
+
+## Memory Forcing Functions
+
+OpenClaw uses **five distinct mechanisms** to force the model to
+actually read from and write to memory. Without these, models tend
+to ignore memory instructions. Kimaki currently only has passive
+instructions in the system prompt (mechanism 1, partially). The
+other four are what make openclaw's memory actually work.
+
+### 1. Tool description says "Mandatory"
+
+The `memory_search` tool description starts with **"Mandatory recall
+step"**. This is pure prompt engineering — there is no code that
+enforces it. No middleware checks if `memory_search` was called
+before responding, no validator rejects responses that skip the
+search, and no code auto-calls `memory_search` on behalf of the
+model. The word "Mandatory" is doing the same job as writing
+"IMPORTANT" or "You MUST" in a prompt: stronger phrasing to bias
+the model. The power comes from stacking this with mechanisms 2 and
+3 below — three independent reminders make compliance very likely
+but not guaranteed.
+
+### 2. System prompt "Memory Recall" section
+
+Injected only when `memory_search`/`memory_get` tools are available,
+and only in full mode (not subagents):
+
+> Before answering anything about prior work, decisions, dates,
+> people, preferences, or todos: run memory_search on MEMORY.md +
+> memory/\*.md; then use memory_get to pull only the needed lines.
+> If low confidence after search, say you checked.
+> Citations: include Source: <path#line> when it helps the user
+> verify memory snippets.
+
+### 3. AGENTS.md startup ritual — "don't ask, just do it"
+
+The default `AGENTS.md` template (loaded into every session's
+context) contains explicit startup instructions:
+
+```markdown
+## Every Session
+
+Before doing anything else:
+
+1. Read `SOUL.md` — this is who you are
+2. Read `USER.md` — this is who you're helping
+3. Read `memory/YYYY-MM-DD.md` (today + yesterday) for recent context
+4. **If in MAIN SESSION** (direct chat with your human): Also read `MEMORY.md`
+
+Don't ask permission. Just do it.
+```
+
+And a writing discipline section:
+
+```markdown
+### Write It Down - No "Mental Notes"!
+
+- **Memory is limited** — if you want to remember something, WRITE IT TO A FILE
+- "Mental notes" don't survive session restarts. Files do.
+- When someone says "remember this" -> update `memory/YYYY-MM-DD.md` or relevant file
+- **Text > Brain**
+```
+
+And a maintenance ritual:
+
+```markdown
+### Memory Maintenance (During Heartbeats)
+
+Periodically (every few days), use a heartbeat to:
+1. Read through recent `memory/YYYY-MM-DD.md` files
+2. Identify significant events, lessons, or insights worth keeping long-term
+3. Update `MEMORY.md` with distilled learnings
+4. Remove outdated info from MEMORY.md that's no longer relevant
+```
+
+### 4. Pre-compaction memory flush (automatic write trigger)
+
+When the session is approaching the context window limit, openclaw
+runs a **silent agentic turn** before compaction. This is the
+automatic "write your memories now before they're lost" trigger.
+
+**User prompt** (`DEFAULT_MEMORY_FLUSH_PROMPT`):
+
+> Pre-compaction memory flush. Store durable memories now (use
+> memory/YYYY-MM-DD.md; create memory/ if needed). IMPORTANT: If the
+> file already exists, APPEND new content only and do not overwrite
+> existing entries. If nothing to store, reply with \<NO_REPLY token\>.
+
+**System prompt** (`DEFAULT_MEMORY_FLUSH_SYSTEM_PROMPT`):
+
+> Pre-compaction memory flush turn. The session is near
+> auto-compaction; capture durable memories to disk. You may reply,
+> but usually \<NO_REPLY token\> is correct.
+
+**Trigger condition**: fires when
+`totalTokens >= contextWindow - reserveTokensFloor - softThresholdTokens`
+(default threshold: `contextWindow - 20000 - 4000`). Runs once per
+compaction cycle. Implemented in `memory-flush.ts` and
+`agent-runner-memory.ts`.
+
+### 5. Post-compaction audit and context injection
+
+After context compaction, two things happen:
+
+**Audit** (`post-compaction-audit.ts`): checks whether the model
+read required startup files after the context reset. If it didn't,
+injects a warning:
+
+> Post-Compaction Audit: The following required startup files were
+> not read after context reset:
+>   - WORKFLOW_AUTO.md
+>   - memory/YYYY-MM-DD.md
+>
+> Please read them now using the Read tool before continuing.
+
+Default required reads:
+```ts
+const DEFAULT_REQUIRED_READS = [
+  "WORKFLOW_AUTO.md",
+  /memory\/\d{4}-\d{2}-\d{2}\.md/,
+]
+```
+
+**Context injection** (`post-compaction-context.ts`): reads the
+`## Session Startup` and `## Red Lines` sections from `AGENTS.md`
+and injects them as a system message:
+
+> [Post-compaction context refresh]
+>
+> Session was just compacted. The conversation summary above is a
+> hint, NOT a substitute for your startup sequence. Execute your
+> Session Startup sequence now — read the required files before
+> responding to the user.
+
+### Bonus: session-memory hook (auto-save on /new and /reset)
+
+When the user issues `/new` or `/reset`, the `session-memory` hook:
+1. Finds the previous session transcript (last 15 messages)
+2. Uses LLM to generate a descriptive filename slug
+3. Creates `memory/YYYY-MM-DD-slug.md` with the conversation content
+
+This ensures conversations are always persisted to disk even if the
+model forgot to write during the session.
+
+### Summary table
+
+| # | Mechanism                     | When it fires                    | Read/Write | Enforced? |
+|---|-------------------------------|----------------------------------|------------|-----------|
+| 1 | Tool desc says "Mandatory"    | Every tool call                  | Read       | No — prompt nudge |
+| 2 | System prompt Memory Recall   | Every model turn                 | Read       | No — prompt nudge |
+| 3 | AGENTS.md startup ritual      | Session start                    | Read+Write | No — prompt nudge |
+| 4 | Pre-compaction memory flush   | Before context compaction        | Write      | Yes — auto turn  |
+| 5 | Post-compaction audit+inject  | After context compaction         | Read       | Yes — auto inject |
+| + | session-memory hook           | On /new and /reset commands      | Write      | Yes — hook code   |
+
+Mechanisms 1-3 are pure prompt engineering (the model can ignore
+them). Mechanisms 4-5 and the hook are actual code that runs
+regardless of what the model decides to do. The combination of
+prompt pressure (makes the model want to comply) + automated
+fallbacks (catches the cases where it doesn't) is what makes
+openclaw's memory reliable.
+
+### Gap analysis: kimaki vs openclaw
+
+Kimaki currently has **only mechanism 2, partially**. The system
+prompt in `discord/src/system-message.ts:122-183` says "before
+answering questions about prior work... list existing files and read
+relevant ones" but:
+
+- **No mandatory startup read**: kimaki doesn't force the model to
+  read memory files at session start. The instruction is passive
+  ("before answering questions about..." vs "before doing anything
+  else, don't ask permission, just do it").
+- **No pre-compaction flush**: when the context window fills up and
+  opencode compacts, all learned context is lost. There's no
+  automatic write-before-compact mechanism.
+- **No post-compaction audit**: after compaction, the model doesn't
+  re-read memory files. It just continues with the summary.
+- **No auto-save hook**: when a session ends or resets, nothing
+  automatically saves the conversation to memory files.
+- **No semantic search**: kimaki uses plain file read/write, not
+  vector-indexed search. This means the model has to know which file
+  to read upfront, rather than searching across all memory files.
 
 ---
 
