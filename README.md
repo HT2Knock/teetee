@@ -137,6 +137,10 @@ This implements the "four-eyes principle" - it adds friction to prevent accident
 - Temporarily disable access for specific users
 - Break-glass scenario: removing the role is a deliberate action
 
+### Allowing Other Bots (Multi-Agent Orchestration)
+
+By default, messages from other bots are ignored. To allow another bot to trigger Kimaki sessions, assign it the **"Kimaki"** role. Kimaki creates this role automatically on startup, or you can create it manually. Bots without the role are silently ignored to prevent loops.
+
 ## Features
 
 ### Text Messages
