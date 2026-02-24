@@ -19,7 +19,11 @@ import type {
   APIApplication,
   APIApplicationCommand,
   APIChannel,
+  APIGuild,
+  APIGuildMember,
   APIMessage,
+  APIRole,
+  APIThreadList,
   RESTGetAPIGatewayBotResult,
   RESTPutAPIApplicationCommandsJSONBody,
   RESTPutAPIApplicationCommandsResult,
@@ -28,6 +32,9 @@ import type {
   RESTPatchAPIChannelJSONBody,
   RESTPostAPIChannelThreadsJSONBody,
   RESTPostAPIChannelMessagesThreadsJSONBody,
+  RESTPostAPIGuildChannelJSONBody,
+  RESTPatchAPIGuildRoleJSONBody,
+  RESTPostAPIGuildRoleJSONBody,
   APIInteractionResponseCallbackData,
   RESTPostAPIInteractionCallbackJSONBody,
 } from 'discord-api-types/v10'
@@ -39,6 +46,9 @@ import {
   messageToAPI,
   channelToAPI,
   threadMemberToAPI,
+  guildToAPI,
+  roleToAPI,
+  memberToAPI,
 } from './serializers.js'
 import { generateSnowflake } from './snowflake.js'
 
@@ -55,6 +65,22 @@ const RATE_LIMIT_HEADERS: Record<string, string> = {
   'X-RateLimit-Remaining': '49',
   'X-RateLimit-Reset-After': '60.0',
   'X-RateLimit-Bucket': 'fake-bucket',
+}
+
+const THREAD_CHANNEL_TYPES: ChannelType[] = [
+  ChannelType.PublicThread,
+  ChannelType.PrivateThread,
+  ChannelType.AnnouncementThread,
+]
+
+function isThreadChannelType(channelType: number): boolean {
+  return THREAD_CHANNEL_TYPES.includes(channelType as ChannelType)
+}
+
+type GuildChannelCreateBody = RESTPostAPIGuildChannelJSONBody & {
+  topic?: string
+  position?: number
+  rate_limit_per_user?: number
 }
 
 export interface ServerComponents {
@@ -464,8 +490,9 @@ export function createServer({
         const url = new URL(request.url, 'http://localhost')
         const before = url.searchParams.get('before')
         const after = url.searchParams.get('after')
+        const parsedLimit = parseInt(url.searchParams.get('limit') ?? '50', 10)
         const limit = Math.min(
-          parseInt(url.searchParams.get('limit') ?? '50', 10),
+          Number.isNaN(parsedLimit) ? 50 : parsedLimit,
           100,
         )
 
@@ -640,10 +667,7 @@ export function createServer({
             { status: 404, headers: { 'Content-Type': 'application/json' } },
           )
         }
-        const isThread =
-          channel.type === ChannelType.PublicThread ||
-          channel.type === ChannelType.PrivateThread ||
-          channel.type === ChannelType.AnnouncementThread
+        const isThread = isThreadChannelType(channel.type)
         await prisma.channel.update({
           where: { id: params.channel_id },
           data: {
@@ -692,10 +716,7 @@ export function createServer({
             { status: 404, headers: { 'Content-Type': 'application/json' } },
           )
         }
-        const isThread =
-          channel.type === ChannelType.PublicThread ||
-          channel.type === ChannelType.PrivateThread ||
-          channel.type === ChannelType.AnnouncementThread
+        const isThread = isThreadChannelType(channel.type)
         const apiChannel = channelToAPI(channel)
         await prisma.channel.delete({ where: { id: params.channel_id } })
         if (isThread) {
@@ -900,6 +921,350 @@ export function createServer({
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         })
+      },
+    })
+
+    // --- Guilds ---
+
+    .route({
+      method: 'GET',
+      path: '/guilds/:guild_id',
+      async handler({ params }): Promise<APIGuild> {
+        const guild = await prisma.guild.findUnique({
+          where: { id: params.guild_id },
+          include: { roles: true },
+        })
+        if (!guild) {
+          throw new Response(
+            JSON.stringify({
+              code: 10004,
+              message: 'Unknown Guild',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return guildToAPI(guild)
+      },
+    })
+    .route({
+      method: 'GET',
+      path: '/guilds/:guild_id/channels',
+      async handler({ params }): Promise<APIChannel[]> {
+        const guild = await prisma.guild.findUnique({
+          where: { id: params.guild_id },
+        })
+        if (!guild) {
+          throw new Response(
+            JSON.stringify({
+              code: 10004,
+              message: 'Unknown Guild',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        const channels = await prisma.channel.findMany({
+          where: {
+            guildId: params.guild_id,
+            type: { notIn: THREAD_CHANNEL_TYPES },
+          },
+          orderBy: { position: 'asc' },
+        })
+        return channels.map(channelToAPI)
+      },
+    })
+    .route({
+      method: 'POST',
+      path: '/guilds/:guild_id/channels',
+      async handler({ params, request }): Promise<APIChannel> {
+        const body = (await request.json()) as GuildChannelCreateBody
+        const guild = await prisma.guild.findUnique({
+          where: { id: params.guild_id },
+        })
+        if (!guild) {
+          throw new Response(
+            JSON.stringify({
+              code: 10004,
+              message: 'Unknown Guild',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        const channelId = generateSnowflake()
+        await prisma.channel.create({
+          data: {
+            id: channelId,
+            guildId: params.guild_id,
+            type: body.type ?? ChannelType.GuildText,
+            name: body.name,
+            topic: body.topic ?? null,
+            parentId: body.parent_id != null ? String(body.parent_id) : null,
+            position: body.position ?? 0,
+            rateLimitPerUser: body.rate_limit_per_user ?? 0,
+          },
+        })
+        const channel = await prisma.channel.findUniqueOrThrow({
+          where: { id: channelId },
+        })
+        const apiChannel = channelToAPI(channel)
+        gateway.broadcast(GatewayDispatchEvents.ChannelCreate, apiChannel)
+        return apiChannel
+      },
+    })
+    .route({
+      method: 'GET',
+      path: '/guilds/:guild_id/roles',
+      async handler({ params }): Promise<APIRole[]> {
+        const guild = await prisma.guild.findUnique({
+          where: { id: params.guild_id },
+        })
+        if (!guild) {
+          throw new Response(
+            JSON.stringify({
+              code: 10004,
+              message: 'Unknown Guild',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        const roles = await prisma.role.findMany({
+          where: { guildId: params.guild_id },
+          orderBy: { position: 'asc' },
+        })
+        return roles.map(roleToAPI)
+      },
+    })
+    .route({
+      method: 'POST',
+      path: '/guilds/:guild_id/roles',
+      async handler({ params, request }): Promise<APIRole> {
+        const body = (await request.json()) as RESTPostAPIGuildRoleJSONBody
+        const guild = await prisma.guild.findUnique({
+          where: { id: params.guild_id },
+        })
+        if (!guild) {
+          throw new Response(
+            JSON.stringify({
+              code: 10004,
+              message: 'Unknown Guild',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        const roleCount = await prisma.role.count({
+          where: { guildId: params.guild_id },
+        })
+        const roleId = generateSnowflake()
+        await prisma.role.create({
+          data: {
+            id: roleId,
+            guildId: params.guild_id,
+            name: body.name ?? 'new role',
+            color: body.color ?? 0,
+            hoist: body.hoist ?? false,
+            position: roleCount,
+            permissions:
+              body.permissions != null ? String(body.permissions) : '0',
+            mentionable: body.mentionable ?? false,
+          },
+        })
+        const role = await prisma.role.findUniqueOrThrow({ where: { id: roleId } })
+        const apiRole = roleToAPI(role)
+        gateway.broadcast(GatewayDispatchEvents.GuildRoleCreate, {
+          guild_id: params.guild_id,
+          role: apiRole,
+        })
+        return apiRole
+      },
+    })
+    .route({
+      method: 'PATCH',
+      path: '/guilds/:guild_id/roles/:role_id',
+      async handler({ params, request }): Promise<APIRole> {
+        const body = (await request.json()) as RESTPatchAPIGuildRoleJSONBody
+        const role = await prisma.role.findFirst({
+          where: {
+            id: params.role_id,
+            guildId: params.guild_id,
+          },
+        })
+        if (!role) {
+          throw new Response(
+            JSON.stringify({
+              code: 10011,
+              message: 'Unknown Role',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        await prisma.role.update({
+          where: { id: params.role_id },
+          data: {
+            ...(body.name !== undefined ? { name: body.name ?? 'new role' } : {}),
+            ...(body.color !== undefined ? { color: body.color ?? 0 } : {}),
+            ...(body.hoist !== undefined ? { hoist: body.hoist ?? false } : {}),
+            ...(body.permissions !== undefined
+              ? { permissions: body.permissions != null ? String(body.permissions) : '0' }
+              : {}),
+            ...(body.mentionable !== undefined
+              ? { mentionable: body.mentionable ?? false }
+              : {}),
+          },
+        })
+        const updatedRole = await prisma.role.findUniqueOrThrow({
+          where: { id: params.role_id },
+        })
+        const apiRole = roleToAPI(updatedRole)
+        gateway.broadcast(GatewayDispatchEvents.GuildRoleUpdate, {
+          guild_id: params.guild_id,
+          role: apiRole,
+        })
+        return apiRole
+      },
+    })
+    .route({
+      method: 'GET',
+      path: '/guilds/:guild_id/members/search',
+      async handler({ params, request }): Promise<APIGuildMember[]> {
+        const guild = await prisma.guild.findUnique({
+          where: { id: params.guild_id },
+        })
+        if (!guild) {
+          throw new Response(
+            JSON.stringify({
+              code: 10004,
+              message: 'Unknown Guild',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        const url = new URL(request.url, 'http://localhost')
+        const query = url.searchParams.get('query') ?? ''
+        const parsedLimit = parseInt(url.searchParams.get('limit') ?? '1', 10)
+        const limit = Math.min(
+          Number.isNaN(parsedLimit) ? 1 : parsedLimit,
+          1000,
+        )
+        const members = await prisma.guildMember.findMany({
+          where: {
+            guildId: params.guild_id,
+            OR: [
+              { user: { username: { contains: query } } },
+              { nick: { contains: query } },
+            ],
+          },
+          include: { user: true },
+          take: limit,
+        })
+        return members.map(memberToAPI)
+      },
+    })
+    .route({
+      method: 'GET',
+      path: '/guilds/:guild_id/members',
+      async handler({ params, request }): Promise<APIGuildMember[]> {
+        const guild = await prisma.guild.findUnique({
+          where: { id: params.guild_id },
+        })
+        if (!guild) {
+          throw new Response(
+            JSON.stringify({
+              code: 10004,
+              message: 'Unknown Guild',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        const url = new URL(request.url, 'http://localhost')
+        const after = url.searchParams.get('after')
+        const parsedLimit = parseInt(url.searchParams.get('limit') ?? '1', 10)
+        const limit = Math.min(
+          Number.isNaN(parsedLimit) ? 1 : parsedLimit,
+          1000,
+        )
+        const members = await prisma.guildMember.findMany({
+          where: {
+            guildId: params.guild_id,
+            ...(after ? { userId: { gt: after } } : {}),
+          },
+          include: { user: true },
+          orderBy: { userId: 'asc' },
+          take: limit,
+        })
+        return members.map(memberToAPI)
+      },
+    })
+    .route({
+      method: 'GET',
+      path: '/guilds/:guild_id/members/:user_id',
+      async handler({ params }): Promise<APIGuildMember> {
+        const member = await prisma.guildMember.findUnique({
+          where: {
+            guildId_userId: {
+              guildId: params.guild_id,
+              userId: params.user_id,
+            },
+          },
+          include: { user: true },
+        })
+        if (!member) {
+          throw new Response(
+            JSON.stringify({
+              code: 10007,
+              message: 'Unknown Member',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return memberToAPI(member)
+      },
+    })
+    .route({
+      method: 'GET',
+      path: '/guilds/:guild_id/threads/active',
+      async handler({ params }): Promise<APIThreadList> {
+        const guild = await prisma.guild.findUnique({
+          where: { id: params.guild_id },
+        })
+        if (!guild) {
+          throw new Response(
+            JSON.stringify({
+              code: 10004,
+              message: 'Unknown Guild',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        const threads = await prisma.channel.findMany({
+          where: {
+            guildId: params.guild_id,
+            type: { in: THREAD_CHANNEL_TYPES },
+            archived: false,
+          },
+          orderBy: { createdAt: 'desc' },
+        })
+        const threadIds = threads.map((thread) => {
+          return thread.id
+        })
+        const threadMembers =
+          threadIds.length === 0
+            ? []
+            : await prisma.threadMember.findMany({
+                where: { channelId: { in: threadIds } },
+              })
+        return {
+          threads: threads.map(channelToAPI),
+          members: threadMembers.map(threadMemberToAPI),
+        }
       },
     })
 
