@@ -322,6 +322,58 @@ jobs:
 
 Use `--notify-only` for notifications that don't need immediate AI response (e.g., subscription events). Reply to the thread later to start a session with the notification as context.
 
+## Scheduled Tasks
+
+Add `--send-at` to any `kimaki send` command to schedule it for later. Supports one-time ISO dates (must be UTC ending with `Z`) and recurring cron expressions (runs in your local timezone):
+
+```bash
+# One-time: run at a specific UTC time
+kimaki send --channel <channel-id> --prompt "Review open PRs" \
+  --send-at "2026-03-01T09:00:00Z"
+
+# Recurring: every Monday at 9am local time
+kimaki send --channel <channel-id> \
+  --prompt "Run weekly test suite and summarize failures" \
+  --send-at "0 9 * * 1"
+
+# Schedule a reminder into an existing thread
+kimaki send --session <session-id> \
+  --prompt "Reminder: <@user-id> check back on this thread" \
+  --send-at "2026-03-01T15:00:00Z" --notify-only
+```
+
+All other `send` flags (`--notify-only`, `--worktree`, `--agent`, `--model`, `--user`) work with `--send-at`. The only exception is `--wait`, which is incompatible since the task runs in the future.
+
+Manage scheduled tasks with `kimaki task list` and `kimaki task delete <id>`.
+
+## Memory
+
+Enable persistent memory across sessions with `--memory`:
+
+```bash
+kimaki --memory
+```
+
+This creates a **kimaki-memory** forum channel in your Discord server and syncs it bidirectionally with `~/.kimaki/memory/` on disk. Memory files are markdown with YAML frontmatter:
+
+```markdown
+---
+title: Auth architecture decisions
+tags:
+  - auth
+---
+
+Using JWT tokens with 15min expiry. Refresh tokens in httpOnly cookies.
+```
+
+Two scopes:
+- `~/.kimaki/memory/<channelId>/` — project-specific notes
+- `~/.kimaki/memory/global/` — cross-project preferences
+
+Changes on disk sync to Discord forum threads and vice versa. The AI reads relevant memory files at session start and writes them after important decisions or when you say "remember this".
+
+Forum threads have a **2000 character limit**, so keep individual memory files small. Never store secrets in memory files — they're visible in Discord.
+
 ## How It Works
 
 **SQLite Database** - Kimaki stores state in `<data-dir>/discord-sessions.db` (default: `~/.kimaki/discord-sessions.db`). This maps Discord threads to OpenCode sessions, channels to directories, and stores your bot credentials. Use `--data-dir` to change the location.
