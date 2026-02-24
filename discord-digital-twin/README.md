@@ -1,5 +1,7 @@
 # Discord Digital Twin
 
+> **Experimental and unstable.** APIs may change without notice between versions.
+
 `discord-digital-twin` is a local Discord API twin for tests.
 It runs:
 

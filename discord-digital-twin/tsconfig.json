@@ -6,10 +6,14 @@
     "moduleDetection": "force",
     "allowJs": true,
     "outDir": "dist",
+    "rootDir": "src",
     "useUnknownInCatchVariables": false,
     "moduleResolution": "nodenext",
     "verbatimModuleSyntax": true,
-    "noEmit": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "noEmit": false,
     "strict": true,
     "skipLibCheck": true,
     "noFallthroughCasesInSwitch": true,
@@ -19,5 +23,5 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
   },
-  "include": ["src", "tests"]
+  "include": ["src"]
 }
