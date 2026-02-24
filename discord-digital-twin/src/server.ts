@@ -681,15 +681,11 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
         }
 
         const callbackType = body.type
-        let messageId: string | null = null
+        let messageId: string | null = existing.messageId
         const data = ('data' in body ? body.data : null) as APIInteractionResponseCallbackData | null
 
-        // Types 4 (CHANNEL_MESSAGE_WITH_SOURCE) and 7 (UPDATE_MESSAGE)
-        // create a message immediately
-        if (
-          callbackType === InteractionResponseType.ChannelMessageWithSource ||
-          callbackType === InteractionResponseType.UpdateMessage
-        ) {
+        // Type 4 (CHANNEL_MESSAGE_WITH_SOURCE) creates a message immediately
+        if (callbackType === InteractionResponseType.ChannelMessageWithSource) {
           messageId = generateSnowflake()
           await prisma.message.create({
             data: {
@@ -726,6 +722,48 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
             : null
           const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
           gateway.broadcastMessageCreate(apiMessage, guildId ?? '')
+        } else if (callbackType === InteractionResponseType.UpdateMessage) {
+          messageId = existing.messageId
+          if (!messageId) {
+            throw new Response(JSON.stringify({
+              code: 40060,
+              message: 'Interaction is not attached to a message',
+              errors: {},
+            }), { status: 400, headers: { 'Content-Type': 'application/json' } })
+          }
+          const origMessage = await prisma.message.findUnique({ where: { id: messageId } })
+          if (!origMessage) {
+            throw new Response(JSON.stringify({
+              code: 10008,
+              message: 'Unknown Message',
+              errors: {},
+            }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          }
+          await prisma.message.update({
+            where: { id: messageId },
+            data: {
+              content: data?.content ?? origMessage.content,
+              editedTimestamp: new Date(),
+              ...(data?.embeds ? { embeds: JSON.stringify(data.embeds) } : {}),
+              ...(data?.components ? { components: JSON.stringify(data.components) } : {}),
+              ...(data?.flags != null ? { flags: data.flags } : {}),
+            },
+          })
+          const dbMessage = await prisma.message.findUniqueOrThrow({ where: { id: messageId } })
+          const author = await prisma.user.findUniqueOrThrow({ where: { id: dbMessage.authorId } })
+          const channel = await prisma.channel.findUnique({ where: { id: dbMessage.channelId } })
+          const guildId = channel?.guildId ?? undefined
+          const member = guildId
+            ? await prisma.guildMember.findUnique({
+                where: { guildId_userId: { guildId, userId: dbMessage.authorId } },
+                include: { user: true },
+              })
+            : null
+          const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
+          gateway.broadcast(GatewayDispatchEvents.MessageUpdate, {
+            ...apiMessage,
+            guild_id: guildId,
+          })
         }
 
         // Mark interaction as acknowledged and store the response
@@ -856,6 +894,7 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
 
         // For @original, look up the interaction response's messageId.
         // If deferred (no messageId yet), create the message on first edit.
+        let wasNewlyCreated = false
         const messageId = await (async () => {
           if (resolvedId === '@original') {
             const interaction = await prisma.interactionResponse.findUnique({
@@ -897,6 +936,7 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
                 where: { interactionId: interaction.interactionId },
                 data: { messageId: newId },
               })
+              wasNewlyCreated = true
               return newId
             }
             return interaction.messageId
@@ -914,8 +954,7 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
         }
 
         // Skip the DB update if we just created the message (deferred case)
-        const isNewlyCreated = existing.editedTimestamp === null && existing.content === (body.content ?? '')
-        if (!isNewlyCreated) {
+        if (!wasNewlyCreated) {
           await prisma.message.update({
             where: { id: messageId },
             data: {

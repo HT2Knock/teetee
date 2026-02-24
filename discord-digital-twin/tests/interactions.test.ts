@@ -12,6 +12,8 @@ import {
 import type {
   ChatInputCommandInteraction,
   Interaction,
+  ButtonInteraction,
+  TextChannel,
 } from 'discord.js'
 import { DigitalDiscord } from '../src/index.js'
 
@@ -296,4 +298,110 @@ describe('interactions', () => {
     expect(msg?.content).toBe('Edited reply')
     expect(msg?.edited_timestamp).toBeTruthy()
   })
+
+  test('editReply() twice correctly updates the message', async () => {
+    const received = new Promise<ChatInputCommandInteraction>((resolve) => {
+      client.once('interactionCreate', (i) => {
+        if (i.isChatInputCommand()) { resolve(i) }
+      })
+    })
+
+    const { id } = await discord.simulateInteraction({
+      type: InteractionType.ApplicationCommand,
+      channelId,
+      userId: testUserId,
+      data: {
+        id: '1234567898',
+        name: 'double-edit-test',
+        type: 1,
+      },
+    })
+
+    const interaction = await received
+    await interaction.deferReply()
+    
+    // First edit creates the message
+    await interaction.editReply({ content: 'First edit' })
+    
+    // Second edit changes ONLY embeds
+    await interaction.editReply({ embeds: [{ title: 'Test Embed' }] })
+
+    const response = await discord.getInteractionResponse(id)
+    const messages = await discord.getMessages(channelId)
+    const msg = messages.find((m) => m.id === response!.messageId)
+    
+    expect(msg?.content).toBe('First edit')
+    expect(msg!.embeds.length).toBe(1)
+    expect(msg!.embeds[0]!.title).toBe('Test Embed')
+  })
+
+  test('UpdateMessage component interaction updates the original message', async () => {
+    // First create a message that the component is attached to
+    const channel = client.channels.cache.get(channelId) as TextChannel
+    const targetMsg = await channel.send({ content: 'Target message' })
+    expect(targetMsg).toBeDefined()
+
+    const received = new Promise<ButtonInteraction>((resolve) => {
+      client.once('interactionCreate', (i) => {
+        if (i.isButton()) { resolve(i) }
+      })
+    })
+
+    const { id } = await discord.simulateInteraction({
+      type: InteractionType.MessageComponent,
+      channelId,
+      userId: testUserId,
+      messageId: targetMsg!.id,
+      data: {
+        custom_id: 'test-button',
+        component_type: 2,
+      },
+    })
+
+    const interaction = await received
+    await interaction.update({ content: 'Updated by component' })
+
+    const response = await discord.getInteractionResponse(id)
+    expect(response!.messageId).toBe(targetMsg!.id)
+    
+    const messages = await discord.getMessages(channelId)
+    const msg = messages.find((m) => m.id === targetMsg!.id)
+    expect(msg?.content).toBe('Updated by component')
+    expect(msg?.edited_timestamp).toBeTruthy()
+  })
+
+  test('deferUpdate() followed by editReply() updates the original message', async () => {
+    const channel = client.channels.cache.get(channelId) as TextChannel
+    const targetMsg = await channel.send({ content: 'Message for deferUpdate' })
+
+    const received = new Promise<ButtonInteraction>((resolve) => {
+      client.once('interactionCreate', (i) => {
+        if (i.isButton()) { resolve(i) }
+      })
+    })
+
+    const { id } = await discord.simulateInteraction({
+      type: InteractionType.MessageComponent,
+      channelId,
+      userId: testUserId,
+      messageId: targetMsg.id,
+      data: {
+        custom_id: 'defer-update-button',
+        component_type: 2,
+      },
+    })
+
+    const interaction = await received
+    await interaction.deferUpdate()
+    await interaction.editReply({ content: 'Edited after deferUpdate' })
+
+    const response = await discord.getInteractionResponse(id)
+    expect(response!.messageId).toBe(targetMsg.id)
+    
+    const messages = await discord.getMessages(channelId)
+    const msg = messages.find((m) => m.id === targetMsg.id)
+    expect(msg?.content).toBe('Edited after deferUpdate')
+    expect(msg?.edited_timestamp).toBeTruthy()
+  })
+
 })

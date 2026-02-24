@@ -203,12 +203,13 @@ export class DigitalDiscord {
     return apiMessage
   }
 
-  async simulateInteraction({ type, channelId, userId, data, guildId }: {
+  async simulateInteraction({ type, channelId, userId, data, guildId, messageId }: {
     type: InteractionType
     channelId: string
     userId: string
     data?: Record<string, unknown>
     guildId?: string
+    messageId?: string
   }): Promise<{ id: string; token: string }> {
     if (!this.server) {
       throw new Error('Server not started')
@@ -225,6 +226,7 @@ export class DigitalDiscord {
         applicationId: this.botUserId,
         channelId,
         type: 0, // placeholder, updated when callback is received
+        messageId: messageId ?? null,
         acknowledged: false,
       },
     })
@@ -237,6 +239,19 @@ export class DigitalDiscord {
     })
     const channel = await this.prisma.channel.findUnique({ where: { id: channelId } })
 
+    let messageData: APIMessage | undefined = undefined
+    if (messageId) {
+      const msg = await this.prisma.message.findUniqueOrThrow({ where: { id: messageId } })
+      const msgAuthor = await this.prisma.user.findUniqueOrThrow({ where: { id: msg.authorId } })
+      const msgMember = resolvedGuildId
+        ? await this.prisma.guildMember.findUnique({
+            where: { guildId_userId: { guildId: resolvedGuildId, userId: msg.authorId } },
+            include: { user: true },
+          })
+        : null
+      messageData = messageToAPI(msg, msgAuthor, resolvedGuildId, msgMember ?? undefined)
+    }
+
     // APIInteraction is a discriminated union keyed by `type` -- the concrete
     // variant is only known at runtime, so `as APIInteraction` is justified
     const interactionPayload = {
@@ -247,6 +262,7 @@ export class DigitalDiscord {
       guild_id: resolvedGuildId,
       channel_id: channelId,
       channel: channel ? channelToAPI(channel) : undefined,
+      message: messageData,
       member: member ? {
         user: userToAPI(member.user),
         nick: member.nick ?? undefined,
