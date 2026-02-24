@@ -1,7 +1,25 @@
 {
   "name": "discord-digital-twin",
   "version": "0.0.1",
+  "description": "Local Discord API twin for testing discord.js bots without hitting real Discord servers",
   "type": "module",
+  "license": "MIT",
+  "author": "remorses <beats.by.morse@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/remorses/kimaki",
+    "directory": "discord-digital-twin"
+  },
+  "homepage": "https://github.com/remorses/kimaki/tree/main/discord-digital-twin",
+  "bugs": "https://github.com/remorses/kimaki/issues",
+  "keywords": [
+    "discord",
+    "testing",
+    "mock",
+    "discord.js",
+    "e2e",
+    "integration-test"
+  ],
   "exports": {
     ".": {
       "types": "./src/index.ts",
