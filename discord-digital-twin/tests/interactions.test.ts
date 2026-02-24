@@ -1,0 +1,299 @@
+// Phase 4 tests: interactions (slash commands, replies, deferred responses, follow-ups).
+// Validates that discord.js Client can receive INTERACTION_CREATE events and
+// respond via interaction callback, webhook follow-up, and edit endpoints.
+
+import { describe, test, expect, beforeAll, afterAll } from 'vitest'
+import {
+  Client,
+  GatewayIntentBits,
+  ChannelType,
+  InteractionType,
+} from 'discord.js'
+import type {
+  ChatInputCommandInteraction,
+  Interaction,
+} from 'discord.js'
+import { DigitalDiscord } from '../src/index.js'
+
+describe('interactions', () => {
+  let discord: DigitalDiscord
+  let client: Client
+  let channelId: string
+  let testUserId: string
+
+  beforeAll(async () => {
+    discord = new DigitalDiscord({
+      guild: { name: 'Test Server' },
+      channels: [
+        {
+          name: 'general',
+          type: ChannelType.GuildText,
+          topic: 'test channel',
+        },
+      ],
+      users: [{ username: 'TestUser' }],
+    })
+    await discord.start()
+
+    const channels = await discord.prisma.channel.findMany()
+    channelId = channels[0]!.id
+    const users = await discord.prisma.user.findMany({ where: { bot: false } })
+    testUserId = users[0]!.id
+
+    client = new Client({
+      intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+      ],
+      rest: {
+        api: discord.restUrl,
+        version: '10',
+      },
+    })
+
+    await client.login(discord.botToken)
+    await new Promise<void>((resolve) => {
+      if (client.isReady()) {
+        resolve()
+        return
+      }
+      client.once('ready', () => { resolve() })
+    })
+  }, 15000)
+
+  afterAll(async () => {
+    client?.destroy()
+    await discord?.stop()
+  })
+
+  test('simulateInteraction dispatches interactionCreate to client', async () => {
+    const received = new Promise<Interaction>((resolve) => {
+      client.once('interactionCreate', (i) => { resolve(i) })
+    })
+
+    const { id } = await discord.simulateInteraction({
+      type: InteractionType.ApplicationCommand,
+      channelId,
+      userId: testUserId,
+      data: {
+        id: '1234567890',
+        name: 'test-command',
+        type: 1,
+      },
+    })
+
+    const interaction = await received
+    expect(interaction.id).toBe(id)
+    expect(interaction.type).toBe(InteractionType.ApplicationCommand)
+    expect(interaction.isChatInputCommand()).toBe(true)
+  })
+
+  test('interaction.reply() creates a message via callback endpoint', async () => {
+    const received = new Promise<ChatInputCommandInteraction>((resolve) => {
+      client.once('interactionCreate', (i) => {
+        if (i.isChatInputCommand()) { resolve(i) }
+      })
+    })
+
+    const { id } = await discord.simulateInteraction({
+      type: InteractionType.ApplicationCommand,
+      channelId,
+      userId: testUserId,
+      data: {
+        id: '1234567891',
+        name: 'reply-test',
+        type: 1,
+      },
+    })
+
+    const interaction = await received
+    await interaction.reply({ content: 'Reply from bot' })
+
+    const response = await discord.getInteractionResponse(id)
+    expect(response).toBeDefined()
+    expect(response!.acknowledged).toBe(true)
+    expect(response!.messageId).toBeTruthy()
+
+    const messages = await discord.getMessages(channelId)
+    const replyMsg = messages.find((m) => m.content === 'Reply from bot')
+    expect(replyMsg).toBeDefined()
+    expect(replyMsg!.application_id).toBe(discord.botUserId)
+  })
+
+  test('interaction.deferReply() + editReply() creates message on edit', async () => {
+    const received = new Promise<ChatInputCommandInteraction>((resolve) => {
+      client.once('interactionCreate', (i) => {
+        if (i.isChatInputCommand()) { resolve(i) }
+      })
+    })
+
+    const { id } = await discord.simulateInteraction({
+      type: InteractionType.ApplicationCommand,
+      channelId,
+      userId: testUserId,
+      data: {
+        id: '1234567892',
+        name: 'defer-test',
+        type: 1,
+      },
+    })
+
+    const interaction = await received
+    await interaction.deferReply()
+
+    // After deferring, interaction is acknowledged but no message yet
+    const afterDefer = await discord.getInteractionResponse(id)
+    expect(afterDefer!.acknowledged).toBe(true)
+    expect(afterDefer!.messageId).toBeNull()
+
+    await interaction.editReply({ content: 'Deferred then edited' })
+
+    // After editReply, message should exist
+    const afterEdit = await discord.getInteractionResponse(id)
+    expect(afterEdit!.messageId).toBeTruthy()
+
+    const messages = await discord.getMessages(channelId)
+    const msg = messages.find((m) => m.content === 'Deferred then edited')
+    expect(msg).toBeDefined()
+  })
+
+  test('interaction.deleteReply() removes the message', async () => {
+    const received = new Promise<ChatInputCommandInteraction>((resolve) => {
+      client.once('interactionCreate', (i) => {
+        if (i.isChatInputCommand()) { resolve(i) }
+      })
+    })
+
+    await discord.simulateInteraction({
+      type: InteractionType.ApplicationCommand,
+      channelId,
+      userId: testUserId,
+      data: {
+        id: '1234567893',
+        name: 'delete-test',
+        type: 1,
+      },
+    })
+
+    const interaction = await received
+    await interaction.reply({ content: 'To be deleted' })
+    const reply = await interaction.fetchReply()
+    expect(reply.content).toBe('To be deleted')
+
+    await interaction.deleteReply()
+
+    const messages = await discord.getMessages(channelId)
+    const found = messages.find((m) => m.id === reply.id)
+    expect(found).toBeUndefined()
+  })
+
+  test('interaction.followUp() creates an additional message', async () => {
+    const received = new Promise<ChatInputCommandInteraction>((resolve) => {
+      client.once('interactionCreate', (i) => {
+        if (i.isChatInputCommand()) { resolve(i) }
+      })
+    })
+
+    await discord.simulateInteraction({
+      type: InteractionType.ApplicationCommand,
+      channelId,
+      userId: testUserId,
+      data: {
+        id: '1234567894',
+        name: 'followup-test',
+        type: 1,
+      },
+    })
+
+    const interaction = await received
+    await interaction.reply({ content: 'Initial reply' })
+    const followUp = await interaction.followUp({ content: 'Follow-up message' })
+
+    expect(followUp.content).toBe('Follow-up message')
+
+    const messages = await discord.getMessages(channelId)
+    expect(messages.some((m) => m.content === 'Initial reply')).toBe(true)
+    expect(messages.some((m) => m.content === 'Follow-up message')).toBe(true)
+  })
+
+  test('interaction.fetchReply() returns the original reply', async () => {
+    const received = new Promise<ChatInputCommandInteraction>((resolve) => {
+      client.once('interactionCreate', (i) => {
+        if (i.isChatInputCommand()) { resolve(i) }
+      })
+    })
+
+    await discord.simulateInteraction({
+      type: InteractionType.ApplicationCommand,
+      channelId,
+      userId: testUserId,
+      data: {
+        id: '1234567895',
+        name: 'fetch-test',
+        type: 1,
+      },
+    })
+
+    const interaction = await received
+    await interaction.reply({ content: 'Fetch this reply' })
+    const fetched = await interaction.fetchReply()
+
+    expect(fetched.content).toBe('Fetch this reply')
+    expect(fetched.author.id).toBe(discord.botUserId)
+  })
+
+  test('double reply is guarded by discord.js (interaction.replied = true)', async () => {
+    const received = new Promise<ChatInputCommandInteraction>((resolve) => {
+      client.once('interactionCreate', (i) => {
+        if (i.isChatInputCommand()) { resolve(i) }
+      })
+    })
+
+    await discord.simulateInteraction({
+      type: InteractionType.ApplicationCommand,
+      channelId,
+      userId: testUserId,
+      data: {
+        id: '1234567896',
+        name: 'double-reply-test',
+        type: 1,
+      },
+    })
+
+    const interaction = await received
+    await interaction.reply({ content: 'First reply' })
+
+    // discord.js guards against double reply client-side
+    expect(interaction.replied).toBe(true)
+  })
+
+  test('editReply() edits existing message content', async () => {
+    const received = new Promise<ChatInputCommandInteraction>((resolve) => {
+      client.once('interactionCreate', (i) => {
+        if (i.isChatInputCommand()) { resolve(i) }
+      })
+    })
+
+    const { id } = await discord.simulateInteraction({
+      type: InteractionType.ApplicationCommand,
+      channelId,
+      userId: testUserId,
+      data: {
+        id: '1234567897',
+        name: 'edit-existing-test',
+        type: 1,
+      },
+    })
+
+    const interaction = await received
+    await interaction.reply({ content: 'Original reply' })
+    await interaction.editReply({ content: 'Edited reply' })
+
+    const response = await discord.getInteractionResponse(id)
+    const messages = await discord.getMessages(channelId)
+    const msg = messages.find((m) => m.id === response!.messageId)
+    expect(msg?.content).toBe('Edited reply')
+    expect(msg?.edited_timestamp).toBeTruthy()
+  })
+})

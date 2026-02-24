@@ -3,8 +3,18 @@
 // can connect to. Used for automated testing of the Kimaki bot without
 // hitting real Discord.
 
-import { ChannelType } from 'discord-api-types/v10'
-import type { APIMessage, APIChannel, APIEmbed, APIAttachment } from 'discord-api-types/v10'
+import {
+  ChannelType,
+  GatewayDispatchEvents,
+} from 'discord-api-types/v10'
+import type {
+  APIMessage,
+  APIChannel,
+  APIEmbed,
+  APIAttachment,
+  APIInteraction,
+  InteractionType,
+} from 'discord-api-types/v10'
 import { createPrismaClient, type PrismaClient } from './db.js'
 import { generateSnowflake } from './snowflake.js'
 import { createServer, startServer, stopServer, type ServerComponents } from './server.js'
@@ -191,6 +201,117 @@ export class DigitalDiscord {
     const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
     this.server.gateway.broadcastMessageCreate(apiMessage, guildId ?? '')
     return apiMessage
+  }
+
+  async simulateInteraction({ type, channelId, userId, data, guildId }: {
+    type: InteractionType
+    channelId: string
+    userId: string
+    data?: Record<string, unknown>
+    guildId?: string
+  }): Promise<{ id: string; token: string }> {
+    if (!this.server) {
+      throw new Error('Server not started')
+    }
+    const interactionId = generateSnowflake()
+    const interactionToken = `test-interaction-token-${interactionId}`
+    const resolvedGuildId = guildId ?? this.guildId
+
+    // Pre-create the InteractionResponse row so the callback endpoint can find it
+    await this.prisma.interactionResponse.create({
+      data: {
+        interactionId,
+        interactionToken,
+        applicationId: this.botUserId,
+        channelId,
+        type: 0, // placeholder, updated when callback is received
+        acknowledged: false,
+      },
+    })
+
+    // Build the INTERACTION_CREATE gateway payload
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } })
+    const member = await this.prisma.guildMember.findUnique({
+      where: { guildId_userId: { guildId: resolvedGuildId, userId } },
+      include: { user: true },
+    })
+    const channel = await this.prisma.channel.findUnique({ where: { id: channelId } })
+
+    // APIInteraction is a discriminated union keyed by `type` -- the concrete
+    // variant is only known at runtime, so `as APIInteraction` is justified
+    const interactionPayload = {
+      id: interactionId,
+      application_id: this.botUserId,
+      type,
+      data: data ?? {},
+      guild_id: resolvedGuildId,
+      channel_id: channelId,
+      channel: channel ? channelToAPI(channel) : undefined,
+      member: member ? {
+        user: userToAPI(member.user),
+        nick: member.nick ?? undefined,
+        roles: JSON.parse(member.roles) as string[],
+        joined_at: member.joinedAt.toISOString(),
+        deaf: member.deaf,
+        mute: member.mute,
+        flags: 0,
+        permissions: member.permissions ?? '1099511627775',
+      } : undefined,
+      token: interactionToken,
+      version: 1,
+      app_permissions: '1099511627775',
+      locale: 'en-US',
+      guild_locale: 'en-US',
+      entitlements: [],
+      authorizing_integration_owners: {},
+      context: 0,
+      attachment_size_limit: 26214400,
+    } as unknown as APIInteraction
+
+    this.server.gateway.broadcast(
+      GatewayDispatchEvents.InteractionCreate,
+      interactionPayload,
+    )
+
+    return { id: interactionId, token: interactionToken }
+  }
+
+  async getInteractionResponse(interactionId: string): Promise<{
+    interactionId: string
+    interactionToken: string
+    applicationId: string
+    channelId: string
+    type: number
+    messageId: string | null
+    data: string | null
+    acknowledged: boolean
+  } | null> {
+    return this.prisma.interactionResponse.findUnique({
+      where: { interactionId },
+    })
+  }
+
+  async waitForInteractionResponse({ interactionId, timeout = 10000 }: {
+    interactionId: string
+    timeout?: number
+  }): Promise<{
+    interactionId: string
+    interactionToken: string
+    type: number
+    messageId: string | null
+    acknowledged: boolean
+  }> {
+    const start = Date.now()
+    while (Date.now() - start < timeout) {
+      const response = await this.prisma.interactionResponse.findUnique({
+        where: { interactionId },
+      })
+      if (response?.acknowledged) {
+        return response
+      }
+      await new Promise((resolve) => { setTimeout(resolve, 50) })
+    }
+    throw new Error(`Timed out waiting for interaction response ${interactionId}`)
   }
 
   async waitForBotMessage({ channelId, timeout = 10000 }: {

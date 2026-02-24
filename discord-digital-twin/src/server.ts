@@ -11,6 +11,8 @@ import {
   ApplicationCommandType,
   ChannelType,
   GatewayDispatchEvents,
+  InteractionResponseType,
+  MessageType,
 } from 'discord-api-types/v10'
 import type {
   APIUser,
@@ -26,12 +28,21 @@ import type {
   RESTPatchAPIChannelJSONBody,
   RESTPostAPIChannelThreadsJSONBody,
   RESTPostAPIChannelMessagesThreadsJSONBody,
+  APIInteractionResponseCallbackData,
+  RESTPostAPIInteractionCallbackJSONBody,
 } from 'discord-api-types/v10'
 import { DiscordGateway } from './gateway.js'
 import type { GatewayState } from './gateway.js'
 import type { PrismaClient } from './generated/client.js'
 import { userToAPI, messageToAPI, channelToAPI, threadMemberToAPI } from './serializers.js'
 import { generateSnowflake } from './snowflake.js'
+
+// discord.js (via undici) URL-encodes @original to %40original.
+// Decode so route handlers can check for the canonical form.
+function resolveWebhookMessageId(raw: string): string {
+  const decoded = decodeURIComponent(raw)
+  return decoded
+}
 
 // Generous fake rate limit headers so discord.js never self-throttles
 const RATE_LIMIT_HEADERS: Record<string, string> = {
@@ -639,6 +650,340 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         })
+      },
+    })
+
+    // --- Interactions ---
+
+    .route({
+      method: 'POST',
+      path: '/interactions/:interaction_id/:interaction_token/callback',
+      async handler({ params, request }): Promise<Response> {
+        // JSON.parse of unknown request body -- `as` is the only option
+        const body = await request.json() as RESTPostAPIInteractionCallbackJSONBody
+
+        const existing = await prisma.interactionResponse.findUnique({
+          where: { interactionId: params.interaction_id },
+        })
+        if (!existing) {
+          throw new Response(JSON.stringify({
+            code: 10062,
+            message: 'Unknown Interaction',
+            errors: {},
+          }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        if (existing.acknowledged) {
+          throw new Response(JSON.stringify({
+            code: 40060,
+            message: 'Interaction has already been acknowledged',
+            errors: {},
+          }), { status: 400, headers: { 'Content-Type': 'application/json' } })
+        }
+
+        const callbackType = body.type
+        let messageId: string | null = null
+        const data = ('data' in body ? body.data : null) as APIInteractionResponseCallbackData | null
+
+        // Types 4 (CHANNEL_MESSAGE_WITH_SOURCE) and 7 (UPDATE_MESSAGE)
+        // create a message immediately
+        if (
+          callbackType === InteractionResponseType.ChannelMessageWithSource ||
+          callbackType === InteractionResponseType.UpdateMessage
+        ) {
+          messageId = generateSnowflake()
+          await prisma.message.create({
+            data: {
+              id: messageId,
+              channelId: existing.channelId,
+              authorId: botUserId,
+              content: data?.content ?? '',
+              tts: data?.tts ?? false,
+              flags: data?.flags ?? 0,
+              embeds: JSON.stringify(data?.embeds ?? []),
+              components: JSON.stringify(data?.components ?? []),
+              webhookId: existing.applicationId,
+              applicationId: existing.applicationId,
+              type: MessageType.Default,
+            },
+          })
+          await prisma.channel.update({
+            where: { id: existing.channelId },
+            data: {
+              lastMessageId: messageId,
+              messageCount: { increment: 1 },
+              totalMessageSent: { increment: 1 },
+            },
+          })
+          const dbMessage = await prisma.message.findUniqueOrThrow({ where: { id: messageId } })
+          const author = await prisma.user.findUniqueOrThrow({ where: { id: botUserId } })
+          const channel = await prisma.channel.findUnique({ where: { id: existing.channelId } })
+          const guildId = channel?.guildId ?? undefined
+          const member = guildId
+            ? await prisma.guildMember.findUnique({
+                where: { guildId_userId: { guildId, userId: botUserId } },
+                include: { user: true },
+              })
+            : null
+          const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
+          gateway.broadcastMessageCreate(apiMessage, guildId ?? '')
+        }
+
+        // Mark interaction as acknowledged and store the response
+        await prisma.interactionResponse.update({
+          where: { interactionId: params.interaction_id },
+          data: {
+            acknowledged: true,
+            type: callbackType,
+            messageId,
+            data: data ? JSON.stringify(data) : null,
+          },
+        })
+
+        return new Response(null, { status: 204 })
+      },
+    })
+
+    // --- Webhook endpoints for interaction follow-ups and edits ---
+    // discord.js (via undici) URL-encodes @original to %40original, so we
+    // use :message_id params and resolve @original inside each handler.
+
+    .route({
+      method: 'POST',
+      path: '/webhooks/:webhook_id/:webhook_token',
+      async handler({ params, request }): Promise<APIMessage> {
+        // JSON.parse of unknown request body -- `as` is the only option
+        const body = await request.json() as RESTPostAPIChannelMessageJSONBody
+
+        // Look up the interaction to find which channel to post in
+        const interaction = await prisma.interactionResponse.findUnique({
+          where: { interactionToken: params.webhook_token },
+        })
+        if (!interaction) {
+          throw new Response(JSON.stringify({
+            code: 10062,
+            message: 'Unknown Interaction',
+            errors: {},
+          }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+
+        const messageId = generateSnowflake()
+        await prisma.message.create({
+          data: {
+            id: messageId,
+            channelId: interaction.channelId,
+            authorId: botUserId,
+            content: body.content ?? '',
+            tts: body.tts ?? false,
+            flags: body.flags ?? 0,
+            embeds: JSON.stringify(body.embeds ?? []),
+            components: JSON.stringify(body.components ?? []),
+            webhookId: interaction.applicationId,
+            applicationId: interaction.applicationId,
+            type: MessageType.Default,
+          },
+        })
+        await prisma.channel.update({
+          where: { id: interaction.channelId },
+          data: {
+            lastMessageId: messageId,
+            messageCount: { increment: 1 },
+            totalMessageSent: { increment: 1 },
+          },
+        })
+        const dbMessage = await prisma.message.findUniqueOrThrow({ where: { id: messageId } })
+        const author = await prisma.user.findUniqueOrThrow({ where: { id: botUserId } })
+        const channel = await prisma.channel.findUnique({ where: { id: interaction.channelId } })
+        const guildId = channel?.guildId ?? undefined
+        const member = guildId
+          ? await prisma.guildMember.findUnique({
+              where: { guildId_userId: { guildId, userId: botUserId } },
+              include: { user: true },
+            })
+          : null
+        const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
+        gateway.broadcastMessageCreate(apiMessage, guildId ?? '')
+        return apiMessage
+      },
+    })
+    .route({
+      method: 'GET',
+      path: '/webhooks/:webhook_id/:webhook_token/messages/:message_id',
+      async handler({ params }): Promise<APIMessage> {
+        const resolvedId = resolveWebhookMessageId(params.message_id)
+        const messageId = await (async () => {
+          if (resolvedId === '@original') {
+            const interaction = await prisma.interactionResponse.findUnique({
+              where: { interactionToken: params.webhook_token },
+            })
+            if (!interaction || !interaction.messageId) {
+              throw new Response(JSON.stringify({
+                code: 10008,
+                message: 'Unknown Message',
+                errors: {},
+              }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+            }
+            return interaction.messageId
+          }
+          return resolvedId
+        })()
+
+        const dbMessage = await prisma.message.findUnique({ where: { id: messageId } })
+        if (!dbMessage) {
+          throw new Response(JSON.stringify({
+            code: 10008,
+            message: 'Unknown Message',
+            errors: {},
+          }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        const author = await prisma.user.findUniqueOrThrow({ where: { id: dbMessage.authorId } })
+        const channel = await prisma.channel.findUnique({ where: { id: dbMessage.channelId } })
+        const guildId = channel?.guildId ?? undefined
+        const member = guildId
+          ? await prisma.guildMember.findUnique({
+              where: { guildId_userId: { guildId, userId: dbMessage.authorId } },
+              include: { user: true },
+            })
+          : null
+        return messageToAPI(dbMessage, author, guildId, member ?? undefined)
+      },
+    })
+    .route({
+      method: 'PATCH',
+      path: '/webhooks/:webhook_id/:webhook_token/messages/:message_id',
+      async handler({ params, request }): Promise<APIMessage> {
+        const body = await request.json() as RESTPatchAPIChannelMessageJSONBody
+        const resolvedId = resolveWebhookMessageId(params.message_id)
+
+        // For @original, look up the interaction response's messageId.
+        // If deferred (no messageId yet), create the message on first edit.
+        const messageId = await (async () => {
+          if (resolvedId === '@original') {
+            const interaction = await prisma.interactionResponse.findUnique({
+              where: { interactionToken: params.webhook_token },
+            })
+            if (!interaction) {
+              throw new Response(JSON.stringify({
+                code: 10062,
+                message: 'Unknown Interaction',
+                errors: {},
+              }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+            }
+            if (!interaction.messageId) {
+              // Deferred interaction -- create the message on first edit
+              const newId = generateSnowflake()
+              await prisma.message.create({
+                data: {
+                  id: newId,
+                  channelId: interaction.channelId,
+                  authorId: botUserId,
+                  content: body.content ?? '',
+                  flags: body.flags ?? 0,
+                  embeds: JSON.stringify(body.embeds ?? []),
+                  components: JSON.stringify(body.components ?? []),
+                  webhookId: interaction.applicationId,
+                  applicationId: interaction.applicationId,
+                  type: MessageType.Default,
+                },
+              })
+              await prisma.channel.update({
+                where: { id: interaction.channelId },
+                data: {
+                  lastMessageId: newId,
+                  messageCount: { increment: 1 },
+                  totalMessageSent: { increment: 1 },
+                },
+              })
+              await prisma.interactionResponse.update({
+                where: { interactionId: interaction.interactionId },
+                data: { messageId: newId },
+              })
+              return newId
+            }
+            return interaction.messageId
+          }
+          return resolvedId
+        })()
+
+        const existing = await prisma.message.findUnique({ where: { id: messageId } })
+        if (!existing) {
+          throw new Response(JSON.stringify({
+            code: 10008,
+            message: 'Unknown Message',
+            errors: {},
+          }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+
+        // Skip the DB update if we just created the message (deferred case)
+        const isNewlyCreated = existing.editedTimestamp === null && existing.content === (body.content ?? '')
+        if (!isNewlyCreated) {
+          await prisma.message.update({
+            where: { id: messageId },
+            data: {
+              content: body.content ?? existing.content,
+              editedTimestamp: new Date(),
+              ...(body.embeds ? { embeds: JSON.stringify(body.embeds) } : {}),
+              ...(body.components ? { components: JSON.stringify(body.components) } : {}),
+              ...(body.flags != null ? { flags: body.flags } : {}),
+            },
+          })
+        }
+
+        const dbMessage = await prisma.message.findUniqueOrThrow({ where: { id: messageId } })
+        const author = await prisma.user.findUniqueOrThrow({ where: { id: dbMessage.authorId } })
+        const channel = await prisma.channel.findUnique({ where: { id: dbMessage.channelId } })
+        const guildId = channel?.guildId ?? undefined
+        const member = guildId
+          ? await prisma.guildMember.findUnique({
+              where: { guildId_userId: { guildId, userId: dbMessage.authorId } },
+              include: { user: true },
+            })
+          : null
+        const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
+        gateway.broadcast(GatewayDispatchEvents.MessageUpdate, {
+          ...apiMessage,
+          guild_id: guildId,
+        })
+        return apiMessage
+      },
+    })
+    .route({
+      method: 'DELETE',
+      path: '/webhooks/:webhook_id/:webhook_token/messages/:message_id',
+      async handler({ params }): Promise<Response> {
+        const resolvedId = resolveWebhookMessageId(params.message_id)
+        const messageId = await (async () => {
+          if (resolvedId === '@original') {
+            const interaction = await prisma.interactionResponse.findUnique({
+              where: { interactionToken: params.webhook_token },
+            })
+            if (!interaction || !interaction.messageId) {
+              throw new Response(JSON.stringify({
+                code: 10008,
+                message: 'Unknown Message',
+                errors: {},
+              }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+            }
+            return interaction.messageId
+          }
+          return resolvedId
+        })()
+
+        const dbMessage = await prisma.message.findUnique({ where: { id: messageId } })
+        if (!dbMessage) {
+          throw new Response(JSON.stringify({
+            code: 10008,
+            message: 'Unknown Message',
+            errors: {},
+          }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        const channel = await prisma.channel.findUnique({ where: { id: dbMessage.channelId } })
+        await prisma.message.delete({ where: { id: messageId } })
+        gateway.broadcast(GatewayDispatchEvents.MessageDelete, {
+          id: messageId,
+          channel_id: dbMessage.channelId,
+          guild_id: channel?.guildId ?? undefined,
+        })
+        return new Response(null, { status: 204 })
       },
     })
 
