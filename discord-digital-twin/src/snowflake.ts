@@ -9,6 +9,6 @@ let increment = 0n
 export function generateSnowflake(): string {
   const timestamp = BigInt(Date.now()) - DISCORD_EPOCH
   const id = (timestamp << 22n) | (0n << 17n) | (0n << 12n) | increment
-  increment = (increment + 1n) & 0xFFFn
+  increment = (increment + 1n) & 0xfffn
   return id.toString()
 }

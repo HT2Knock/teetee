@@ -34,7 +34,12 @@ import type {
 import { DiscordGateway } from './gateway.js'
 import type { GatewayState } from './gateway.js'
 import type { PrismaClient } from './generated/client.js'
-import { userToAPI, messageToAPI, channelToAPI, threadMemberToAPI } from './serializers.js'
+import {
+  userToAPI,
+  messageToAPI,
+  channelToAPI,
+  threadMemberToAPI,
+} from './serializers.js'
 import { generateSnowflake } from './snowflake.js'
 
 // discord.js (via undici) URL-encodes @original to %40original.
@@ -59,7 +64,12 @@ export interface ServerComponents {
   port: number
 }
 
-export function createServer({ prisma, botUserId, botToken, loadGatewayState }: {
+export function createServer({
+  prisma,
+  botUserId,
+  botToken,
+  loadGatewayState,
+}: {
   prisma: PrismaClient
   botUserId: string
   botToken: string
@@ -112,11 +122,14 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
           where: { id: params.user_id },
         })
         if (!user) {
-          throw new Response(JSON.stringify({
-            code: 10013,
-            message: 'Unknown User',
-            errors: {},
-          }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10013,
+              message: 'Unknown User',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
         return userToAPI(user)
       },
@@ -138,7 +151,10 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
           bot_require_code_grant: false,
           verify_key: 'fake-verify-key',
           team: null,
-          flags: ApplicationFlags.GatewayPresence | ApplicationFlags.GatewayGuildMembers | ApplicationFlags.GatewayMessageContent,
+          flags:
+            ApplicationFlags.GatewayPresence |
+            ApplicationFlags.GatewayGuildMembers |
+            ApplicationFlags.GatewayMessageContent,
           event_webhooks_status: ApplicationWebhookEventStatus.Disabled,
         }
       },
@@ -146,9 +162,13 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
     .route({
       method: 'PUT',
       path: '/applications/:application_id/commands',
-      async handler({ params, request }): Promise<RESTPutAPIApplicationCommandsResult> {
+      async handler({
+        params,
+        request,
+      }): Promise<RESTPutAPIApplicationCommandsResult> {
         // JSON.parse of unknown request body -- `as` is the only option
-        const commands = await request.json() as RESTPutAPIApplicationCommandsJSONBody
+        const commands =
+          (await request.json()) as RESTPutAPIApplicationCommandsJSONBody
 
         await prisma.applicationCommand.deleteMany({
           where: {
@@ -161,7 +181,8 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
         for (const cmd of commands) {
           const id = generateSnowflake()
           const version = generateSnowflake()
-          const description = 'description' in cmd ? (cmd.description ?? '') : ''
+          const description =
+            'description' in cmd ? (cmd.description ?? '') : ''
           const options = 'options' in cmd ? (cmd.options ?? []) : []
           const type = cmd.type ?? ApplicationCommandType.ChatInput
           await prisma.applicationCommand.create({
@@ -205,10 +226,19 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
       path: '/channels/:channel_id/messages',
       async handler({ params, request }): Promise<APIMessage> {
         // JSON.parse of unknown request body -- `as` is the only option
-        const body = await request.json() as RESTPostAPIChannelMessageJSONBody
-        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        const body = (await request.json()) as RESTPostAPIChannelMessageJSONBody
+        const channel = await prisma.channel.findUnique({
+          where: { id: params.channel_id },
+        })
         if (!channel) {
-          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10003,
+              message: 'Unknown Channel',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
         const messageId = generateSnowflake()
         await prisma.message.create({
@@ -222,7 +252,9 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
             flags: body.flags ?? 0,
             embeds: JSON.stringify(body.embeds ?? []),
             components: JSON.stringify(body.components ?? []),
-            messageReference: body.message_reference ? JSON.stringify(body.message_reference) : null,
+            messageReference: body.message_reference
+              ? JSON.stringify(body.message_reference)
+              : null,
           },
         })
         await prisma.channel.update({
@@ -233,8 +265,12 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
             totalMessageSent: { increment: 1 },
           },
         })
-        const dbMessage = await prisma.message.findUniqueOrThrow({ where: { id: messageId } })
-        const author = await prisma.user.findUniqueOrThrow({ where: { id: botUserId } })
+        const dbMessage = await prisma.message.findUniqueOrThrow({
+          where: { id: messageId },
+        })
+        const author = await prisma.user.findUniqueOrThrow({
+          where: { id: botUserId },
+        })
         const guildId = channel.guildId ?? undefined
         const member = guildId
           ? await prisma.guildMember.findUnique({
@@ -242,7 +278,12 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
               include: { user: true },
             })
           : null
-        const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
+        const apiMessage = messageToAPI(
+          dbMessage,
+          author,
+          guildId,
+          member ?? undefined,
+        )
         gateway.broadcastMessageCreate(apiMessage, guildId ?? '')
         return apiMessage
       },
@@ -251,19 +292,41 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
       method: 'GET',
       path: '/channels/:channel_id/messages/:message_id',
       async handler({ params }): Promise<APIMessage> {
-        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        const channel = await prisma.channel.findUnique({
+          where: { id: params.channel_id },
+        })
         if (!channel) {
-          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10003,
+              message: 'Unknown Channel',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
-        const dbMessage = await prisma.message.findUnique({ where: { id: params.message_id } })
+        const dbMessage = await prisma.message.findUnique({
+          where: { id: params.message_id },
+        })
         if (!dbMessage) {
-          throw new Response(JSON.stringify({ code: 10008, message: 'Unknown Message', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10008,
+              message: 'Unknown Message',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
-        const author = await prisma.user.findUniqueOrThrow({ where: { id: dbMessage.authorId } })
+        const author = await prisma.user.findUniqueOrThrow({
+          where: { id: dbMessage.authorId },
+        })
         const guildId = channel.guildId ?? undefined
         const member = guildId
           ? await prisma.guildMember.findUnique({
-              where: { guildId_userId: { guildId, userId: dbMessage.authorId } },
+              where: {
+                guildId_userId: { guildId, userId: dbMessage.authorId },
+              },
               include: { user: true },
             })
           : null
@@ -274,14 +337,33 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
       method: 'PATCH',
       path: '/channels/:channel_id/messages/:message_id',
       async handler({ params, request }): Promise<APIMessage> {
-        const body = await request.json() as RESTPatchAPIChannelMessageJSONBody
-        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        const body =
+          (await request.json()) as RESTPatchAPIChannelMessageJSONBody
+        const channel = await prisma.channel.findUnique({
+          where: { id: params.channel_id },
+        })
         if (!channel) {
-          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10003,
+              message: 'Unknown Channel',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
-        const existing = await prisma.message.findUnique({ where: { id: params.message_id } })
+        const existing = await prisma.message.findUnique({
+          where: { id: params.message_id },
+        })
         if (!existing) {
-          throw new Response(JSON.stringify({ code: 10008, message: 'Unknown Message', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10008,
+              message: 'Unknown Message',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
         await prisma.message.update({
           where: { id: params.message_id },
@@ -289,20 +371,33 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
             content: body.content ?? existing.content,
             editedTimestamp: new Date(),
             ...(body.embeds ? { embeds: JSON.stringify(body.embeds) } : {}),
-            ...(body.components ? { components: JSON.stringify(body.components) } : {}),
+            ...(body.components
+              ? { components: JSON.stringify(body.components) }
+              : {}),
             ...(body.flags != null ? { flags: body.flags } : {}),
           },
         })
-        const dbMessage = await prisma.message.findUniqueOrThrow({ where: { id: params.message_id } })
-        const author = await prisma.user.findUniqueOrThrow({ where: { id: dbMessage.authorId } })
+        const dbMessage = await prisma.message.findUniqueOrThrow({
+          where: { id: params.message_id },
+        })
+        const author = await prisma.user.findUniqueOrThrow({
+          where: { id: dbMessage.authorId },
+        })
         const guildId = channel.guildId ?? undefined
         const member = guildId
           ? await prisma.guildMember.findUnique({
-              where: { guildId_userId: { guildId, userId: dbMessage.authorId } },
+              where: {
+                guildId_userId: { guildId, userId: dbMessage.authorId },
+              },
               include: { user: true },
             })
           : null
-        const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
+        const apiMessage = messageToAPI(
+          dbMessage,
+          author,
+          guildId,
+          member ?? undefined,
+        )
         gateway.broadcast(GatewayDispatchEvents.MessageUpdate, {
           ...apiMessage,
           guild_id: guildId,
@@ -314,13 +409,31 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
       method: 'DELETE',
       path: '/channels/:channel_id/messages/:message_id',
       async handler({ params }): Promise<Response> {
-        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        const channel = await prisma.channel.findUnique({
+          where: { id: params.channel_id },
+        })
         if (!channel) {
-          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10003,
+              message: 'Unknown Channel',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
-        const existing = await prisma.message.findUnique({ where: { id: params.message_id } })
+        const existing = await prisma.message.findUnique({
+          where: { id: params.message_id },
+        })
         if (!existing) {
-          throw new Response(JSON.stringify({ code: 10008, message: 'Unknown Message', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10008,
+              message: 'Unknown Message',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
         await prisma.message.delete({ where: { id: params.message_id } })
         gateway.broadcast(GatewayDispatchEvents.MessageDelete, {
@@ -335,14 +448,26 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
       method: 'GET',
       path: '/channels/:channel_id/messages',
       async handler({ params, request }): Promise<Response> {
-        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        const channel = await prisma.channel.findUnique({
+          where: { id: params.channel_id },
+        })
         if (!channel) {
-          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10003,
+              message: 'Unknown Channel',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
         const url = new URL(request.url, 'http://localhost')
         const before = url.searchParams.get('before')
         const after = url.searchParams.get('after')
-        const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '50', 10), 100)
+        const limit = Math.min(
+          parseInt(url.searchParams.get('limit') ?? '50', 10),
+          100,
+        )
 
         let messages = await prisma.message.findMany({
           where: { channelId: params.channel_id },
@@ -365,7 +490,9 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
         const guildId = channel.guildId ?? undefined
         const result: APIMessage[] = []
         for (const msg of messages) {
-          const author = await prisma.user.findUniqueOrThrow({ where: { id: msg.authorId } })
+          const author = await prisma.user.findUniqueOrThrow({
+            where: { id: msg.authorId },
+          })
           const member = guildId
             ? await prisma.guildMember.findUnique({
                 where: { guildId_userId: { guildId, userId: msg.authorId } },
@@ -395,13 +522,31 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
       path: '/channels/:channel_id/messages/:message_id/reactions/:emoji/@me',
       async handler({ params }): Promise<Response> {
         const emoji = decodeURIComponent(params.emoji)
-        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        const channel = await prisma.channel.findUnique({
+          where: { id: params.channel_id },
+        })
         if (!channel) {
-          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10003,
+              message: 'Unknown Channel',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
-        const message = await prisma.message.findUnique({ where: { id: params.message_id } })
+        const message = await prisma.message.findUnique({
+          where: { id: params.message_id },
+        })
         if (!message) {
-          throw new Response(JSON.stringify({ code: 10008, message: 'Unknown Message', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10008,
+              message: 'Unknown Message',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
         await prisma.reaction.upsert({
           where: {
@@ -440,7 +585,9 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
             emoji,
           },
         })
-        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        const channel = await prisma.channel.findUnique({
+          where: { id: params.channel_id },
+        })
         gateway.broadcast(GatewayDispatchEvents.MessageReactionRemove, {
           user_id: botUserId,
           channel_id: params.channel_id,
@@ -458,9 +605,18 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
       method: 'GET',
       path: '/channels/:channel_id',
       async handler({ params }): Promise<APIChannel> {
-        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        const channel = await prisma.channel.findUnique({
+          where: { id: params.channel_id },
+        })
         if (!channel) {
-          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10003,
+              message: 'Unknown Channel',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
         return channelToAPI(channel)
       },
@@ -470,29 +626,51 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
       path: '/channels/:channel_id',
       async handler({ params, request }): Promise<APIChannel> {
         // JSON.parse of unknown request body -- `as` is the only option
-        const body = await request.json() as RESTPatchAPIChannelJSONBody
-        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        const body = (await request.json()) as RESTPatchAPIChannelJSONBody
+        const channel = await prisma.channel.findUnique({
+          where: { id: params.channel_id },
+        })
         if (!channel) {
-          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10003,
+              message: 'Unknown Channel',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
-        const isThread = channel.type === ChannelType.PublicThread || channel.type === ChannelType.PrivateThread || channel.type === ChannelType.AnnouncementThread
+        const isThread =
+          channel.type === ChannelType.PublicThread ||
+          channel.type === ChannelType.PrivateThread ||
+          channel.type === ChannelType.AnnouncementThread
         await prisma.channel.update({
           where: { id: params.channel_id },
           data: {
             ...(body.name != null ? { name: body.name } : {}),
             ...(body.topic !== undefined ? { topic: body.topic ?? null } : {}),
-            ...(body.archived != null ? {
-              archived: body.archived,
-              archiveTimestamp: new Date(),
-            } : {}),
+            ...(body.archived != null
+              ? {
+                  archived: body.archived,
+                  archiveTimestamp: new Date(),
+                }
+              : {}),
             ...(body.locked != null ? { locked: body.locked } : {}),
-            ...(body.auto_archive_duration != null ? { autoArchiveDuration: body.auto_archive_duration } : {}),
-            ...(body.rate_limit_per_user != null ? { rateLimitPerUser: body.rate_limit_per_user } : {}),
+            ...(body.auto_archive_duration != null
+              ? { autoArchiveDuration: body.auto_archive_duration }
+              : {}),
+            ...(body.rate_limit_per_user != null
+              ? { rateLimitPerUser: body.rate_limit_per_user }
+              : {}),
           },
         })
-        const updated = await prisma.channel.findUniqueOrThrow({ where: { id: params.channel_id } })
+        const updated = await prisma.channel.findUniqueOrThrow({
+          where: { id: params.channel_id },
+        })
         const apiChannel = channelToAPI(updated)
-        const event = isThread ? GatewayDispatchEvents.ThreadUpdate : GatewayDispatchEvents.ChannelUpdate
+        const event = isThread
+          ? GatewayDispatchEvents.ThreadUpdate
+          : GatewayDispatchEvents.ChannelUpdate
         gateway.broadcast(event, apiChannel)
         return apiChannel
       },
@@ -501,11 +679,23 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
       method: 'DELETE',
       path: '/channels/:channel_id',
       async handler({ params }): Promise<APIChannel> {
-        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        const channel = await prisma.channel.findUnique({
+          where: { id: params.channel_id },
+        })
         if (!channel) {
-          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10003,
+              message: 'Unknown Channel',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
-        const isThread = channel.type === ChannelType.PublicThread || channel.type === ChannelType.PrivateThread || channel.type === ChannelType.AnnouncementThread
+        const isThread =
+          channel.type === ChannelType.PublicThread ||
+          channel.type === ChannelType.PrivateThread ||
+          channel.type === ChannelType.AnnouncementThread
         const apiChannel = channelToAPI(channel)
         await prisma.channel.delete({ where: { id: params.channel_id } })
         if (isThread) {
@@ -529,10 +719,19 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
       path: '/channels/:channel_id/threads',
       async handler({ params, request }): Promise<APIChannel> {
         // JSON.parse of unknown request body -- `as` is the only option
-        const body = await request.json() as RESTPostAPIChannelThreadsJSONBody
-        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        const body = (await request.json()) as RESTPostAPIChannelThreadsJSONBody
+        const channel = await prisma.channel.findUnique({
+          where: { id: params.channel_id },
+        })
         if (!channel) {
-          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10003,
+              message: 'Unknown Channel',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
         const threadId = generateSnowflake()
         const threadType = body.type ?? ChannelType.PublicThread
@@ -554,7 +753,9 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
         await prisma.threadMember.create({
           data: { channelId: threadId, userId: botUserId },
         })
-        const thread = await prisma.channel.findUniqueOrThrow({ where: { id: threadId } })
+        const thread = await prisma.channel.findUniqueOrThrow({
+          where: { id: threadId },
+        })
         const apiChannel = channelToAPI(thread)
         // Include newly_created so discord.js ThreadCreate action emits the event
         // even when the REST response is processed before the gateway WS event
@@ -568,14 +769,33 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
       path: '/channels/:channel_id/messages/:message_id/threads',
       async handler({ params, request }): Promise<APIChannel> {
         // JSON.parse of unknown request body -- `as` is the only option
-        const body = await request.json() as RESTPostAPIChannelMessagesThreadsJSONBody
-        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        const body =
+          (await request.json()) as RESTPostAPIChannelMessagesThreadsJSONBody
+        const channel = await prisma.channel.findUnique({
+          where: { id: params.channel_id },
+        })
         if (!channel) {
-          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10003,
+              message: 'Unknown Channel',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
-        const message = await prisma.message.findUnique({ where: { id: params.message_id } })
+        const message = await prisma.message.findUnique({
+          where: { id: params.message_id },
+        })
         if (!message) {
-          throw new Response(JSON.stringify({ code: 10008, message: 'Unknown Message', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10008,
+              message: 'Unknown Message',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
         const threadId = generateSnowflake()
         await prisma.channel.create({
@@ -595,7 +815,9 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
         await prisma.threadMember.create({
           data: { channelId: threadId, userId: botUserId },
         })
-        const thread = await prisma.channel.findUniqueOrThrow({ where: { id: threadId } })
+        const thread = await prisma.channel.findUniqueOrThrow({
+          where: { id: threadId },
+        })
         const apiChannel = channelToAPI(thread)
         const withCreated = { ...apiChannel, newly_created: true }
         gateway.broadcast(GatewayDispatchEvents.ThreadCreate, withCreated)
@@ -606,12 +828,26 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
       method: 'PUT',
       path: '/channels/:channel_id/thread-members/:user_id',
       async handler({ params }): Promise<Response> {
-        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        const channel = await prisma.channel.findUnique({
+          where: { id: params.channel_id },
+        })
         if (!channel) {
-          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10003,
+              message: 'Unknown Channel',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
         const existing = await prisma.threadMember.findUnique({
-          where: { channelId_userId: { channelId: params.channel_id, userId: params.user_id } },
+          where: {
+            channelId_userId: {
+              channelId: params.channel_id,
+              userId: params.user_id,
+            },
+          },
         })
         if (!existing) {
           await prisma.threadMember.create({
@@ -622,7 +858,12 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
             data: { memberCount: { increment: 1 } },
           })
           const threadMember = await prisma.threadMember.findUniqueOrThrow({
-            where: { channelId_userId: { channelId: params.channel_id, userId: params.user_id } },
+            where: {
+              channelId_userId: {
+                channelId: params.channel_id,
+                userId: params.user_id,
+              },
+            },
           })
           gateway.broadcast(GatewayDispatchEvents.ThreadMembersUpdate, {
             id: params.channel_id,
@@ -639,9 +880,18 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
       method: 'GET',
       path: '/channels/:channel_id/thread-members',
       async handler({ params }): Promise<Response> {
-        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        const channel = await prisma.channel.findUnique({
+          where: { id: params.channel_id },
+        })
         if (!channel) {
-          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10003,
+              message: 'Unknown Channel',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
         const members = await prisma.threadMember.findMany({
           where: { channelId: params.channel_id },
@@ -660,29 +910,38 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
       path: '/interactions/:interaction_id/:interaction_token/callback',
       async handler({ params, request }): Promise<Response> {
         // JSON.parse of unknown request body -- `as` is the only option
-        const body = await request.json() as RESTPostAPIInteractionCallbackJSONBody
+        const body =
+          (await request.json()) as RESTPostAPIInteractionCallbackJSONBody
 
         const existing = await prisma.interactionResponse.findUnique({
           where: { interactionId: params.interaction_id },
         })
         if (!existing) {
-          throw new Response(JSON.stringify({
-            code: 10062,
-            message: 'Unknown Interaction',
-            errors: {},
-          }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10062,
+              message: 'Unknown Interaction',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
         if (existing.acknowledged) {
-          throw new Response(JSON.stringify({
-            code: 40060,
-            message: 'Interaction has already been acknowledged',
-            errors: {},
-          }), { status: 400, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 40060,
+              message: 'Interaction has already been acknowledged',
+              errors: {},
+            }),
+            { status: 400, headers: { 'Content-Type': 'application/json' } },
+          )
         }
 
         const callbackType = body.type
         let messageId: string | null = existing.messageId
-        const data = ('data' in body ? body.data : null) as APIInteractionResponseCallbackData | null
+        const data = (
+          'data' in body ? body.data : null
+        ) as APIInteractionResponseCallbackData | null
 
         // Type 4 (CHANNEL_MESSAGE_WITH_SOURCE) creates a message immediately
         if (callbackType === InteractionResponseType.ChannelMessageWithSource) {
@@ -710,9 +969,15 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
               totalMessageSent: { increment: 1 },
             },
           })
-          const dbMessage = await prisma.message.findUniqueOrThrow({ where: { id: messageId } })
-          const author = await prisma.user.findUniqueOrThrow({ where: { id: botUserId } })
-          const channel = await prisma.channel.findUnique({ where: { id: existing.channelId } })
+          const dbMessage = await prisma.message.findUniqueOrThrow({
+            where: { id: messageId },
+          })
+          const author = await prisma.user.findUniqueOrThrow({
+            where: { id: botUserId },
+          })
+          const channel = await prisma.channel.findUnique({
+            where: { id: existing.channelId },
+          })
           const guildId = channel?.guildId ?? undefined
           const member = guildId
             ? await prisma.guildMember.findUnique({
@@ -720,24 +985,37 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
                 include: { user: true },
               })
             : null
-          const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
+          const apiMessage = messageToAPI(
+            dbMessage,
+            author,
+            guildId,
+            member ?? undefined,
+          )
           gateway.broadcastMessageCreate(apiMessage, guildId ?? '')
         } else if (callbackType === InteractionResponseType.UpdateMessage) {
           messageId = existing.messageId
           if (!messageId) {
-            throw new Response(JSON.stringify({
-              code: 40060,
-              message: 'Interaction is not attached to a message',
-              errors: {},
-            }), { status: 400, headers: { 'Content-Type': 'application/json' } })
+            throw new Response(
+              JSON.stringify({
+                code: 40060,
+                message: 'Interaction is not attached to a message',
+                errors: {},
+              }),
+              { status: 400, headers: { 'Content-Type': 'application/json' } },
+            )
           }
-          const origMessage = await prisma.message.findUnique({ where: { id: messageId } })
+          const origMessage = await prisma.message.findUnique({
+            where: { id: messageId },
+          })
           if (!origMessage) {
-            throw new Response(JSON.stringify({
-              code: 10008,
-              message: 'Unknown Message',
-              errors: {},
-            }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+            throw new Response(
+              JSON.stringify({
+                code: 10008,
+                message: 'Unknown Message',
+                errors: {},
+              }),
+              { status: 404, headers: { 'Content-Type': 'application/json' } },
+            )
           }
           await prisma.message.update({
             where: { id: messageId },
@@ -745,21 +1023,36 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
               content: data?.content ?? origMessage.content,
               editedTimestamp: new Date(),
               ...(data?.embeds ? { embeds: JSON.stringify(data.embeds) } : {}),
-              ...(data?.components ? { components: JSON.stringify(data.components) } : {}),
+              ...(data?.components
+                ? { components: JSON.stringify(data.components) }
+                : {}),
               ...(data?.flags != null ? { flags: data.flags } : {}),
             },
           })
-          const dbMessage = await prisma.message.findUniqueOrThrow({ where: { id: messageId } })
-          const author = await prisma.user.findUniqueOrThrow({ where: { id: dbMessage.authorId } })
-          const channel = await prisma.channel.findUnique({ where: { id: dbMessage.channelId } })
+          const dbMessage = await prisma.message.findUniqueOrThrow({
+            where: { id: messageId },
+          })
+          const author = await prisma.user.findUniqueOrThrow({
+            where: { id: dbMessage.authorId },
+          })
+          const channel = await prisma.channel.findUnique({
+            where: { id: dbMessage.channelId },
+          })
           const guildId = channel?.guildId ?? undefined
           const member = guildId
             ? await prisma.guildMember.findUnique({
-                where: { guildId_userId: { guildId, userId: dbMessage.authorId } },
+                where: {
+                  guildId_userId: { guildId, userId: dbMessage.authorId },
+                },
                 include: { user: true },
               })
             : null
-          const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
+          const apiMessage = messageToAPI(
+            dbMessage,
+            author,
+            guildId,
+            member ?? undefined,
+          )
           gateway.broadcast(GatewayDispatchEvents.MessageUpdate, {
             ...apiMessage,
             guild_id: guildId,
@@ -790,18 +1083,21 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
       path: '/webhooks/:webhook_id/:webhook_token',
       async handler({ params, request }): Promise<APIMessage> {
         // JSON.parse of unknown request body -- `as` is the only option
-        const body = await request.json() as RESTPostAPIChannelMessageJSONBody
+        const body = (await request.json()) as RESTPostAPIChannelMessageJSONBody
 
         // Look up the interaction to find which channel to post in
         const interaction = await prisma.interactionResponse.findUnique({
           where: { interactionToken: params.webhook_token },
         })
         if (!interaction) {
-          throw new Response(JSON.stringify({
-            code: 10062,
-            message: 'Unknown Interaction',
-            errors: {},
-          }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10062,
+              message: 'Unknown Interaction',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
 
         const messageId = generateSnowflake()
@@ -828,9 +1124,15 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
             totalMessageSent: { increment: 1 },
           },
         })
-        const dbMessage = await prisma.message.findUniqueOrThrow({ where: { id: messageId } })
-        const author = await prisma.user.findUniqueOrThrow({ where: { id: botUserId } })
-        const channel = await prisma.channel.findUnique({ where: { id: interaction.channelId } })
+        const dbMessage = await prisma.message.findUniqueOrThrow({
+          where: { id: messageId },
+        })
+        const author = await prisma.user.findUniqueOrThrow({
+          where: { id: botUserId },
+        })
+        const channel = await prisma.channel.findUnique({
+          where: { id: interaction.channelId },
+        })
         const guildId = channel?.guildId ?? undefined
         const member = guildId
           ? await prisma.guildMember.findUnique({
@@ -838,7 +1140,12 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
               include: { user: true },
             })
           : null
-        const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
+        const apiMessage = messageToAPI(
+          dbMessage,
+          author,
+          guildId,
+          member ?? undefined,
+        )
         gateway.broadcastMessageCreate(apiMessage, guildId ?? '')
         return apiMessage
       },
@@ -854,31 +1161,48 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
               where: { interactionToken: params.webhook_token },
             })
             if (!interaction || !interaction.messageId) {
-              throw new Response(JSON.stringify({
-                code: 10008,
-                message: 'Unknown Message',
-                errors: {},
-              }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+              throw new Response(
+                JSON.stringify({
+                  code: 10008,
+                  message: 'Unknown Message',
+                  errors: {},
+                }),
+                {
+                  status: 404,
+                  headers: { 'Content-Type': 'application/json' },
+                },
+              )
             }
             return interaction.messageId
           }
           return resolvedId
         })()
 
-        const dbMessage = await prisma.message.findUnique({ where: { id: messageId } })
+        const dbMessage = await prisma.message.findUnique({
+          where: { id: messageId },
+        })
         if (!dbMessage) {
-          throw new Response(JSON.stringify({
-            code: 10008,
-            message: 'Unknown Message',
-            errors: {},
-          }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10008,
+              message: 'Unknown Message',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
-        const author = await prisma.user.findUniqueOrThrow({ where: { id: dbMessage.authorId } })
-        const channel = await prisma.channel.findUnique({ where: { id: dbMessage.channelId } })
+        const author = await prisma.user.findUniqueOrThrow({
+          where: { id: dbMessage.authorId },
+        })
+        const channel = await prisma.channel.findUnique({
+          where: { id: dbMessage.channelId },
+        })
         const guildId = channel?.guildId ?? undefined
         const member = guildId
           ? await prisma.guildMember.findUnique({
-              where: { guildId_userId: { guildId, userId: dbMessage.authorId } },
+              where: {
+                guildId_userId: { guildId, userId: dbMessage.authorId },
+              },
               include: { user: true },
             })
           : null
@@ -889,7 +1213,8 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
       method: 'PATCH',
       path: '/webhooks/:webhook_id/:webhook_token/messages/:message_id',
       async handler({ params, request }): Promise<APIMessage> {
-        const body = await request.json() as RESTPatchAPIChannelMessageJSONBody
+        const body =
+          (await request.json()) as RESTPatchAPIChannelMessageJSONBody
         const resolvedId = resolveWebhookMessageId(params.message_id)
 
         // For @original, look up the interaction response's messageId.
@@ -901,11 +1226,17 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
               where: { interactionToken: params.webhook_token },
             })
             if (!interaction) {
-              throw new Response(JSON.stringify({
-                code: 10062,
-                message: 'Unknown Interaction',
-                errors: {},
-              }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+              throw new Response(
+                JSON.stringify({
+                  code: 10062,
+                  message: 'Unknown Interaction',
+                  errors: {},
+                }),
+                {
+                  status: 404,
+                  headers: { 'Content-Type': 'application/json' },
+                },
+              )
             }
             if (!interaction.messageId) {
               // Deferred interaction -- create the message on first edit
@@ -944,13 +1275,18 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
           return resolvedId
         })()
 
-        const existing = await prisma.message.findUnique({ where: { id: messageId } })
+        const existing = await prisma.message.findUnique({
+          where: { id: messageId },
+        })
         if (!existing) {
-          throw new Response(JSON.stringify({
-            code: 10008,
-            message: 'Unknown Message',
-            errors: {},
-          }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10008,
+              message: 'Unknown Message',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
 
         // Skip the DB update if we just created the message (deferred case)
@@ -961,23 +1297,38 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
               content: body.content ?? existing.content,
               editedTimestamp: new Date(),
               ...(body.embeds ? { embeds: JSON.stringify(body.embeds) } : {}),
-              ...(body.components ? { components: JSON.stringify(body.components) } : {}),
+              ...(body.components
+                ? { components: JSON.stringify(body.components) }
+                : {}),
               ...(body.flags != null ? { flags: body.flags } : {}),
             },
           })
         }
 
-        const dbMessage = await prisma.message.findUniqueOrThrow({ where: { id: messageId } })
-        const author = await prisma.user.findUniqueOrThrow({ where: { id: dbMessage.authorId } })
-        const channel = await prisma.channel.findUnique({ where: { id: dbMessage.channelId } })
+        const dbMessage = await prisma.message.findUniqueOrThrow({
+          where: { id: messageId },
+        })
+        const author = await prisma.user.findUniqueOrThrow({
+          where: { id: dbMessage.authorId },
+        })
+        const channel = await prisma.channel.findUnique({
+          where: { id: dbMessage.channelId },
+        })
         const guildId = channel?.guildId ?? undefined
         const member = guildId
           ? await prisma.guildMember.findUnique({
-              where: { guildId_userId: { guildId, userId: dbMessage.authorId } },
+              where: {
+                guildId_userId: { guildId, userId: dbMessage.authorId },
+              },
               include: { user: true },
             })
           : null
-        const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
+        const apiMessage = messageToAPI(
+          dbMessage,
+          author,
+          guildId,
+          member ?? undefined,
+        )
         gateway.broadcast(GatewayDispatchEvents.MessageUpdate, {
           ...apiMessage,
           guild_id: guildId,
@@ -996,26 +1347,39 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
               where: { interactionToken: params.webhook_token },
             })
             if (!interaction || !interaction.messageId) {
-              throw new Response(JSON.stringify({
-                code: 10008,
-                message: 'Unknown Message',
-                errors: {},
-              }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+              throw new Response(
+                JSON.stringify({
+                  code: 10008,
+                  message: 'Unknown Message',
+                  errors: {},
+                }),
+                {
+                  status: 404,
+                  headers: { 'Content-Type': 'application/json' },
+                },
+              )
             }
             return interaction.messageId
           }
           return resolvedId
         })()
 
-        const dbMessage = await prisma.message.findUnique({ where: { id: messageId } })
+        const dbMessage = await prisma.message.findUnique({
+          where: { id: messageId },
+        })
         if (!dbMessage) {
-          throw new Response(JSON.stringify({
-            code: 10008,
-            message: 'Unknown Message',
-            errors: {},
-          }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+          throw new Response(
+            JSON.stringify({
+              code: 10008,
+              message: 'Unknown Message',
+              errors: {},
+            }),
+            { status: 404, headers: { 'Content-Type': 'application/json' } },
+          )
         }
-        const channel = await prisma.channel.findUnique({ where: { id: dbMessage.channelId } })
+        const channel = await prisma.channel.findUnique({
+          where: { id: dbMessage.channelId },
+        })
         await prisma.message.delete({ where: { id: messageId } })
         gateway.broadcast(GatewayDispatchEvents.MessageDelete, {
           id: messageId,
@@ -1030,7 +1394,12 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
     const origWriteHead = res.writeHead.bind(res)
     // Node's writeHead has complex overloads. Intercept to inject rate
     // limit headers on every response.
-    res.writeHead = function writeHeadWithRateLimits(statusCode: number, ...rest: Parameters<typeof res.writeHead> extends [number, ...infer R] ? R : never[]) {
+    res.writeHead = function writeHeadWithRateLimits(
+      statusCode: number,
+      ...rest: Parameters<typeof res.writeHead> extends [number, ...infer R]
+        ? R
+        : never[]
+    ) {
       for (const [key, value] of Object.entries(RATE_LIMIT_HEADERS)) {
         res.setHeader(key, value)
       }
@@ -1051,8 +1420,12 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
     httpServer,
     gateway,
     app,
-    get port() { return state.port },
-    set port(v) { state.port = v },
+    get port() {
+      return state.port
+    },
+    set port(v) {
+      state.port = v
+    },
   }
 }
 

@@ -3,10 +3,7 @@
 // can connect to. Used for automated testing of the Kimaki bot without
 // hitting real Discord.
 
-import {
-  ChannelType,
-  GatewayDispatchEvents,
-} from 'discord-api-types/v10'
+import { ChannelType, GatewayDispatchEvents } from 'discord-api-types/v10'
 import type {
   APIMessage,
   APIChannel,
@@ -17,7 +14,12 @@ import type {
 } from 'discord-api-types/v10'
 import { createPrismaClient, type PrismaClient } from './db.js'
 import { generateSnowflake } from './snowflake.js'
-import { createServer, startServer, stopServer, type ServerComponents } from './server.js'
+import {
+  createServer,
+  startServer,
+  stopServer,
+  type ServerComponents,
+} from './server.js'
 import type { GatewayState } from './gateway.js'
 import {
   userToAPI,
@@ -128,11 +130,13 @@ export class DigitalDiscord {
       const channel = await this.prisma.channel.findUnique({
         where: { id: channelId },
       })
-      result.push((await import('./serializers.js')).messageToAPI(
-        msg,
-        author,
-        channel?.guildId ?? undefined,
-      ))
+      result.push(
+        (await import('./serializers.js')).messageToAPI(
+          msg,
+          author,
+          channel?.guildId ?? undefined,
+        ),
+      )
     }
     return result
   }
@@ -151,7 +155,13 @@ export class DigitalDiscord {
     const threads = await this.prisma.channel.findMany({
       where: {
         parentId: parentChannelId,
-        type: { in: [ChannelType.PublicThread, ChannelType.PrivateThread, ChannelType.AnnouncementThread] },
+        type: {
+          in: [
+            ChannelType.PublicThread,
+            ChannelType.PrivateThread,
+            ChannelType.AnnouncementThread,
+          ],
+        },
       },
     })
     return threads.map(channelToAPI)
@@ -159,7 +169,13 @@ export class DigitalDiscord {
 
   // --- Test utilities ---
 
-  async simulateUserMessage({ channelId, userId, content, embeds, attachments }: {
+  async simulateUserMessage({
+    channelId,
+    userId,
+    content,
+    embeds,
+    attachments,
+  }: {
     channelId: string
     userId: string
     content: string
@@ -188,9 +204,15 @@ export class DigitalDiscord {
         totalMessageSent: { increment: 1 },
       },
     })
-    const dbMessage = await this.prisma.message.findUniqueOrThrow({ where: { id: messageId } })
-    const author = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } })
-    const channel = await this.prisma.channel.findUnique({ where: { id: channelId } })
+    const dbMessage = await this.prisma.message.findUniqueOrThrow({
+      where: { id: messageId },
+    })
+    const author = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+    })
+    const channel = await this.prisma.channel.findUnique({
+      where: { id: channelId },
+    })
     const guildId = channel?.guildId ?? undefined
     const member = guildId
       ? await this.prisma.guildMember.findUnique({
@@ -198,12 +220,24 @@ export class DigitalDiscord {
           include: { user: true },
         })
       : null
-    const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
+    const apiMessage = messageToAPI(
+      dbMessage,
+      author,
+      guildId,
+      member ?? undefined,
+    )
     this.server.gateway.broadcastMessageCreate(apiMessage, guildId ?? '')
     return apiMessage
   }
 
-  async simulateInteraction({ type, channelId, userId, data, guildId, messageId }: {
+  async simulateInteraction({
+    type,
+    channelId,
+    userId,
+    data,
+    guildId,
+    messageId,
+  }: {
     type: InteractionType
     channelId: string
     userId: string
@@ -232,24 +266,42 @@ export class DigitalDiscord {
     })
 
     // Build the INTERACTION_CREATE gateway payload
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } })
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+    })
     const member = await this.prisma.guildMember.findUnique({
       where: { guildId_userId: { guildId: resolvedGuildId, userId } },
       include: { user: true },
     })
-    const channel = await this.prisma.channel.findUnique({ where: { id: channelId } })
+    const channel = await this.prisma.channel.findUnique({
+      where: { id: channelId },
+    })
 
     let messageData: APIMessage | undefined = undefined
     if (messageId) {
-      const msg = await this.prisma.message.findUniqueOrThrow({ where: { id: messageId } })
-      const msgAuthor = await this.prisma.user.findUniqueOrThrow({ where: { id: msg.authorId } })
+      const msg = await this.prisma.message.findUniqueOrThrow({
+        where: { id: messageId },
+      })
+      const msgAuthor = await this.prisma.user.findUniqueOrThrow({
+        where: { id: msg.authorId },
+      })
       const msgMember = resolvedGuildId
         ? await this.prisma.guildMember.findUnique({
-            where: { guildId_userId: { guildId: resolvedGuildId, userId: msg.authorId } },
+            where: {
+              guildId_userId: {
+                guildId: resolvedGuildId,
+                userId: msg.authorId,
+              },
+            },
             include: { user: true },
           })
         : null
-      messageData = messageToAPI(msg, msgAuthor, resolvedGuildId, msgMember ?? undefined)
+      messageData = messageToAPI(
+        msg,
+        msgAuthor,
+        resolvedGuildId,
+        msgMember ?? undefined,
+      )
     }
 
     // APIInteraction is a discriminated union keyed by `type` -- the concrete
@@ -263,16 +315,18 @@ export class DigitalDiscord {
       channel_id: channelId,
       channel: channel ? channelToAPI(channel) : undefined,
       message: messageData,
-      member: member ? {
-        user: userToAPI(member.user),
-        nick: member.nick ?? undefined,
-        roles: JSON.parse(member.roles) as string[],
-        joined_at: member.joinedAt.toISOString(),
-        deaf: member.deaf,
-        mute: member.mute,
-        flags: 0,
-        permissions: member.permissions ?? '1099511627775',
-      } : undefined,
+      member: member
+        ? {
+            user: userToAPI(member.user),
+            nick: member.nick ?? undefined,
+            roles: JSON.parse(member.roles) as string[],
+            joined_at: member.joinedAt.toISOString(),
+            deaf: member.deaf,
+            mute: member.mute,
+            flags: 0,
+            permissions: member.permissions ?? '1099511627775',
+          }
+        : undefined,
       token: interactionToken,
       version: 1,
       app_permissions: '1099511627775',
@@ -307,7 +361,10 @@ export class DigitalDiscord {
     })
   }
 
-  async waitForInteractionResponse({ interactionId, timeout = 10000 }: {
+  async waitForInteractionResponse({
+    interactionId,
+    timeout = 10000,
+  }: {
     interactionId: string
     timeout?: number
   }): Promise<{
@@ -325,12 +382,19 @@ export class DigitalDiscord {
       if (response?.acknowledged) {
         return response
       }
-      await new Promise((resolve) => { setTimeout(resolve, 50) })
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50)
+      })
     }
-    throw new Error(`Timed out waiting for interaction response ${interactionId}`)
+    throw new Error(
+      `Timed out waiting for interaction response ${interactionId}`,
+    )
   }
 
-  async waitForBotMessage({ channelId, timeout = 10000 }: {
+  async waitForBotMessage({
+    channelId,
+    timeout = 10000,
+  }: {
     channelId: string
     timeout?: number
   }): Promise<APIMessage> {
@@ -348,12 +412,18 @@ export class DigitalDiscord {
           orderBy: { timestamp: 'desc' },
         })
         if (msg) {
-          const author = await this.prisma.user.findUniqueOrThrow({ where: { id: this.botUserId } })
-          const channel = await this.prisma.channel.findUnique({ where: { id: channelId } })
+          const author = await this.prisma.user.findUniqueOrThrow({
+            where: { id: this.botUserId },
+          })
+          const channel = await this.prisma.channel.findUnique({
+            where: { id: channelId },
+          })
           return messageToAPI(msg, author, channel?.guildId ?? undefined)
         }
       }
-      await new Promise((resolve) => { setTimeout(resolve, 50) })
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50)
+      })
     }
     throw new Error(`Timed out waiting for bot message in channel ${channelId}`)
   }

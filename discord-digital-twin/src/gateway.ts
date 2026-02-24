@@ -57,7 +57,12 @@ export class DiscordGateway {
   private port: number
   private expectedToken: string
 
-  constructor({ httpServer, port, loadState, expectedToken }: {
+  constructor({
+    httpServer,
+    port,
+    loadState,
+    expectedToken,
+  }: {
     httpServer: http.Server
     port: number
     loadState: () => Promise<GatewayState>
@@ -198,7 +203,13 @@ export class DiscordGateway {
       })),
       session_id: client.sessionId,
       resume_gateway_url: `ws://localhost:${this.port}/gateway`,
-      application: { id: state.botUser.id, flags: ApplicationFlags.GatewayPresence | ApplicationFlags.GatewayGuildMembers | ApplicationFlags.GatewayMessageContent },
+      application: {
+        id: state.botUser.id,
+        flags:
+          ApplicationFlags.GatewayPresence |
+          ApplicationFlags.GatewayGuildMembers |
+          ApplicationFlags.GatewayMessageContent,
+      },
     }
     this.sendDispatch(client, GatewayDispatchEvents.Ready, readyData)
 
@@ -232,11 +243,7 @@ export class DiscordGateway {
         guild_scheduled_events: emptyScheduledEvents,
         soundboard_sounds: emptySoundboardSounds,
       }
-      this.sendDispatch(
-        client,
-        GatewayDispatchEvents.GuildCreate,
-        guildData,
-      )
+      this.sendDispatch(client, GatewayDispatchEvents.GuildCreate, guildData)
     }
   }
 }

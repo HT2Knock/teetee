@@ -51,7 +51,9 @@ describe('threads and channels', () => {
         resolve()
         return
       }
-      client.once('ready', () => { resolve() })
+      client.once('ready', () => {
+        resolve()
+      })
     })
   }, 15000)
 
@@ -68,12 +70,16 @@ describe('threads and channels', () => {
 
   test('create thread from message via startThread()', async () => {
     const guild = client.guilds.cache.first()!
-    const channel = guild.channels.cache.find((c) => c.name === 'general') as TextChannel
+    const channel = guild.channels.cache.find(
+      (c) => c.name === 'general',
+    ) as TextChannel
 
     const message = await channel.send('Thread starter message')
 
     const threadCreatePromise = new Promise<ThreadChannel>((resolve) => {
-      client.once('threadCreate', (thread) => { resolve(thread as ThreadChannel) })
+      client.once('threadCreate', (thread) => {
+        resolve(thread as ThreadChannel)
+      })
     })
 
     const thread = await message.startThread({
@@ -87,7 +93,9 @@ describe('threads and channels', () => {
     expect(thread.type).toBe(ChannelType.PublicThread)
 
     // Verify thread persisted in DB
-    const dbThread = await discord.prisma.channel.findUnique({ where: { id: thread.id } })
+    const dbThread = await discord.prisma.channel.findUnique({
+      where: { id: thread.id },
+    })
     expect(dbThread).toBeDefined()
     expect(dbThread!.name).toBe('test-thread')
     expect(dbThread!.type).toBe(ChannelType.PublicThread)
@@ -115,7 +123,9 @@ describe('threads and channels', () => {
     expect(archived.archived).toBe(true)
 
     // Verify archived flag in DB
-    const dbThread = await discord.prisma.channel.findUniqueOrThrow({ where: { id: createdThreadId } })
+    const dbThread = await discord.prisma.channel.findUniqueOrThrow({
+      where: { id: createdThreadId },
+    })
     expect(dbThread.archived).toBe(true)
     expect(dbThread.archiveTimestamp).toBeTruthy()
   })
@@ -139,7 +149,9 @@ describe('threads and channels', () => {
 
   test('create standalone thread via channel.threads.create()', async () => {
     const guild = client.guilds.cache.first()!
-    const channel = guild.channels.cache.find((c) => c.name === 'general') as TextChannel
+    const channel = guild.channels.cache.find(
+      (c) => c.name === 'general',
+    ) as TextChannel
 
     const thread = await channel.threads.create({
       name: 'standalone-thread',
@@ -151,7 +163,9 @@ describe('threads and channels', () => {
     expect(thread.parentId).toBe(channelId)
 
     // Verify in DB
-    const dbThread = await discord.prisma.channel.findUnique({ where: { id: thread.id } })
+    const dbThread = await discord.prisma.channel.findUnique({
+      where: { id: thread.id },
+    })
     expect(dbThread).toBeDefined()
     expect(dbThread!.name).toBe('standalone-thread')
     expect(dbThread!.type).toBe(ChannelType.PublicThread)

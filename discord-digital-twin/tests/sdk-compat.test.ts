@@ -43,7 +43,9 @@ describe('discord.js SDK compatibility', () => {
         resolve()
         return
       }
-      client.once('ready', () => { resolve() })
+      client.once('ready', () => {
+        resolve()
+      })
     })
   }, 15000)
 

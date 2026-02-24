@@ -52,7 +52,9 @@ describe('messages and reactions', () => {
         resolve()
         return
       }
-      client.once('ready', () => { resolve() })
+      client.once('ready', () => {
+        resolve()
+      })
     })
   }, 15000)
 
@@ -63,7 +65,9 @@ describe('messages and reactions', () => {
 
   test('simulateUserMessage dispatches messageCreate to client', async () => {
     const received = new Promise<DjsMessage>((resolve) => {
-      client.once('messageCreate', (msg) => { resolve(msg) })
+      client.once('messageCreate', (msg) => {
+        resolve(msg)
+      })
     })
 
     await discord.simulateUserMessage({
@@ -80,7 +84,9 @@ describe('messages and reactions', () => {
 
   test('channel.send stores message in DB', async () => {
     const guild = client.guilds.cache.first()!
-    const channel = guild.channels.cache.find((c) => c.name === 'general') as TextChannel
+    const channel = guild.channels.cache.find(
+      (c) => c.name === 'general',
+    ) as TextChannel
 
     const sent = await channel.send('Hello from bot!')
     expect(sent.content).toBe('Hello from bot!')
@@ -93,7 +99,9 @@ describe('messages and reactions', () => {
 
   test('message edit updates content and edited_timestamp', async () => {
     const guild = client.guilds.cache.first()!
-    const channel = guild.channels.cache.find((c) => c.name === 'general') as TextChannel
+    const channel = guild.channels.cache.find(
+      (c) => c.name === 'general',
+    ) as TextChannel
 
     const sent = await channel.send('Original content')
     const edited = await sent.edit('Edited content')
@@ -107,7 +115,9 @@ describe('messages and reactions', () => {
 
   test('message delete removes from DB', async () => {
     const guild = client.guilds.cache.first()!
-    const channel = guild.channels.cache.find((c) => c.name === 'general') as TextChannel
+    const channel = guild.channels.cache.find(
+      (c) => c.name === 'general',
+    ) as TextChannel
 
     const sent = await channel.send('To be deleted')
     const sentId = sent.id
@@ -120,7 +130,9 @@ describe('messages and reactions', () => {
 
   test('reactions can be added via message.react', async () => {
     const guild = client.guilds.cache.first()!
-    const channel = guild.channels.cache.find((c) => c.name === 'general') as TextChannel
+    const channel = guild.channels.cache.find(
+      (c) => c.name === 'general',
+    ) as TextChannel
 
     const sent = await channel.send('React to me')
     await sent.react('🔥')

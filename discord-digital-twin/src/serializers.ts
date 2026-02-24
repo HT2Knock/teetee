@@ -79,7 +79,8 @@ export function channelToAPI(channel: Channel): APIChannel {
   // We build the shape generically because the concrete variant is only
   // known at runtime. The `as APIChannel` cast is justified -- it's a
   // single-hop cast on an object that has all the fields discord.js reads.
-  const isThread = channel.type === 10 || channel.type === 11 || channel.type === 12
+  const isThread =
+    channel.type === 10 || channel.type === 11 || channel.type === 12
 
   const base = {
     id: channel.id,
@@ -91,18 +92,22 @@ export function channelToAPI(channel: Channel): APIChannel {
     position: channel.position,
     last_message_id: channel.lastMessageId ?? undefined,
     rate_limit_per_user: channel.rateLimitPerUser,
-    ...(isThread ? {
-      owner_id: channel.ownerId ?? undefined,
-      message_count: channel.messageCount,
-      member_count: channel.memberCount,
-      total_message_sent: channel.totalMessageSent,
-      thread_metadata: {
-        archived: channel.archived,
-        auto_archive_duration: channel.autoArchiveDuration,
-        archive_timestamp: (channel.archiveTimestamp ?? channel.createdAt).toISOString(),
-        locked: channel.locked,
-      },
-    } : {}),
+    ...(isThread
+      ? {
+          owner_id: channel.ownerId ?? undefined,
+          message_count: channel.messageCount,
+          member_count: channel.memberCount,
+          total_message_sent: channel.totalMessageSent,
+          thread_metadata: {
+            archived: channel.archived,
+            auto_archive_duration: channel.autoArchiveDuration,
+            archive_timestamp: (
+              channel.archiveTimestamp ?? channel.createdAt
+            ).toISOString(),
+            locked: channel.locked,
+          },
+        }
+      : {}),
   }
 
   return base as APIChannel
@@ -122,9 +127,7 @@ export function memberToAPI(
   }
 }
 
-export function guildToAPI(
-  guild: Guild & { roles: Role[] },
-): APIGuild {
+export function guildToAPI(guild: Guild & { roles: Role[] }): APIGuild {
   return {
     id: guild.id,
     name: guild.name,
@@ -191,10 +194,12 @@ export function messageToAPI(
       ? { components: JSON.parse(message.components) }
       : {}),
     ...(guildId ? { guild_id: guildId } : {}),
-    ...(member ? (() => {
-      const { user: _u, ...partialMember } = memberToAPI(member)
-      return { member: partialMember }
-    })() : {}),
+    ...(member
+      ? (() => {
+          const { user: _u, ...partialMember } = memberToAPI(member)
+          return { member: partialMember }
+        })()
+      : {}),
     ...(message.nonce ? { nonce: message.nonce } : {}),
     ...(message.webhookId ? { webhook_id: message.webhookId } : {}),
     ...(message.applicationId ? { application_id: message.applicationId } : {}),

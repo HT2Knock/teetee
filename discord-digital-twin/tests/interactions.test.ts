@@ -60,7 +60,9 @@ describe('interactions', () => {
         resolve()
         return
       }
-      client.once('ready', () => { resolve() })
+      client.once('ready', () => {
+        resolve()
+      })
     })
   }, 15000)
 
@@ -71,7 +73,9 @@ describe('interactions', () => {
 
   test('simulateInteraction dispatches interactionCreate to client', async () => {
     const received = new Promise<Interaction>((resolve) => {
-      client.once('interactionCreate', (i) => { resolve(i) })
+      client.once('interactionCreate', (i) => {
+        resolve(i)
+      })
     })
 
     const { id } = await discord.simulateInteraction({
@@ -94,7 +98,9 @@ describe('interactions', () => {
   test('interaction.reply() creates a message via callback endpoint', async () => {
     const received = new Promise<ChatInputCommandInteraction>((resolve) => {
       client.once('interactionCreate', (i) => {
-        if (i.isChatInputCommand()) { resolve(i) }
+        if (i.isChatInputCommand()) {
+          resolve(i)
+        }
       })
     })
 
@@ -126,7 +132,9 @@ describe('interactions', () => {
   test('interaction.deferReply() + editReply() creates message on edit', async () => {
     const received = new Promise<ChatInputCommandInteraction>((resolve) => {
       client.once('interactionCreate', (i) => {
-        if (i.isChatInputCommand()) { resolve(i) }
+        if (i.isChatInputCommand()) {
+          resolve(i)
+        }
       })
     })
 
@@ -163,7 +171,9 @@ describe('interactions', () => {
   test('interaction.deleteReply() removes the message', async () => {
     const received = new Promise<ChatInputCommandInteraction>((resolve) => {
       client.once('interactionCreate', (i) => {
-        if (i.isChatInputCommand()) { resolve(i) }
+        if (i.isChatInputCommand()) {
+          resolve(i)
+        }
       })
     })
 
@@ -193,7 +203,9 @@ describe('interactions', () => {
   test('interaction.followUp() creates an additional message', async () => {
     const received = new Promise<ChatInputCommandInteraction>((resolve) => {
       client.once('interactionCreate', (i) => {
-        if (i.isChatInputCommand()) { resolve(i) }
+        if (i.isChatInputCommand()) {
+          resolve(i)
+        }
       })
     })
 
@@ -210,7 +222,9 @@ describe('interactions', () => {
 
     const interaction = await received
     await interaction.reply({ content: 'Initial reply' })
-    const followUp = await interaction.followUp({ content: 'Follow-up message' })
+    const followUp = await interaction.followUp({
+      content: 'Follow-up message',
+    })
 
     expect(followUp.content).toBe('Follow-up message')
 
@@ -222,7 +236,9 @@ describe('interactions', () => {
   test('interaction.fetchReply() returns the original reply', async () => {
     const received = new Promise<ChatInputCommandInteraction>((resolve) => {
       client.once('interactionCreate', (i) => {
-        if (i.isChatInputCommand()) { resolve(i) }
+        if (i.isChatInputCommand()) {
+          resolve(i)
+        }
       })
     })
 
@@ -248,7 +264,9 @@ describe('interactions', () => {
   test('double reply is guarded by discord.js (interaction.replied = true)', async () => {
     const received = new Promise<ChatInputCommandInteraction>((resolve) => {
       client.once('interactionCreate', (i) => {
-        if (i.isChatInputCommand()) { resolve(i) }
+        if (i.isChatInputCommand()) {
+          resolve(i)
+        }
       })
     })
 
@@ -273,7 +291,9 @@ describe('interactions', () => {
   test('editReply() edits existing message content', async () => {
     const received = new Promise<ChatInputCommandInteraction>((resolve) => {
       client.once('interactionCreate', (i) => {
-        if (i.isChatInputCommand()) { resolve(i) }
+        if (i.isChatInputCommand()) {
+          resolve(i)
+        }
       })
     })
 
@@ -302,7 +322,9 @@ describe('interactions', () => {
   test('editReply() twice correctly updates the message', async () => {
     const received = new Promise<ChatInputCommandInteraction>((resolve) => {
       client.once('interactionCreate', (i) => {
-        if (i.isChatInputCommand()) { resolve(i) }
+        if (i.isChatInputCommand()) {
+          resolve(i)
+        }
       })
     })
 
@@ -319,17 +341,17 @@ describe('interactions', () => {
 
     const interaction = await received
     await interaction.deferReply()
-    
+
     // First edit creates the message
     await interaction.editReply({ content: 'First edit' })
-    
+
     // Second edit changes ONLY embeds
     await interaction.editReply({ embeds: [{ title: 'Test Embed' }] })
 
     const response = await discord.getInteractionResponse(id)
     const messages = await discord.getMessages(channelId)
     const msg = messages.find((m) => m.id === response!.messageId)
-    
+
     expect(msg?.content).toBe('First edit')
     expect(msg!.embeds.length).toBe(1)
     expect(msg!.embeds[0]!.title).toBe('Test Embed')
@@ -343,7 +365,9 @@ describe('interactions', () => {
 
     const received = new Promise<ButtonInteraction>((resolve) => {
       client.once('interactionCreate', (i) => {
-        if (i.isButton()) { resolve(i) }
+        if (i.isButton()) {
+          resolve(i)
+        }
       })
     })
 
@@ -363,7 +387,7 @@ describe('interactions', () => {
 
     const response = await discord.getInteractionResponse(id)
     expect(response!.messageId).toBe(targetMsg!.id)
-    
+
     const messages = await discord.getMessages(channelId)
     const msg = messages.find((m) => m.id === targetMsg!.id)
     expect(msg?.content).toBe('Updated by component')
@@ -376,7 +400,9 @@ describe('interactions', () => {
 
     const received = new Promise<ButtonInteraction>((resolve) => {
       client.once('interactionCreate', (i) => {
-        if (i.isButton()) { resolve(i) }
+        if (i.isButton()) {
+          resolve(i)
+        }
       })
     })
 
@@ -397,11 +423,10 @@ describe('interactions', () => {
 
     const response = await discord.getInteractionResponse(id)
     expect(response!.messageId).toBe(targetMsg.id)
-    
+
     const messages = await discord.getMessages(channelId)
     const msg = messages.find((m) => m.id === targetMsg.id)
     expect(msg?.content).toBe('Edited after deferUpdate')
     expect(msg?.edited_timestamp).toBeTruthy()
   })
-
 })
