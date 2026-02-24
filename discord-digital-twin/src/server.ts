@@ -9,19 +9,23 @@ import {
   ApplicationFlags,
   ApplicationWebhookEventStatus,
   ApplicationCommandType,
+  GatewayDispatchEvents,
 } from 'discord-api-types/v10'
 import type {
   APIUser,
   APIApplication,
   APIApplicationCommand,
+  APIMessage,
   RESTGetAPIGatewayBotResult,
   RESTPutAPIApplicationCommandsJSONBody,
   RESTPutAPIApplicationCommandsResult,
+  RESTPostAPIChannelMessageJSONBody,
+  RESTPatchAPIChannelMessageJSONBody,
 } from 'discord-api-types/v10'
 import { DiscordGateway } from './gateway.js'
 import type { GatewayState } from './gateway.js'
 import type { PrismaClient } from './generated/client.js'
-import { userToAPI } from './serializers.js'
+import { userToAPI, messageToAPI } from './serializers.js'
 import { generateSnowflake } from './snowflake.js'
 
 // Generous fake rate limit headers so discord.js never self-throttles
@@ -46,6 +50,10 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
   loadGatewayState: () => Promise<GatewayState>
 }): ServerComponents {
   const state = { port: 0 }
+
+  // Route handlers close over `gateway`. It's assigned after httpServer
+  // creation but before any request arrives (server hasn't started listening).
+  let gateway!: DiscordGateway
 
   const app = new Spiceflow({ basePath: '/api/v10' })
 
@@ -174,6 +182,260 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
       },
     })
 
+    // --- Messages ---
+
+    .route({
+      method: 'POST',
+      path: '/channels/:channel_id/messages',
+      async handler({ params, request }): Promise<APIMessage> {
+        // JSON.parse of unknown request body -- `as` is the only option
+        const body = await request.json() as RESTPostAPIChannelMessageJSONBody
+        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        if (!channel) {
+          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        const messageId = generateSnowflake()
+        await prisma.message.create({
+          data: {
+            id: messageId,
+            channelId: params.channel_id,
+            authorId: botUserId,
+            content: body.content ?? '',
+            tts: body.tts ?? false,
+            nonce: body.nonce != null ? String(body.nonce) : null,
+            flags: body.flags ?? 0,
+            embeds: JSON.stringify(body.embeds ?? []),
+            components: JSON.stringify(body.components ?? []),
+            messageReference: body.message_reference ? JSON.stringify(body.message_reference) : null,
+          },
+        })
+        await prisma.channel.update({
+          where: { id: params.channel_id },
+          data: {
+            lastMessageId: messageId,
+            messageCount: { increment: 1 },
+            totalMessageSent: { increment: 1 },
+          },
+        })
+        const dbMessage = await prisma.message.findUniqueOrThrow({ where: { id: messageId } })
+        const author = await prisma.user.findUniqueOrThrow({ where: { id: botUserId } })
+        const guildId = channel.guildId ?? undefined
+        const member = guildId
+          ? await prisma.guildMember.findUnique({
+              where: { guildId_userId: { guildId, userId: botUserId } },
+              include: { user: true },
+            })
+          : null
+        const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
+        gateway.broadcastMessageCreate(apiMessage, guildId ?? '')
+        return apiMessage
+      },
+    })
+    .route({
+      method: 'GET',
+      path: '/channels/:channel_id/messages/:message_id',
+      async handler({ params }): Promise<APIMessage> {
+        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        if (!channel) {
+          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        const dbMessage = await prisma.message.findUnique({ where: { id: params.message_id } })
+        if (!dbMessage) {
+          throw new Response(JSON.stringify({ code: 10008, message: 'Unknown Message', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        const author = await prisma.user.findUniqueOrThrow({ where: { id: dbMessage.authorId } })
+        const guildId = channel.guildId ?? undefined
+        const member = guildId
+          ? await prisma.guildMember.findUnique({
+              where: { guildId_userId: { guildId, userId: dbMessage.authorId } },
+              include: { user: true },
+            })
+          : null
+        return messageToAPI(dbMessage, author, guildId, member ?? undefined)
+      },
+    })
+    .route({
+      method: 'PATCH',
+      path: '/channels/:channel_id/messages/:message_id',
+      async handler({ params, request }): Promise<APIMessage> {
+        const body = await request.json() as RESTPatchAPIChannelMessageJSONBody
+        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        if (!channel) {
+          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        const existing = await prisma.message.findUnique({ where: { id: params.message_id } })
+        if (!existing) {
+          throw new Response(JSON.stringify({ code: 10008, message: 'Unknown Message', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        await prisma.message.update({
+          where: { id: params.message_id },
+          data: {
+            content: body.content ?? existing.content,
+            editedTimestamp: new Date(),
+            ...(body.embeds ? { embeds: JSON.stringify(body.embeds) } : {}),
+            ...(body.components ? { components: JSON.stringify(body.components) } : {}),
+            ...(body.flags != null ? { flags: body.flags } : {}),
+          },
+        })
+        const dbMessage = await prisma.message.findUniqueOrThrow({ where: { id: params.message_id } })
+        const author = await prisma.user.findUniqueOrThrow({ where: { id: dbMessage.authorId } })
+        const guildId = channel.guildId ?? undefined
+        const member = guildId
+          ? await prisma.guildMember.findUnique({
+              where: { guildId_userId: { guildId, userId: dbMessage.authorId } },
+              include: { user: true },
+            })
+          : null
+        const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
+        gateway.broadcast(GatewayDispatchEvents.MessageUpdate, {
+          ...apiMessage,
+          guild_id: guildId,
+        })
+        return apiMessage
+      },
+    })
+    .route({
+      method: 'DELETE',
+      path: '/channels/:channel_id/messages/:message_id',
+      async handler({ params }): Promise<Response> {
+        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        if (!channel) {
+          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        const existing = await prisma.message.findUnique({ where: { id: params.message_id } })
+        if (!existing) {
+          throw new Response(JSON.stringify({ code: 10008, message: 'Unknown Message', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        await prisma.message.delete({ where: { id: params.message_id } })
+        gateway.broadcast(GatewayDispatchEvents.MessageDelete, {
+          id: params.message_id,
+          channel_id: params.channel_id,
+          guild_id: channel.guildId ?? undefined,
+        })
+        return new Response(null, { status: 204 })
+      },
+    })
+    .route({
+      method: 'GET',
+      path: '/channels/:channel_id/messages',
+      async handler({ params, request }): Promise<Response> {
+        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        if (!channel) {
+          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        const url = new URL(request.url, 'http://localhost')
+        const before = url.searchParams.get('before')
+        const after = url.searchParams.get('after')
+        const limit = Math.min(parseInt(url.searchParams.get('limit') ?? '50', 10), 100)
+
+        let messages = await prisma.message.findMany({
+          where: { channelId: params.channel_id },
+        })
+        if (before) {
+          const beforeBigInt = BigInt(before)
+          messages = messages.filter((m) => BigInt(m.id) < beforeBigInt)
+        }
+        if (after) {
+          const afterBigInt = BigInt(after)
+          messages = messages.filter((m) => BigInt(m.id) > afterBigInt)
+        }
+        // Discord returns desc by default, asc when `after` is specified
+        messages.sort((a, b) => {
+          const cmp = Number(BigInt(a.id) - BigInt(b.id))
+          return after ? cmp : -cmp
+        })
+        messages = messages.slice(0, limit)
+
+        const guildId = channel.guildId ?? undefined
+        const result: APIMessage[] = []
+        for (const msg of messages) {
+          const author = await prisma.user.findUniqueOrThrow({ where: { id: msg.authorId } })
+          const member = guildId
+            ? await prisma.guildMember.findUnique({
+                where: { guildId_userId: { guildId, userId: msg.authorId } },
+                include: { user: true },
+              })
+            : null
+          result.push(messageToAPI(msg, author, guildId, member ?? undefined))
+        }
+        return new Response(JSON.stringify(result), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      },
+    })
+    .route({
+      method: 'POST',
+      path: '/channels/:channel_id/typing',
+      handler(): Response {
+        return new Response(null, { status: 204 })
+      },
+    })
+
+    // --- Reactions ---
+
+    .route({
+      method: 'PUT',
+      path: '/channels/:channel_id/messages/:message_id/reactions/:emoji/@me',
+      async handler({ params }): Promise<Response> {
+        const emoji = decodeURIComponent(params.emoji)
+        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        if (!channel) {
+          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        const message = await prisma.message.findUnique({ where: { id: params.message_id } })
+        if (!message) {
+          throw new Response(JSON.stringify({ code: 10008, message: 'Unknown Message', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        await prisma.reaction.upsert({
+          where: {
+            messageId_userId_emoji: {
+              messageId: params.message_id,
+              userId: botUserId,
+              emoji,
+            },
+          },
+          create: {
+            messageId: params.message_id,
+            userId: botUserId,
+            emoji,
+          },
+          update: {},
+        })
+        gateway.broadcast(GatewayDispatchEvents.MessageReactionAdd, {
+          user_id: botUserId,
+          channel_id: params.channel_id,
+          message_id: params.message_id,
+          guild_id: channel.guildId ?? undefined,
+          emoji: { id: null, name: emoji },
+        })
+        return new Response(null, { status: 204 })
+      },
+    })
+    .route({
+      method: 'DELETE',
+      path: '/channels/:channel_id/messages/:message_id/reactions/:emoji/@me',
+      async handler({ params }): Promise<Response> {
+        const emoji = decodeURIComponent(params.emoji)
+        await prisma.reaction.deleteMany({
+          where: {
+            messageId: params.message_id,
+            userId: botUserId,
+            emoji,
+          },
+        })
+        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        gateway.broadcast(GatewayDispatchEvents.MessageReactionRemove, {
+          user_id: botUserId,
+          channel_id: params.channel_id,
+          message_id: params.message_id,
+          guild_id: channel?.guildId ?? undefined,
+          emoji: { id: null, name: emoji },
+        })
+        return new Response(null, { status: 204 })
+      },
+    })
+
   const httpServer = http.createServer((req, res) => {
     const origWriteHead = res.writeHead.bind(res)
     // Node's writeHead has complex overloads. Intercept to inject rate
@@ -188,7 +450,7 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
     return app.handleForNode(req, res)
   })
 
-  const gateway = new DiscordGateway({
+  gateway = new DiscordGateway({
     httpServer,
     port: 0,
     loadState: loadGatewayState,

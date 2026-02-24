@@ -8,6 +8,9 @@ import { PrismaClient } from './generated/client.js'
 export { PrismaClient }
 
 export function createPrismaClient(): PrismaClient {
-  const adapter = new PrismaLibSql({ url: 'file::memory:' })
+  // cache=shared ensures all connections (including transaction connections)
+  // share the same in-memory database. Without it, libsql's transaction()
+  // method creates a new Database() which gets a separate empty DB.
+  const adapter = new PrismaLibSql({ url: 'file::memory:?cache=shared' })
   return new PrismaClient({ adapter })
 }

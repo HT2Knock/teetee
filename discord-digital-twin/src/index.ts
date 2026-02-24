@@ -4,7 +4,7 @@
 // hitting real Discord.
 
 import { ChannelType } from 'discord-api-types/v10'
-import type { APIMessage, APIChannel } from 'discord-api-types/v10'
+import type { APIMessage, APIChannel, APIEmbed, APIAttachment } from 'discord-api-types/v10'
 import { createPrismaClient, type PrismaClient } from './db.js'
 import { generateSnowflake } from './snowflake.js'
 import { createServer, startServer, stopServer, type ServerComponents } from './server.js'
@@ -14,6 +14,7 @@ import {
   guildToAPI,
   memberToAPI,
   channelToAPI,
+  messageToAPI,
 } from './serializers.js'
 
 export interface DigitalDiscordOptions {
@@ -141,6 +142,80 @@ export class DigitalDiscord {
       },
     })
     return threads.map(channelToAPI)
+  }
+
+  // --- Test utilities ---
+
+  async simulateUserMessage({ channelId, userId, content, embeds, attachments }: {
+    channelId: string
+    userId: string
+    content: string
+    embeds?: APIEmbed[]
+    attachments?: APIAttachment[]
+  }): Promise<APIMessage> {
+    if (!this.server) {
+      throw new Error('Server not started')
+    }
+    const messageId = generateSnowflake()
+    await this.prisma.message.create({
+      data: {
+        id: messageId,
+        channelId,
+        authorId: userId,
+        content,
+        embeds: JSON.stringify(embeds ?? []),
+        attachments: JSON.stringify(attachments ?? []),
+      },
+    })
+    await this.prisma.channel.update({
+      where: { id: channelId },
+      data: {
+        lastMessageId: messageId,
+        messageCount: { increment: 1 },
+        totalMessageSent: { increment: 1 },
+      },
+    })
+    const dbMessage = await this.prisma.message.findUniqueOrThrow({ where: { id: messageId } })
+    const author = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } })
+    const channel = await this.prisma.channel.findUnique({ where: { id: channelId } })
+    const guildId = channel?.guildId ?? undefined
+    const member = guildId
+      ? await this.prisma.guildMember.findUnique({
+          where: { guildId_userId: { guildId, userId } },
+          include: { user: true },
+        })
+      : null
+    const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
+    this.server.gateway.broadcastMessageCreate(apiMessage, guildId ?? '')
+    return apiMessage
+  }
+
+  async waitForBotMessage({ channelId, timeout = 10000 }: {
+    channelId: string
+    timeout?: number
+  }): Promise<APIMessage> {
+    const start = Date.now()
+    const startCount = await this.prisma.message.count({
+      where: { channelId, authorId: this.botUserId },
+    })
+    while (Date.now() - start < timeout) {
+      const currentCount = await this.prisma.message.count({
+        where: { channelId, authorId: this.botUserId },
+      })
+      if (currentCount > startCount) {
+        const msg = await this.prisma.message.findFirst({
+          where: { channelId, authorId: this.botUserId },
+          orderBy: { timestamp: 'desc' },
+        })
+        if (msg) {
+          const author = await this.prisma.user.findUniqueOrThrow({ where: { id: this.botUserId } })
+          const channel = await this.prisma.channel.findUnique({ where: { id: channelId } })
+          return messageToAPI(msg, author, channel?.guildId ?? undefined)
+        }
+      }
+      await new Promise((resolve) => { setTimeout(resolve, 50) })
+    }
+    throw new Error(`Timed out waiting for bot message in channel ${channelId}`)
   }
 
   // --- Internal ---
