@@ -39,6 +39,7 @@ everything. Safe to call on every startup.
 ### 1. Add `WELCOME_TUTORIAL_MESSAGE` constant
 
 A multi-line string covering:
+
 - How channels map to project directories
 - How threads = sessions
 - Voice channels
@@ -61,6 +62,7 @@ createWelcomeChannel({ guild, appId, botToken, discordClient })
 ```
 
 Steps:
+
 1. Check if `~/.kimaki/projects/kimaki` exists -> return null
 2. Call `createNewProject({ guild, projectName: 'kimaki', appId })`
 3. Send `WELCOME_TUTORIAL_MESSAGE` to the new text channel
@@ -81,6 +83,7 @@ Prefer discord.js for consistency.
 `cli.ts` has two startup paths:
 
 **Full setup path** (first run, interactive prompts):
+
 - Resolve `targetGuild` **before** project selection prompt
   (currently guild selection is inside the `selectedProjects`
   block at lines 1817-1845 -- hoist it earlier)
@@ -89,6 +92,7 @@ Prefer discord.js for consistency.
   ready message
 
 **Quick-start path** (subsequent runs, non-interactive):
+
 - Call `createWelcomeChannel()` in the background void block
   alongside channel sync and role reconciliation
 - Non-blocking, uses `guilds[0]` as target guild

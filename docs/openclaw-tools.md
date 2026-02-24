@@ -237,6 +237,7 @@ And a maintenance ritual:
 ### Memory Maintenance (During Heartbeats)
 
 Periodically (every few days), use a heartbeat to:
+
 1. Read through recent `memory/YYYY-MM-DD.md` files
 2. Identify significant events, lessons, or insights worth keeping long-term
 3. Update `MEMORY.md` with distilled learnings
@@ -278,15 +279,17 @@ injects a warning:
 
 > Post-Compaction Audit: The following required startup files were
 > not read after context reset:
->   - WORKFLOW_AUTO.md
->   - memory/YYYY-MM-DD.md
+>
+> - WORKFLOW_AUTO.md
+> - memory/YYYY-MM-DD.md
 >
 > Please read them now using the Read tool before continuing.
 
 Default required reads:
+
 ```ts
 const DEFAULT_REQUIRED_READS = [
-  "WORKFLOW_AUTO.md",
+  'WORKFLOW_AUTO.md',
   /memory\/\d{4}-\d{2}-\d{2}\.md/,
 ]
 ```
@@ -305,6 +308,7 @@ and injects them as a system message:
 ### Bonus: session-memory hook (auto-save on /new and /reset)
 
 When the user issues `/new` or `/reset`, the `session-memory` hook:
+
 1. Finds the previous session transcript (last 15 messages)
 2. Uses LLM to generate a descriptive filename slug
 3. Creates `memory/YYYY-MM-DD-slug.md` with the conversation content
@@ -314,14 +318,14 @@ model forgot to write during the session.
 
 ### Summary table
 
-| # | Mechanism                     | When it fires                    | Read/Write | Enforced? |
-|---|-------------------------------|----------------------------------|------------|-----------|
-| 1 | Tool desc says "Mandatory"    | Every tool call                  | Read       | No — prompt nudge |
-| 2 | System prompt Memory Recall   | Every model turn                 | Read       | No — prompt nudge |
-| 3 | AGENTS.md startup ritual      | Session start                    | Read+Write | No — prompt nudge |
-| 4 | Pre-compaction memory flush   | Before context compaction        | Write      | Yes — auto turn  |
-| 5 | Post-compaction audit+inject  | After context compaction         | Read       | Yes — auto inject |
-| + | session-memory hook           | On /new and /reset commands      | Write      | Yes — hook code   |
+| #   | Mechanism                    | When it fires               | Read/Write | Enforced?         |
+| --- | ---------------------------- | --------------------------- | ---------- | ----------------- |
+| 1   | Tool desc says "Mandatory"   | Every tool call             | Read       | No — prompt nudge |
+| 2   | System prompt Memory Recall  | Every model turn            | Read       | No — prompt nudge |
+| 3   | AGENTS.md startup ritual     | Session start               | Read+Write | No — prompt nudge |
+| 4   | Pre-compaction memory flush  | Before context compaction   | Write      | Yes — auto turn   |
+| 5   | Post-compaction audit+inject | After context compaction    | Read       | Yes — auto inject |
+| +   | session-memory hook          | On /new and /reset commands | Write      | Yes — hook code   |
 
 Mechanisms 1-3 are pure prompt engineering (the model can ignore
 them). Mechanisms 4-5 and the hook are actual code that runs
@@ -475,12 +479,13 @@ per-action requirements.
 >   `{ "kind": "systemEvent", "text": "<message>" }`
 > - "agentTurn": Runs agent with message (isolated sessions only)
 >   `{ "kind": "agentTurn", "message": "<prompt>", "model": "<optional>",
-   "thinking": "<optional>", "timeoutSeconds": <optional> }`
+ "thinking": "<optional>", "timeoutSeconds": <optional> }`
 >
 > DELIVERY (top-level):
 > `{ "mode": "none|announce|webhook", "channel": "<optional>",
+
      "to": "<optional>", "bestEffort": <optional-bool> }`
->
+
 > - Default for isolated agentTurn jobs (when delivery omitted): "announce"
 > - announce: send to chat channel
 > - webhook: send finished-run event as HTTP POST to delivery.to

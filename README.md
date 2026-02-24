@@ -367,6 +367,7 @@ Using JWT tokens with 15min expiry. Refresh tokens in httpOnly cookies.
 ```
 
 Two scopes:
+
 - `~/.kimaki/memory/<channelId>/` — project-specific notes
 - `~/.kimaki/memory/global/` — cross-project preferences
 
