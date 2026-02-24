@@ -40,6 +40,9 @@ export interface DigitalDiscordOptions {
     username?: string
   }
   botToken?: string
+  // Database URL. Defaults to in-memory (file::memory:?cache=shared).
+  // Pass a file: URL (e.g. "file:./test.db") for persistent storage.
+  dbUrl?: string
 }
 
 export class DigitalDiscord {
@@ -54,7 +57,7 @@ export class DigitalDiscord {
 
   constructor(options: DigitalDiscordOptions = {}) {
     this.options = options
-    this.prisma = createPrismaClient()
+    this.prisma = createPrismaClient(options.dbUrl)
     this.botToken = options.botToken ?? 'fake-bot-token'
     this.botUserId = options.botUser?.id ?? generateSnowflake()
     this.guildId = options.guild?.id ?? generateSnowflake()
