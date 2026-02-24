@@ -78,6 +78,23 @@ export type DigitalDiscordModalField = {
 }
 
 export type DigitalDiscordMessagePredicate = (message: APIMessage) => boolean
+export type DigitalDiscordThreadPredicate = (thread: APIChannel) => boolean
+
+function compareSnowflakeDesc(a: string, b: string): number {
+  try {
+    const aSnowflake = BigInt(a)
+    const bSnowflake = BigInt(b)
+    if (aSnowflake > bSnowflake) {
+      return -1
+    }
+    if (aSnowflake < bSnowflake) {
+      return 1
+    }
+    return 0
+  } catch {
+    return b.localeCompare(a)
+  }
+}
 
 export class DigitalDiscord {
   prisma: PrismaClient
@@ -209,12 +226,6 @@ export class DigitalDiscord {
 
   bot(): DigitalDiscordUserActor {
     return this.user(this.botUserId)
-  }
-
-  expect(): DigitalDiscordExpect {
-    return new DigitalDiscordExpect({
-      discord: this,
-    })
   }
 
   // --- Test utilities ---
@@ -570,34 +581,107 @@ export class DigitalDiscord {
     channelId: string
     timeout?: number
   }): Promise<APIMessage> {
-    const start = Date.now()
-    const startCount = await this.prisma.message.count({
-      where: { channelId, authorId: this.botUserId },
+    return this.waitForBotReply({
+      channelId,
+      timeout,
     })
+  }
+
+  async waitForThread({
+    parentChannelId,
+    timeout = 10000,
+    predicate,
+  }: {
+    parentChannelId: string
+    timeout?: number
+    predicate?: DigitalDiscordThreadPredicate
+  }): Promise<APIChannel> {
+    const start = Date.now()
     while (Date.now() - start < timeout) {
-      const currentCount = await this.prisma.message.count({
-        where: { channelId, authorId: this.botUserId },
-      })
-      if (currentCount > startCount) {
-        const msg = await this.prisma.message.findFirst({
-          where: { channelId, authorId: this.botUserId },
-          orderBy: { timestamp: 'desc' },
-        })
-        if (msg) {
-          const author = await this.prisma.user.findUniqueOrThrow({
-            where: { id: this.botUserId },
+      const threads = await this.getThreads(parentChannelId)
+      const matchedThreads = predicate
+        ? threads.filter((thread) => {
+            return predicate(thread)
           })
-          const channel = await this.prisma.channel.findUnique({
-            where: { id: channelId },
-          })
-          return messageToAPI(msg, author, channel?.guildId ?? undefined)
+        : threads
+      if (matchedThreads.length > 0) {
+        const newestThread = [...matchedThreads].sort((a, b) => {
+          return compareSnowflakeDesc(a.id, b.id)
+        })[0]
+        if (newestThread) {
+          return newestThread
         }
       }
+
       await new Promise((resolve) => {
         setTimeout(resolve, 50)
       })
     }
-    throw new Error(`Timed out waiting for bot message in channel ${channelId}`)
+
+    throw new Error(
+      `Timed out waiting for thread in parent channel ${parentChannelId}`,
+    )
+  }
+
+  async waitForMessage({
+    channelId,
+    timeout = 10000,
+    predicate,
+  }: {
+    channelId: string
+    timeout?: number
+    predicate?: DigitalDiscordMessagePredicate
+  }): Promise<APIMessage> {
+    const start = Date.now()
+    while (Date.now() - start < timeout) {
+      const messages = await this.getMessages(channelId)
+      const matchedMessage = [...messages]
+        .reverse()
+        .find((message) => {
+          if (!predicate) {
+            return true
+          }
+          return predicate(message)
+        })
+      if (matchedMessage) {
+        return matchedMessage
+      }
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50)
+      })
+    }
+
+    throw new Error(`Timed out waiting for message in channel ${channelId}`)
+  }
+
+  async waitForBotReply({
+    channelId,
+    timeout = 10000,
+  }: {
+    channelId: string
+    timeout?: number
+  }): Promise<APIMessage> {
+    return this.waitForMessage({
+      channelId,
+      timeout,
+      predicate: (message) => {
+        return message.author.id === this.botUserId
+      },
+    })
+  }
+
+  async waitForInteractionAck({
+    interactionId,
+    timeout = 10000,
+  }: {
+    interactionId: string
+    timeout?: number
+  }) {
+    return this.waitForInteractionResponse({
+      interactionId,
+      timeout,
+    })
   }
 
   // --- Internal ---
@@ -841,147 +925,6 @@ export class DigitalDiscordUserActor {
       customId,
       fields,
       guildId,
-    })
-  }
-}
-
-export class DigitalDiscordExpect {
-  private readonly discord: DigitalDiscord
-
-  constructor({ discord }: { discord: DigitalDiscord }) {
-    this.discord = discord
-  }
-
-  async threadCreated({
-    parentChannelId,
-    timeoutMs = 10000,
-    trigger,
-  }: {
-    parentChannelId: string
-    timeoutMs?: number
-    trigger?: () => Promise<unknown>
-  }): Promise<APIChannel> {
-    const existingThreads = await this.discord.getThreads(parentChannelId)
-    const existingIds = new Set(
-      existingThreads.map((thread) => {
-        return thread.id
-      }),
-    )
-
-    if (trigger) {
-      await trigger()
-    }
-
-    const startedAt = Date.now()
-    while (Date.now() - startedAt < timeoutMs) {
-      const threads = await this.discord.getThreads(parentChannelId)
-      const createdThread = threads.find((thread) => {
-        return !existingIds.has(thread.id)
-      })
-      if (createdThread) {
-        return createdThread
-      }
-      await new Promise((resolve) => {
-        setTimeout(resolve, 50)
-      })
-    }
-
-    throw new Error(
-      `Timed out waiting for new thread in parent channel ${parentChannelId}`,
-    )
-  }
-
-  async message({
-    channelId,
-    timeoutMs = 10000,
-    trigger,
-    predicate,
-  }: {
-    channelId: string
-    timeoutMs?: number
-    trigger?: () => Promise<unknown>
-    predicate?: DigitalDiscordMessagePredicate
-  }): Promise<APIMessage> {
-    const existingMessages = await this.discord.getMessages(channelId)
-    const existingIds = new Set(
-      existingMessages.map((message) => {
-        return message.id
-      }),
-    )
-
-    if (trigger) {
-      await trigger()
-    }
-
-    const startedAt = Date.now()
-    while (Date.now() - startedAt < timeoutMs) {
-      const messages = await this.discord.getMessages(channelId)
-      const matched = messages.find((message) => {
-        if (existingIds.has(message.id)) {
-          return false
-        }
-        if (!predicate) {
-          return true
-        }
-        return predicate(message)
-      })
-
-      if (matched) {
-        return matched
-      }
-
-      await new Promise((resolve) => {
-        setTimeout(resolve, 50)
-      })
-    }
-
-    throw new Error(`Timed out waiting for message in channel ${channelId}`)
-  }
-
-  async botReply({
-    channelId,
-    timeoutMs = 10000,
-    trigger,
-  }: {
-    channelId: string
-    timeoutMs?: number
-    trigger?: () => Promise<unknown>
-  }): Promise<APIMessage> {
-    return this.message({
-      channelId,
-      timeoutMs,
-      trigger,
-      predicate: (message) => {
-        return message.author.id === this.discord.botUserId
-      },
-    })
-  }
-
-  async interactionAck({
-    interactionId,
-    timeoutMs = 10000,
-    trigger,
-  }: {
-    interactionId?: string
-    timeoutMs?: number
-    trigger?: () => Promise<{ id: string }>
-  }) {
-    const resolvedInteractionId: string = await (async () => {
-      if (interactionId) {
-        return interactionId
-      }
-      if (!trigger) {
-        throw new Error(
-          'interactionAck requires either interactionId or trigger callback',
-        )
-      }
-      const interaction = await trigger()
-      return interaction.id
-    })()
-
-    return this.discord.waitForInteractionResponse({
-      interactionId: resolvedInteractionId,
-      timeout: timeoutMs,
     })
   }
 }

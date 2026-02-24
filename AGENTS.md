@@ -170,7 +170,7 @@ when writing discord e2e tests, prefer adding reusable automation methods to `Di
 aim for a playwright-like style in tests:
 
 - actor methods for actions: `discord.user(userId).sendMessage(...)`, `runSlashCommand(...)`, `clickButton(...)`, etc
-- expect/wait methods for assertions: `discord.expect().threadCreated(...)`, `discord.expect().botReply(...)`, `discord.expect().interactionAck(...)`
+- separate wait methods for assertions: `discord.waitForThread(...)`, `discord.waitForBotReply(...)`, `discord.waitForInteractionAck(...)`
 
 if a kimaki test needs a new interaction primitive, first add it to `discord-digital-twin/src/index.ts` and cover it in `discord-digital-twin/tests/*` so future tests can reuse it.
 

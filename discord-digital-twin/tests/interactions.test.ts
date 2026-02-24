@@ -111,13 +111,13 @@ describe('interactions', () => {
       })
     })
 
-    const response = await discord.expect().interactionAck({
-      trigger: async () => {
-        return discord.user(testUserId).runSlashCommand({
-          channelId,
-          name: commandName,
-        })
-      },
+    const interaction = await discord.user(testUserId).runSlashCommand({
+      channelId,
+      name: commandName,
+    })
+
+    const response = await discord.waitForInteractionAck({
+      interactionId: interaction.id,
     })
 
     await interactionHandled
