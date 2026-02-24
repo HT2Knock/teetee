@@ -9,23 +9,28 @@ import {
   ApplicationFlags,
   ApplicationWebhookEventStatus,
   ApplicationCommandType,
+  ChannelType,
   GatewayDispatchEvents,
 } from 'discord-api-types/v10'
 import type {
   APIUser,
   APIApplication,
   APIApplicationCommand,
+  APIChannel,
   APIMessage,
   RESTGetAPIGatewayBotResult,
   RESTPutAPIApplicationCommandsJSONBody,
   RESTPutAPIApplicationCommandsResult,
   RESTPostAPIChannelMessageJSONBody,
   RESTPatchAPIChannelMessageJSONBody,
+  RESTPatchAPIChannelJSONBody,
+  RESTPostAPIChannelThreadsJSONBody,
+  RESTPostAPIChannelMessagesThreadsJSONBody,
 } from 'discord-api-types/v10'
 import { DiscordGateway } from './gateway.js'
 import type { GatewayState } from './gateway.js'
 import type { PrismaClient } from './generated/client.js'
-import { userToAPI, messageToAPI } from './serializers.js'
+import { userToAPI, messageToAPI, channelToAPI, threadMemberToAPI } from './serializers.js'
 import { generateSnowflake } from './snowflake.js'
 
 // Generous fake rate limit headers so discord.js never self-throttles
@@ -433,6 +438,207 @@ export function createServer({ prisma, botUserId, botToken, loadGatewayState }: 
           emoji: { id: null, name: emoji },
         })
         return new Response(null, { status: 204 })
+      },
+    })
+
+    // --- Channels ---
+
+    .route({
+      method: 'GET',
+      path: '/channels/:channel_id',
+      async handler({ params }): Promise<APIChannel> {
+        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        if (!channel) {
+          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        return channelToAPI(channel)
+      },
+    })
+    .route({
+      method: 'PATCH',
+      path: '/channels/:channel_id',
+      async handler({ params, request }): Promise<APIChannel> {
+        // JSON.parse of unknown request body -- `as` is the only option
+        const body = await request.json() as RESTPatchAPIChannelJSONBody
+        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        if (!channel) {
+          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        const isThread = channel.type === ChannelType.PublicThread || channel.type === ChannelType.PrivateThread || channel.type === ChannelType.AnnouncementThread
+        await prisma.channel.update({
+          where: { id: params.channel_id },
+          data: {
+            ...(body.name != null ? { name: body.name } : {}),
+            ...(body.topic !== undefined ? { topic: body.topic ?? null } : {}),
+            ...(body.archived != null ? {
+              archived: body.archived,
+              archiveTimestamp: new Date(),
+            } : {}),
+            ...(body.locked != null ? { locked: body.locked } : {}),
+            ...(body.auto_archive_duration != null ? { autoArchiveDuration: body.auto_archive_duration } : {}),
+            ...(body.rate_limit_per_user != null ? { rateLimitPerUser: body.rate_limit_per_user } : {}),
+          },
+        })
+        const updated = await prisma.channel.findUniqueOrThrow({ where: { id: params.channel_id } })
+        const apiChannel = channelToAPI(updated)
+        const event = isThread ? GatewayDispatchEvents.ThreadUpdate : GatewayDispatchEvents.ChannelUpdate
+        gateway.broadcast(event, apiChannel)
+        return apiChannel
+      },
+    })
+    .route({
+      method: 'DELETE',
+      path: '/channels/:channel_id',
+      async handler({ params }): Promise<APIChannel> {
+        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        if (!channel) {
+          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        const isThread = channel.type === ChannelType.PublicThread || channel.type === ChannelType.PrivateThread || channel.type === ChannelType.AnnouncementThread
+        const apiChannel = channelToAPI(channel)
+        await prisma.channel.delete({ where: { id: params.channel_id } })
+        if (isThread) {
+          gateway.broadcast(GatewayDispatchEvents.ThreadDelete, {
+            id: channel.id,
+            guild_id: channel.guildId,
+            parent_id: channel.parentId,
+            type: channel.type,
+          })
+        } else {
+          gateway.broadcast(GatewayDispatchEvents.ChannelDelete, apiChannel)
+        }
+        return apiChannel
+      },
+    })
+
+    // --- Threads ---
+
+    .route({
+      method: 'POST',
+      path: '/channels/:channel_id/threads',
+      async handler({ params, request }): Promise<APIChannel> {
+        // JSON.parse of unknown request body -- `as` is the only option
+        const body = await request.json() as RESTPostAPIChannelThreadsJSONBody
+        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        if (!channel) {
+          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        const threadId = generateSnowflake()
+        const threadType = body.type ?? ChannelType.PublicThread
+        await prisma.channel.create({
+          data: {
+            id: threadId,
+            guildId: channel.guildId,
+            type: threadType,
+            name: body.name,
+            parentId: params.channel_id,
+            ownerId: botUserId,
+            autoArchiveDuration: body.auto_archive_duration ?? 1440,
+            archiveTimestamp: new Date(),
+            rateLimitPerUser: body.rate_limit_per_user ?? 0,
+            memberCount: 1,
+          },
+        })
+        // Auto-add creator as thread member
+        await prisma.threadMember.create({
+          data: { channelId: threadId, userId: botUserId },
+        })
+        const thread = await prisma.channel.findUniqueOrThrow({ where: { id: threadId } })
+        const apiChannel = channelToAPI(thread)
+        // Include newly_created so discord.js ThreadCreate action emits the event
+        // even when the REST response is processed before the gateway WS event
+        const withCreated = { ...apiChannel, newly_created: true }
+        gateway.broadcast(GatewayDispatchEvents.ThreadCreate, withCreated)
+        return withCreated as APIChannel
+      },
+    })
+    .route({
+      method: 'POST',
+      path: '/channels/:channel_id/messages/:message_id/threads',
+      async handler({ params, request }): Promise<APIChannel> {
+        // JSON.parse of unknown request body -- `as` is the only option
+        const body = await request.json() as RESTPostAPIChannelMessagesThreadsJSONBody
+        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        if (!channel) {
+          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        const message = await prisma.message.findUnique({ where: { id: params.message_id } })
+        if (!message) {
+          throw new Response(JSON.stringify({ code: 10008, message: 'Unknown Message', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        const threadId = generateSnowflake()
+        await prisma.channel.create({
+          data: {
+            id: threadId,
+            guildId: channel.guildId,
+            type: ChannelType.PublicThread,
+            name: body.name,
+            parentId: params.channel_id,
+            ownerId: botUserId,
+            autoArchiveDuration: body.auto_archive_duration ?? 1440,
+            archiveTimestamp: new Date(),
+            rateLimitPerUser: body.rate_limit_per_user ?? 0,
+            memberCount: 1,
+          },
+        })
+        await prisma.threadMember.create({
+          data: { channelId: threadId, userId: botUserId },
+        })
+        const thread = await prisma.channel.findUniqueOrThrow({ where: { id: threadId } })
+        const apiChannel = channelToAPI(thread)
+        const withCreated = { ...apiChannel, newly_created: true }
+        gateway.broadcast(GatewayDispatchEvents.ThreadCreate, withCreated)
+        return withCreated as APIChannel
+      },
+    })
+    .route({
+      method: 'PUT',
+      path: '/channels/:channel_id/thread-members/:user_id',
+      async handler({ params }): Promise<Response> {
+        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        if (!channel) {
+          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        const existing = await prisma.threadMember.findUnique({
+          where: { channelId_userId: { channelId: params.channel_id, userId: params.user_id } },
+        })
+        if (!existing) {
+          await prisma.threadMember.create({
+            data: { channelId: params.channel_id, userId: params.user_id },
+          })
+          await prisma.channel.update({
+            where: { id: params.channel_id },
+            data: { memberCount: { increment: 1 } },
+          })
+          const threadMember = await prisma.threadMember.findUniqueOrThrow({
+            where: { channelId_userId: { channelId: params.channel_id, userId: params.user_id } },
+          })
+          gateway.broadcast(GatewayDispatchEvents.ThreadMembersUpdate, {
+            id: params.channel_id,
+            guild_id: channel.guildId,
+            member_count: channel.memberCount + 1,
+            added_members: [threadMemberToAPI(threadMember)],
+            removed_member_ids: [] as string[],
+          })
+        }
+        return new Response(null, { status: 204 })
+      },
+    })
+    .route({
+      method: 'GET',
+      path: '/channels/:channel_id/thread-members',
+      async handler({ params }): Promise<Response> {
+        const channel = await prisma.channel.findUnique({ where: { id: params.channel_id } })
+        if (!channel) {
+          throw new Response(JSON.stringify({ code: 10003, message: 'Unknown Channel', errors: {} }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+        }
+        const members = await prisma.threadMember.findMany({
+          where: { channelId: params.channel_id },
+        })
+        return new Response(JSON.stringify(members.map(threadMemberToAPI)), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
       },
     })
 
