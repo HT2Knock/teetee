@@ -1,0 +1,159 @@
+generator client {
+  provider = "prisma-client"
+  output   = "./src/generated"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Guild {
+  id          String        @id
+  name        String
+  ownerId     String
+  icon        String?
+  description String?
+  features    String        @default("[]")
+  channels    Channel[]
+  members     GuildMember[]
+  roles       Role[]
+  createdAt   DateTime      @default(now())
+}
+
+model Channel {
+  id                  String         @id
+  guildId             String?
+  guild               Guild?         @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  type                Int
+  name                String?
+  topic               String?
+  parentId            String?
+  position            Int            @default(0)
+  ownerId             String?
+  archived            Boolean        @default(false)
+  locked              Boolean        @default(false)
+  autoArchiveDuration Int            @default(1440)
+  archiveTimestamp     DateTime?
+  lastMessageId       String?
+  messageCount        Int            @default(0)
+  memberCount         Int            @default(0)
+  totalMessageSent    Int            @default(0)
+  rateLimitPerUser    Int            @default(0)
+  messages            Message[]
+  threadMembers       ThreadMember[]
+  createdAt           DateTime       @default(now())
+}
+
+model Message {
+  id               String    @id
+  channelId        String
+  channel          Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  authorId         String
+  content          String    @default("")
+  timestamp        DateTime  @default(now())
+  editedTimestamp   DateTime?
+  tts              Boolean   @default(false)
+  mentionEveryone  Boolean   @default(false)
+  pinned           Boolean   @default(false)
+  type             Int       @default(0)
+  flags            Int       @default(0)
+  embeds           String    @default("[]")
+  components       String    @default("[]")
+  attachments      String    @default("[]")
+  mentions         String    @default("[]")
+  mentionRoles     String    @default("[]")
+  nonce            String?
+  webhookId        String?
+  applicationId    String?
+  messageReference String?
+  reactions        Reaction[]
+  createdAt        DateTime  @default(now())
+}
+
+model User {
+  id            String        @id
+  username      String
+  discriminator String        @default("0")
+  avatar        String?
+  bot           Boolean       @default(false)
+  system        Boolean       @default(false)
+  flags         Int           @default(0)
+  globalName    String?
+  members       GuildMember[]
+}
+
+model GuildMember {
+  guildId     String
+  guild       Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nick        String?
+  roles       String   @default("[]")
+  joinedAt    DateTime @default(now())
+  deaf        Boolean  @default(false)
+  mute        Boolean  @default(false)
+  permissions String?
+
+  @@id([guildId, userId])
+}
+
+model Role {
+  id          String  @id
+  guildId     String
+  guild       Guild   @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  name        String
+  color       Int     @default(0)
+  hoist       Boolean @default(false)
+  position    Int     @default(0)
+  permissions String  @default("0")
+  managed     Boolean @default(false)
+  mentionable Boolean @default(false)
+  flags       Int     @default(0)
+}
+
+model Reaction {
+  id        Int     @id @default(autoincrement())
+  messageId String
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  emoji     String
+
+  @@unique([messageId, userId, emoji])
+}
+
+model ThreadMember {
+  channelId String
+  channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  userId    String
+  joinedAt  DateTime @default(now())
+
+  @@id([channelId, userId])
+}
+
+model ApplicationCommand {
+  id                       String  @id
+  applicationId            String
+  guildId                  String?
+  name                     String
+  description              String  @default("")
+  type                     Int     @default(1)
+  options                  String  @default("[]")
+  defaultMemberPermissions String?
+  dmPermission             Boolean @default(true)
+  nsfw                     Boolean @default(false)
+  version                  String
+
+  @@unique([applicationId, guildId, name])
+}
+
+model InteractionResponse {
+  interactionId    String   @id
+  interactionToken String   @unique
+  applicationId    String
+  channelId        String
+  type             Int
+  messageId        String?
+  data             String?
+  acknowledged     Boolean  @default(false)
+  createdAt        DateTime @default(now())
+}

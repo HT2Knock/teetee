@@ -1,0 +1,242 @@
+// Discord Gateway WebSocket server.
+// Implements the minimum Gateway protocol needed for discord.js to connect:
+// Hello -> Identify -> Ready -> GUILD_CREATE, plus heartbeat keep-alive.
+// REST routes call gateway.broadcast() to push events to connected clients.
+
+import crypto from 'node:crypto'
+import type http from 'node:http'
+import { WebSocketServer, WebSocket } from 'ws'
+import {
+  GatewayOpcodes,
+  GatewayDispatchEvents,
+  ApplicationFlags,
+} from 'discord-api-types/v10'
+import type {
+  GatewaySendPayload,
+  GatewayHelloData,
+  GatewayReadyDispatchData,
+  GatewayGuildCreateDispatchData,
+  GatewayMessageCreateDispatchData,
+  GatewayPresenceUpdate,
+  APIUser,
+  APIGuild,
+  APIGuildMember,
+  APIChannel,
+  APIMessage,
+  APIBaseVoiceState,
+  APIStageInstance,
+  APIGuildScheduledEvent,
+  APISoundboardSound,
+} from 'discord-api-types/v10'
+
+interface ConnectedClient {
+  ws: WebSocket
+  sessionId: string
+  sequence: number
+  identified: boolean
+  intents: number
+}
+
+export interface GatewayGuildState {
+  id: string
+  apiGuild: APIGuild
+  joinedAt: string
+  members: APIGuildMember[]
+  channels: APIChannel[]
+}
+
+export interface GatewayState {
+  botUser: APIUser
+  guilds: GatewayGuildState[]
+}
+
+export class DiscordGateway {
+  wss: WebSocketServer
+  clients: ConnectedClient[] = []
+  private loadState: () => Promise<GatewayState>
+  private port: number
+  private expectedToken: string
+
+  constructor({ httpServer, port, loadState, expectedToken }: {
+    httpServer: http.Server
+    port: number
+    loadState: () => Promise<GatewayState>
+    expectedToken: string
+  }) {
+    this.port = port
+    this.loadState = loadState
+    this.expectedToken = expectedToken
+    this.wss = new WebSocketServer({ server: httpServer, path: '/gateway' })
+    this.wss.on('connection', (ws) => {
+      this.handleConnection(ws)
+    })
+  }
+
+  broadcast<T>(event: string, data: T): void {
+    for (const client of this.clients) {
+      if (client.identified) {
+        this.sendDispatch(client, event, data)
+      }
+    }
+  }
+
+  broadcastMessageCreate(message: APIMessage, guildId: string): void {
+    const data: GatewayMessageCreateDispatchData = {
+      ...message,
+      guild_id: guildId,
+      mentions: [],
+    }
+    this.broadcast(GatewayDispatchEvents.MessageCreate, data)
+  }
+
+  close(): void {
+    for (const client of this.clients) {
+      client.ws.close()
+    }
+    this.clients = []
+    this.wss.close()
+  }
+
+  private send(client: ConnectedClient, payload: unknown): void {
+    if (client.ws.readyState === WebSocket.OPEN) {
+      client.ws.send(JSON.stringify(payload))
+    }
+  }
+
+  private sendHello(client: ConnectedClient): void {
+    this.send(client, {
+      op: GatewayOpcodes.Hello,
+      d: { heartbeat_interval: 45000 } satisfies GatewayHelloData,
+      s: null,
+      t: null,
+    })
+  }
+
+  private sendHeartbeatAck(client: ConnectedClient): void {
+    this.send(client, {
+      op: GatewayOpcodes.HeartbeatAck,
+      s: null,
+      t: null,
+    })
+  }
+
+  private sendDispatch<T>(
+    client: ConnectedClient,
+    event: string,
+    data: T,
+  ): void {
+    client.sequence++
+    this.send(client, {
+      op: GatewayOpcodes.Dispatch,
+      t: event,
+      s: client.sequence,
+      d: data,
+    })
+  }
+
+  private handleConnection(ws: WebSocket): void {
+    const client: ConnectedClient = {
+      ws,
+      sessionId: crypto.randomUUID(),
+      sequence: 0,
+      identified: false,
+      intents: 0,
+    }
+    this.clients.push(client)
+    this.sendHello(client)
+
+    ws.on('message', (raw) => {
+      void this.handleMessage(client, raw.toString())
+    })
+
+    ws.on('close', () => {
+      const idx = this.clients.indexOf(client)
+      if (idx !== -1) {
+        this.clients.splice(idx, 1)
+      }
+    })
+  }
+
+  private async handleMessage(
+    client: ConnectedClient,
+    raw: string,
+  ): Promise<void> {
+    // JSON.parse returns unknown -- `as` is the only option for untyped JSON
+    const payload = JSON.parse(raw) as GatewaySendPayload
+
+    switch (payload.op) {
+      case GatewayOpcodes.Heartbeat: {
+        this.sendHeartbeatAck(client)
+        break
+      }
+      case GatewayOpcodes.Identify: {
+        // Switch on `op` narrows GatewaySendPayload to GatewayIdentify,
+        // so payload.d is already GatewayIdentifyData -- no cast needed
+        const { token, intents } = payload.d
+        const cleanToken = token.replace(/^Bot\s+/i, '')
+        if (cleanToken !== this.expectedToken) {
+          client.ws.close(4004, 'Authentication failed')
+          return
+        }
+        client.identified = true
+        client.intents = intents
+        await this.sendReadySequence(client)
+        break
+      }
+    }
+  }
+
+  private async sendReadySequence(client: ConnectedClient): Promise<void> {
+    const state = await this.loadState()
+
+    const readyData: GatewayReadyDispatchData = {
+      v: 10,
+      user: state.botUser,
+      guilds: state.guilds.map((g) => ({
+        id: g.id,
+        unavailable: true,
+      })),
+      session_id: client.sessionId,
+      resume_gateway_url: `ws://localhost:${this.port}/gateway`,
+      application: { id: state.botUser.id, flags: ApplicationFlags.GatewayPresence | ApplicationFlags.GatewayGuildMembers | ApplicationFlags.GatewayMessageContent },
+    }
+    this.sendDispatch(client, GatewayDispatchEvents.Ready, readyData)
+
+    // Typed empty arrays so TS doesn't infer never[]
+    const emptyVoiceStates: APIBaseVoiceState[] = []
+    const emptyPresences: GatewayPresenceUpdate[] = []
+    const emptyStageInstances: APIStageInstance[] = []
+    const emptyScheduledEvents: APIGuildScheduledEvent[] = []
+    const emptySoundboardSounds: APISoundboardSound[] = []
+
+    for (const guild of state.guilds) {
+      // GatewayGuildCreateDispatchData narrows channels to non-thread types
+      // and threads to thread types. Our channels from the DB are all guild
+      // channels (not threads), so the cast is safe. Threads are always empty
+      // at GUILD_CREATE time in this test server.
+      type GuildCreateChannels = GatewayGuildCreateDispatchData['channels']
+      type GuildCreateThreads = GatewayGuildCreateDispatchData['threads']
+
+      const guildData: GatewayGuildCreateDispatchData = {
+        ...guild.apiGuild,
+        joined_at: guild.joinedAt,
+        large: false,
+        unavailable: false,
+        member_count: guild.members.length,
+        voice_states: emptyVoiceStates,
+        members: guild.members,
+        channels: guild.channels as GuildCreateChannels,
+        threads: [] as GuildCreateThreads,
+        presences: emptyPresences,
+        stage_instances: emptyStageInstances,
+        guild_scheduled_events: emptyScheduledEvents,
+        soundboard_sounds: emptySoundboardSounds,
+      }
+      this.sendDispatch(
+        client,
+        GatewayDispatchEvents.GuildCreate,
+        guildData,
+      )
+    }
+  }
+}
