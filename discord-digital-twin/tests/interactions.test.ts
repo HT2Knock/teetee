@@ -95,6 +95,36 @@ describe('interactions', () => {
     expect(interaction.isChatInputCommand()).toBe(true)
   })
 
+  test('user actor helper can run slash command and wait for ack', async () => {
+    const commandName = 'actor-ack-test'
+
+    const interactionHandled = new Promise<void>((resolve) => {
+      client.once('interactionCreate', async (interaction) => {
+        if (!interaction.isChatInputCommand()) {
+          return
+        }
+        if (interaction.commandName !== commandName) {
+          return
+        }
+        await interaction.reply({ content: 'ack via actor' })
+        resolve()
+      })
+    })
+
+    const response = await discord.expect().interactionAck({
+      trigger: async () => {
+        return discord.user(testUserId).runSlashCommand({
+          channelId,
+          name: commandName,
+        })
+      },
+    })
+
+    await interactionHandled
+    expect(response.acknowledged).toBe(true)
+    expect(response.messageId).toBeTruthy()
+  })
+
   test('interaction.reply() creates a message via callback endpoint', async () => {
     const received = new Promise<ChatInputCommandInteraction>((resolve) => {
       client.once('interactionCreate', (i) => {

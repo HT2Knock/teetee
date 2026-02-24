@@ -82,6 +82,24 @@ describe('messages and reactions', () => {
     expect(msg.author.username).toBe('TestUser')
   })
 
+  test('user actor helper can send a message and expect can observe it', async () => {
+    const observed = await discord.expect().message({
+      channelId,
+      trigger: async () => {
+        await discord.user(testUserId).sendMessage({
+          channelId,
+          content: 'Actor helper message',
+        })
+      },
+      predicate: (message) => {
+        return message.content === 'Actor helper message'
+      },
+    })
+
+    expect(observed.content).toBe('Actor helper message')
+    expect(observed.author.id).toBe(testUserId)
+  })
+
   test('channel.send stores message in DB', async () => {
     const guild = client.guilds.cache.first()!
     const channel = guild.channels.cache.find(

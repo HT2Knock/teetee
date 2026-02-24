@@ -3,14 +3,18 @@
 // can connect to. Used for automated testing of the Kimaki bot without
 // hitting real Discord.
 
-import { ChannelType, GatewayDispatchEvents } from 'discord-api-types/v10'
+import {
+  ChannelType,
+  GatewayDispatchEvents,
+  InteractionType,
+  ComponentType,
+} from 'discord-api-types/v10'
 import type {
   APIMessage,
   APIChannel,
   APIEmbed,
   APIAttachment,
   APIInteraction,
-  InteractionType,
 } from 'discord-api-types/v10'
 import { createPrismaClient, type PrismaClient } from './db.js'
 import { generateSnowflake } from './snowflake.js'
@@ -56,6 +60,24 @@ export interface DigitalDiscordOptions {
   // Pass a file: URL (e.g. "file:./test.db") for persistent storage.
   dbUrl?: string
 }
+
+export type DigitalDiscordCommandOption = {
+  name: string
+  type: number
+  value?: string | number | boolean
+  options?: DigitalDiscordCommandOption[]
+}
+
+export type DigitalDiscordSelectOption = {
+  values: string[]
+}
+
+export type DigitalDiscordModalField = {
+  customId: string
+  value: string
+}
+
+export type DigitalDiscordMessagePredicate = (message: APIMessage) => boolean
 
 export class DigitalDiscord {
   prisma: PrismaClient
@@ -165,6 +187,34 @@ export class DigitalDiscord {
       },
     })
     return threads.map(channelToAPI)
+  }
+
+  async getFirstNonBotUserId(): Promise<string | null> {
+    const firstUser = await this.prisma.user.findFirst({
+      where: { bot: false },
+      orderBy: { id: 'asc' },
+    })
+    if (!firstUser) {
+      return null
+    }
+    return firstUser.id
+  }
+
+  user(userId: string): DigitalDiscordUserActor {
+    return new DigitalDiscordUserActor({
+      discord: this,
+      userId,
+    })
+  }
+
+  bot(): DigitalDiscordUserActor {
+    return this.user(this.botUserId)
+  }
+
+  expect(): DigitalDiscordExpect {
+    return new DigitalDiscordExpect({
+      discord: this,
+    })
   }
 
   // --- Test utilities ---
@@ -344,6 +394,128 @@ export class DigitalDiscord {
     )
 
     return { id: interactionId, token: interactionToken }
+  }
+
+  async simulateSlashCommand({
+    channelId,
+    userId,
+    name,
+    commandId,
+    options,
+    guildId,
+  }: {
+    channelId: string
+    userId: string
+    name: string
+    commandId?: string
+    options?: DigitalDiscordCommandOption[]
+    guildId?: string
+  }): Promise<{ id: string; token: string }> {
+    return this.simulateInteraction({
+      type: InteractionType.ApplicationCommand,
+      channelId,
+      userId,
+      guildId,
+      data: {
+        id: commandId ?? generateSnowflake(),
+        name,
+        type: 1,
+        ...(options && options.length > 0 ? { options } : {}),
+      },
+    })
+  }
+
+  async simulateButtonClick({
+    channelId,
+    userId,
+    messageId,
+    customId,
+    guildId,
+  }: {
+    channelId: string
+    userId: string
+    messageId: string
+    customId: string
+    guildId?: string
+  }): Promise<{ id: string; token: string }> {
+    return this.simulateInteraction({
+      type: InteractionType.MessageComponent,
+      channelId,
+      userId,
+      guildId,
+      messageId,
+      data: {
+        custom_id: customId,
+        component_type: ComponentType.Button,
+      },
+    })
+  }
+
+  async simulateSelectMenu({
+    channelId,
+    userId,
+    messageId,
+    customId,
+    values,
+    guildId,
+  }: {
+    channelId: string
+    userId: string
+    messageId: string
+    customId: string
+    values: string[]
+    guildId?: string
+  }): Promise<{ id: string; token: string }> {
+    return this.simulateInteraction({
+      type: InteractionType.MessageComponent,
+      channelId,
+      userId,
+      guildId,
+      messageId,
+      data: {
+        custom_id: customId,
+        component_type: ComponentType.StringSelect,
+        values,
+      },
+    })
+  }
+
+  async simulateModalSubmit({
+    channelId,
+    userId,
+    customId,
+    fields,
+    guildId,
+  }: {
+    channelId: string
+    userId: string
+    customId: string
+    fields: DigitalDiscordModalField[]
+    guildId?: string
+  }): Promise<{ id: string; token: string }> {
+    const components = fields.map((field) => {
+      return {
+        type: 1,
+        components: [
+          {
+            type: 4,
+            custom_id: field.customId,
+            value: field.value,
+          },
+        ],
+      }
+    })
+
+    return this.simulateInteraction({
+      type: InteractionType.ModalSubmit,
+      channelId,
+      userId,
+      guildId,
+      data: {
+        custom_id: customId,
+        components,
+      },
+    })
   }
 
   async getInteractionResponse(interactionId: string): Promise<{
@@ -554,6 +726,263 @@ export class DigitalDiscord {
         channels: guild.channels.map(channelToAPI),
       })),
     }
+  }
+}
+
+export class DigitalDiscordUserActor {
+  private readonly discord: DigitalDiscord
+  private readonly userId: string
+
+  constructor({ discord, userId }: { discord: DigitalDiscord; userId: string }) {
+    this.discord = discord
+    this.userId = userId
+  }
+
+  async sendMessage({
+    channelId,
+    content,
+    embeds,
+    attachments,
+  }: {
+    channelId: string
+    content: string
+    embeds?: APIEmbed[]
+    attachments?: APIAttachment[]
+  }) {
+    return this.discord.simulateUserMessage({
+      channelId,
+      userId: this.userId,
+      content,
+      embeds,
+      attachments,
+    })
+  }
+
+  async runSlashCommand({
+    channelId,
+    name,
+    commandId,
+    options,
+    guildId,
+  }: {
+    channelId: string
+    name: string
+    commandId?: string
+    options?: DigitalDiscordCommandOption[]
+    guildId?: string
+  }) {
+    return this.discord.simulateSlashCommand({
+      channelId,
+      userId: this.userId,
+      name,
+      commandId,
+      options,
+      guildId,
+    })
+  }
+
+  async clickButton({
+    channelId,
+    messageId,
+    customId,
+    guildId,
+  }: {
+    channelId: string
+    messageId: string
+    customId: string
+    guildId?: string
+  }) {
+    return this.discord.simulateButtonClick({
+      channelId,
+      userId: this.userId,
+      messageId,
+      customId,
+      guildId,
+    })
+  }
+
+  async selectMenu({
+    channelId,
+    messageId,
+    customId,
+    values,
+    guildId,
+  }: {
+    channelId: string
+    messageId: string
+    customId: string
+    values: string[]
+    guildId?: string
+  }) {
+    return this.discord.simulateSelectMenu({
+      channelId,
+      userId: this.userId,
+      messageId,
+      customId,
+      values,
+      guildId,
+    })
+  }
+
+  async submitModal({
+    channelId,
+    customId,
+    fields,
+    guildId,
+  }: {
+    channelId: string
+    customId: string
+    fields: DigitalDiscordModalField[]
+    guildId?: string
+  }) {
+    return this.discord.simulateModalSubmit({
+      channelId,
+      userId: this.userId,
+      customId,
+      fields,
+      guildId,
+    })
+  }
+}
+
+export class DigitalDiscordExpect {
+  private readonly discord: DigitalDiscord
+
+  constructor({ discord }: { discord: DigitalDiscord }) {
+    this.discord = discord
+  }
+
+  async threadCreated({
+    parentChannelId,
+    timeoutMs = 10000,
+    trigger,
+  }: {
+    parentChannelId: string
+    timeoutMs?: number
+    trigger?: () => Promise<unknown>
+  }): Promise<APIChannel> {
+    const existingThreads = await this.discord.getThreads(parentChannelId)
+    const existingIds = new Set(
+      existingThreads.map((thread) => {
+        return thread.id
+      }),
+    )
+
+    if (trigger) {
+      await trigger()
+    }
+
+    const startedAt = Date.now()
+    while (Date.now() - startedAt < timeoutMs) {
+      const threads = await this.discord.getThreads(parentChannelId)
+      const createdThread = threads.find((thread) => {
+        return !existingIds.has(thread.id)
+      })
+      if (createdThread) {
+        return createdThread
+      }
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50)
+      })
+    }
+
+    throw new Error(
+      `Timed out waiting for new thread in parent channel ${parentChannelId}`,
+    )
+  }
+
+  async message({
+    channelId,
+    timeoutMs = 10000,
+    trigger,
+    predicate,
+  }: {
+    channelId: string
+    timeoutMs?: number
+    trigger?: () => Promise<unknown>
+    predicate?: DigitalDiscordMessagePredicate
+  }): Promise<APIMessage> {
+    const existingMessages = await this.discord.getMessages(channelId)
+    const existingIds = new Set(
+      existingMessages.map((message) => {
+        return message.id
+      }),
+    )
+
+    if (trigger) {
+      await trigger()
+    }
+
+    const startedAt = Date.now()
+    while (Date.now() - startedAt < timeoutMs) {
+      const messages = await this.discord.getMessages(channelId)
+      const matched = messages.find((message) => {
+        if (existingIds.has(message.id)) {
+          return false
+        }
+        if (!predicate) {
+          return true
+        }
+        return predicate(message)
+      })
+
+      if (matched) {
+        return matched
+      }
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50)
+      })
+    }
+
+    throw new Error(`Timed out waiting for message in channel ${channelId}`)
+  }
+
+  async botReply({
+    channelId,
+    timeoutMs = 10000,
+    trigger,
+  }: {
+    channelId: string
+    timeoutMs?: number
+    trigger?: () => Promise<unknown>
+  }): Promise<APIMessage> {
+    return this.message({
+      channelId,
+      timeoutMs,
+      trigger,
+      predicate: (message) => {
+        return message.author.id === this.discord.botUserId
+      },
+    })
+  }
+
+  async interactionAck({
+    interactionId,
+    timeoutMs = 10000,
+    trigger,
+  }: {
+    interactionId?: string
+    timeoutMs?: number
+    trigger?: () => Promise<{ id: string }>
+  }) {
+    const resolvedInteractionId: string = await (async () => {
+      if (interactionId) {
+        return interactionId
+      }
+      if (!trigger) {
+        throw new Error(
+          'interactionAck requires either interactionId or trigger callback',
+        )
+      }
+      const interaction = await trigger()
+      return interaction.id
+    })()
+
+    return this.discord.waitForInteractionResponse({
+      interactionId: resolvedInteractionId,
+      timeout: timeoutMs,
+    })
   }
 }
 
