@@ -202,7 +202,7 @@ export class DiscordGateway {
         unavailable: true,
       })),
       session_id: client.sessionId,
-      resume_gateway_url: `ws://localhost:${this.port}/gateway`,
+      resume_gateway_url: `ws://127.0.0.1:${this.port}/gateway`,
       application: {
         id: state.botUser.id,
         flags:

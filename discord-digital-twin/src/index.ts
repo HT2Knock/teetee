@@ -119,11 +119,11 @@ export class DigitalDiscord {
   }
 
   get restUrl(): string {
-    return `http://localhost:${this.port}/api`
+    return `http://127.0.0.1:${this.port}/api`
   }
 
   get gatewayUrl(): string {
-    return `ws://localhost:${this.port}/gateway`
+    return `ws://127.0.0.1:${this.port}/gateway`
   }
 
   async start(): Promise<void> {
