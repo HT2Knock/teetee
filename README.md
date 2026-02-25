@@ -348,32 +348,16 @@ Manage scheduled tasks with `kimaki task list` and `kimaki task delete <id>`.
 
 ## Memory
 
-Enable persistent memory across sessions with `--memory`:
-
-```bash
-kimaki --memory
-```
-
-This creates a **kimaki-memory** forum channel in your Discord server and syncs it bidirectionally with `~/.kimaki/memory/` on disk. Memory files are markdown with YAML frontmatter:
+Kimaki supports persistent memory across sessions via a `MEMORY.md` file in your project root. No flags needed — if the file exists, the AI reads it at session start.
 
 ```markdown
----
-title: Auth architecture decisions
-tags:
-  - auth
----
+# MEMORY.md
 
 Using JWT tokens with 15min expiry. Refresh tokens in httpOnly cookies.
+User prefers kebab-case filenames and errore-style error handling.
 ```
 
-Two scopes:
-
-- `~/.kimaki/memory/<channelId>/` — project-specific notes
-- `~/.kimaki/memory/global/` — cross-project preferences
-
-Changes on disk sync to Discord forum threads and vice versa. The AI reads relevant memory files at session start and writes them after important decisions or when you say "remember this".
-
-Forum threads have a **2000 character limit**, so keep individual memory files small. Never store secrets in memory files — they're visible in Discord.
+The AI can update this file to store learnings, decisions, preferences, and context worth preserving. After long idle gaps (10+ min), the AI is reminded to save important context before starting new work.
 
 ## How It Works
 
