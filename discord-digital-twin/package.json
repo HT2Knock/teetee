@@ -41,7 +41,7 @@
     "@libsql/client": "^0.15.15",
     "@prisma/adapter-libsql": "7.3.0",
     "@prisma/client": "7.3.0",
-    "discord-api-types": "^0.38.16",
+    "discord-api-types": "^0.38.40",
     "spiceflow": "^1.17.12",
     "ws": "^8.18.0"
   },
