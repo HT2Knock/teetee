@@ -85,13 +85,11 @@ describe('messages and reactions', () => {
   test('user actor helper can send a message and wait helper can observe it', async () => {
     const content = `Actor helper message ${Date.now().toString()}`
 
-    await discord.user(testUserId).sendMessage({
-      channelId,
+    await discord.channel(channelId).user(testUserId).sendMessage({
       content,
     })
 
-    const observed = await discord.waitForMessage({
-      channelId,
+    const observed = await discord.channel(channelId).waitForMessage({
       predicate: (message) => {
         return message.content === content
       },
@@ -110,7 +108,7 @@ describe('messages and reactions', () => {
     const sent = await channel.send('Hello from bot!')
     expect(sent.content).toBe('Hello from bot!')
 
-    const messages = await discord.getMessages(channelId)
+    const messages = await discord.channel(channelId).getMessages()
     const found = messages.find((m) => m.content === 'Hello from bot!')
     expect(found).toBeDefined()
     expect(found?.author.bot).toBe(true)
@@ -126,7 +124,7 @@ describe('messages and reactions', () => {
     const edited = await sent.edit('Edited content')
     expect(edited.content).toBe('Edited content')
 
-    const messages = await discord.getMessages(channelId)
+    const messages = await discord.channel(channelId).getMessages()
     const found = messages.find((m) => m.id === sent.id)
     expect(found?.content).toBe('Edited content')
     expect(found?.edited_timestamp).toBeTruthy()
@@ -142,7 +140,7 @@ describe('messages and reactions', () => {
     const sentId = sent.id
     await sent.delete()
 
-    const messages = await discord.getMessages(channelId)
+    const messages = await discord.channel(channelId).getMessages()
     const found = messages.find((m) => m.id === sentId)
     expect(found).toBeUndefined()
   })

@@ -111,12 +111,11 @@ describe('interactions', () => {
       })
     })
 
-    const interaction = await discord.user(testUserId).runSlashCommand({
-      channelId,
+    const interaction = await discord.channel(channelId).user(testUserId).runSlashCommand({
       name: commandName,
     })
 
-    const response = await discord.waitForInteractionAck({
+    const response = await discord.channel(channelId).waitForInteractionAck({
       interactionId: interaction.id,
     })
 
@@ -148,12 +147,12 @@ describe('interactions', () => {
     const interaction = await received
     await interaction.reply({ content: 'Reply from bot' })
 
-    const response = await discord.getInteractionResponse(id)
+    const response = await discord.channel(channelId).getInteractionResponse(id)
     expect(response).toBeDefined()
     expect(response!.acknowledged).toBe(true)
     expect(response!.messageId).toBeTruthy()
 
-    const messages = await discord.getMessages(channelId)
+    const messages = await discord.channel(channelId).getMessages()
     const replyMsg = messages.find((m) => m.content === 'Reply from bot')
     expect(replyMsg).toBeDefined()
     expect(replyMsg!.application_id).toBe(discord.botUserId)
@@ -183,17 +182,18 @@ describe('interactions', () => {
     await interaction.deferReply()
 
     // After deferring, interaction is acknowledged but no message yet
-    const afterDefer = await discord.getInteractionResponse(id)
+    const ch = discord.channel(channelId)
+    const afterDefer = await ch.getInteractionResponse(id)
     expect(afterDefer!.acknowledged).toBe(true)
     expect(afterDefer!.messageId).toBeNull()
 
     await interaction.editReply({ content: 'Deferred then edited' })
 
     // After editReply, message should exist
-    const afterEdit = await discord.getInteractionResponse(id)
+    const afterEdit = await ch.getInteractionResponse(id)
     expect(afterEdit!.messageId).toBeTruthy()
 
-    const messages = await discord.getMessages(channelId)
+    const messages = await ch.getMessages()
     const msg = messages.find((m) => m.content === 'Deferred then edited')
     expect(msg).toBeDefined()
   })
@@ -225,7 +225,7 @@ describe('interactions', () => {
 
     await interaction.deleteReply()
 
-    const messages = await discord.getMessages(channelId)
+    const messages = await discord.channel(channelId).getMessages()
     const found = messages.find((m) => m.id === reply.id)
     expect(found).toBeUndefined()
   })
@@ -258,7 +258,7 @@ describe('interactions', () => {
 
     expect(followUp.content).toBe('Follow-up message')
 
-    const messages = await discord.getMessages(channelId)
+    const messages = await discord.channel(channelId).getMessages()
     expect(messages.some((m) => m.content === 'Initial reply')).toBe(true)
     expect(messages.some((m) => m.content === 'Follow-up message')).toBe(true)
   })
@@ -342,8 +342,8 @@ describe('interactions', () => {
     await interaction.reply({ content: 'Original reply' })
     await interaction.editReply({ content: 'Edited reply' })
 
-    const response = await discord.getInteractionResponse(id)
-    const messages = await discord.getMessages(channelId)
+    const response = await discord.channel(channelId).getInteractionResponse(id)
+    const messages = await discord.channel(channelId).getMessages()
     const msg = messages.find((m) => m.id === response!.messageId)
     expect(msg?.content).toBe('Edited reply')
     expect(msg?.edited_timestamp).toBeTruthy()
@@ -378,8 +378,8 @@ describe('interactions', () => {
     // Second edit changes ONLY embeds
     await interaction.editReply({ embeds: [{ title: 'Test Embed' }] })
 
-    const response = await discord.getInteractionResponse(id)
-    const messages = await discord.getMessages(channelId)
+    const response = await discord.channel(channelId).getInteractionResponse(id)
+    const messages = await discord.channel(channelId).getMessages()
     const msg = messages.find((m) => m.id === response!.messageId)
 
     expect(msg?.content).toBe('First edit')
@@ -415,10 +415,10 @@ describe('interactions', () => {
     const interaction = await received
     await interaction.update({ content: 'Updated by component' })
 
-    const response = await discord.getInteractionResponse(id)
+    const response = await discord.channel(channelId).getInteractionResponse(id)
     expect(response!.messageId).toBe(targetMsg!.id)
 
-    const messages = await discord.getMessages(channelId)
+    const messages = await discord.channel(channelId).getMessages()
     const msg = messages.find((m) => m.id === targetMsg!.id)
     expect(msg?.content).toBe('Updated by component')
     expect(msg?.edited_timestamp).toBeTruthy()
@@ -451,10 +451,10 @@ describe('interactions', () => {
     await interaction.deferUpdate()
     await interaction.editReply({ content: 'Edited after deferUpdate' })
 
-    const response = await discord.getInteractionResponse(id)
+    const response = await discord.channel(channelId).getInteractionResponse(id)
     expect(response!.messageId).toBe(targetMsg.id)
 
-    const messages = await discord.getMessages(channelId)
+    const messages = await discord.channel(channelId).getMessages()
     const msg = messages.find((m) => m.id === targetMsg.id)
     expect(msg?.content).toBe('Edited after deferUpdate')
     expect(msg?.edited_timestamp).toBeTruthy()

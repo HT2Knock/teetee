@@ -63,7 +63,7 @@ describe('threads and channels', () => {
   })
 
   test('GET channel returns channel data', async () => {
-    const channel = await discord.getChannel(channelId)
+    const channel = await discord.channel(channelId).getChannel()
     expect(channel).toBeDefined()
     expect(channel!.name).toBe('general')
   })
@@ -112,7 +112,7 @@ describe('threads and channels', () => {
     const sent = await thread.send('Message in thread')
     expect(sent.content).toBe('Message in thread')
 
-    const messages = await discord.getMessages(createdThreadId)
+    const messages = await discord.thread(createdThreadId).getMessages()
     expect(messages.some((m) => m.content === 'Message in thread')).toBe(true)
   })
 
@@ -172,7 +172,7 @@ describe('threads and channels', () => {
   })
 
   test('getThreads returns threads for parent channel', async () => {
-    const threads = await discord.getThreads(channelId)
+    const threads = await discord.channel(channelId).getThreads()
     expect(threads.length).toBeGreaterThanOrEqual(2)
     const names = threads.map((t) => t.name)
     expect(names).toContain('test-thread')
