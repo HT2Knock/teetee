@@ -1,120 +1,91 @@
 ---
-title: Thread Session Runner Refactor Plan
+title: Thread Runtime Migration Plan
 description: >-
-  Plan to refactor Discord session handling into a per-thread runtime class
-  with centralized state transitions and event-derived completion.
+  Concrete migration plan to a TUI-style per-thread runtime with one event
+  pipeline per thread and normalized state transitions.
 prompt: |
   Voice message transcription from Discord user:
 
-  Create a plan markdown file for this refactoring. Also explain why we cannot
-  do a direct copy. For example, we could create a class per thread, then send
-  with a method on this class a notification when there is a new message in a
-  Discord message request.
+  so there is only one even handler per session instead of per message?
 
-  Additional context used while planning:
-  - Keep interrupt behavior correct when tool calls are running.
-  - Keep session reuse semantics in Discord threads.
-  - Evaluate parity with OpenCode TUI handler/event model.
+  so what would be concrete plan to migrate? update the .md file from scratch
 
-  References used while planning:
+  Goal:
+  - Migrate Kimaki Discord session handling to imitate OpenCode TUI client
+    architecture (shared event stream + derived state), while keeping Discord
+    behavior intact.
+
+  References reviewed:
   - @discord/src/session-handler.ts
   - @discord/src/session-handler/state.ts
+  - @discord/src/session-handler/thread-session-runtime.ts
+  - @discord/src/discord-bot.ts
   - @discord/src/thread-message-queue.e2e.test.ts
   - @opensrc/repos/github.com/sst/opencode/packages/opencode/src/cli/cmd/tui/context/sync.tsx
   - @opensrc/repos/github.com/sst/opencode/packages/opencode/src/cli/cmd/tui/component/prompt/index.tsx
   - @opensrc/repos/github.com/sst/opencode/packages/opencode/src/cli/cmd/tui/routes/session/index.tsx
 ---
 
-## Goal
+## Summary
 
-Refactor the Discord session orchestration into a per-thread runtime class that:
+Direct code copy from OpenCode TUI is not practical, but architecture copy is.
+Target shape:
 
-- centralizes mutable state in one place,
-- keeps interrupt + queue behavior stable,
-- reduces ad-hoc lifecycle flags in `session-handler.ts`,
-- keeps current behavior for typing, footer, permission/question UI, and queue.
+- one runtime object per Discord thread,
+- one event pipeline per runtime,
+- fire-and-forget prompt dispatch at call site,
+- completion derived from event/state timeline,
+- no per-message event handler ownership.
 
-## Why A Direct Copy From OpenCode TUI Is Not Safe
+## What Is Already Done
 
-OpenCode TUI and Kimaki solve related but different problems.
+- Extracted run transition logic into
+  `@discord/src/session-handler/state.ts`.
+- Added first runtime abstraction in
+  `@discord/src/session-handler/thread-session-runtime.ts`.
+- Moved queue + active-handler ownership to runtime accessors in
+  `@discord/src/session-handler.ts`.
 
-1. **Lifecycle shape is different**
-   - TUI keeps a long-lived global sync store fed by event streams.
-   - Kimaki executes request-scoped handler calls per Discord message.
-2. **Interrupt semantics are different**
-   - TUI prompts are fire-and-forget from input submit.
-   - Kimaki does immediate abort + queued message handoff in the same thread.
-3. **Output contract is different**
-   - TUI renders state from message timelines.
-   - Kimaki must emit Discord typing indicators, markdown chunks, and footer
-     timing in strict order.
-4. **Bridging/UI obligations are different**
-   - Kimaki must coordinate Discord components (permissions/questions/buttons)
-     in-flight while aborting and resuming runs.
-
-So direct code copy would drop required Discord-specific sequencing and re-create
-the stale idle race in a new shape.
-
-## Recommended Direction: Per-Thread Runtime Class
-
-Implement a dedicated runtime object per thread and route all new incoming
-messages through it.
+## End State
 
 ```text
 Discord message
-  -> ThreadSessionRuntime.notifyIncomingMessage(...)
-    -> enqueue + maybe interrupt active run
-      -> run loop (single writer)
-        -> session.prompt/session.command
-        -> event correlation + state transitions
-        -> flush output + footer + dequeue next
+  -> ThreadSessionRuntime.notifyIncomingMessage(input)
+    -> enqueue input
+    -> if idle: dispatch next
+    -> if busy: optionally interrupt (policy)
+
+ThreadSessionRuntime
+  -> one event subscription for thread session lifecycle
+  -> one normalized Zustand store
+  -> derived completion + queue drain + Discord effects
 ```
 
-### Proposed Class Responsibilities
+## Concrete Migration Phases
 
-- Own queue for one thread (`pendingMessages`).
-- Own current run token/session info (`activeRun`).
-- Own main run state store (status enum transitions).
-- Own typing lifecycle timers.
-- Own event subscription for this thread runtime.
-- Expose small API:
-  - `notifyIncomingMessage(input)`
-  - `shutdown()`
-  - `getSnapshot()` (debug/status)
-
-## State Model (Normalized)
-
-Keep the store from `@discord/src/session-handler/state.ts` as a focused run
-state machine, then compose that inside the class.
-
-- Run phase: `waiting-dispatch | collecting-baseline | dispatching |
-  prompt-resolved | finished | aborted`
-- Idle phase: `none | deferred`
-- Correlation fields:
-  - `baselineAssistantIds`
-  - `currentAssistantMessageId`
-  - `eventSeq`, `evidenceSeq`, `deferredIdleSeq`
-
-Important: this state tracks **runs within one session ID**, not historical
-sessions.
-
-## Refactor Steps
-
-### 1) Introduce `ThreadSessionRuntime`
+### Phase 1: Single Ingress API (No Behavior Change)
 
 Files:
 
-- Add `@discord/src/session-handler/thread-session-runtime.ts`
-- Keep a thin entry in `@discord/src/session-handler.ts` that delegates to the
-  runtime instance for `thread.id`.
+- `@discord/src/session-handler/thread-session-runtime.ts`
+- `@discord/src/session-handler.ts`
+- `@discord/src/discord-bot.ts`
+- `@discord/src/commands/queue.ts`
 
 Tasks:
 
-- Move queue + interrupt logic into class methods.
-- Move prompt dispatch and event loop into class.
-- Move typing interval/restart timeout ownership into class.
+1. Add `notifyIncomingMessage(...)` on runtime.
+2. Route all call sites through runtime ingress:
+   - thread messages from `discord-bot.ts`
+   - `/queue` and `/queue-command`
+   - action-button enqueue paths.
+3. Remove `threadMessageQueue` from `discord-bot.ts`.
 
-### 2) Keep transition logic centralized
+Acceptance:
+
+- Existing e2e ordering tests still pass unchanged.
+
+### Phase 2: Normalize Thread State Atom
 
 Files:
 
@@ -123,21 +94,66 @@ Files:
 
 Tasks:
 
-- Keep all state updates via named transition helpers.
-- Avoid direct field mutation from runtime methods.
+1. Add thread-level Zustand state (single atom), with sections:
+   - `session`: `sessionId`, `projectDirectory`, `sdkDirectory`
+   - `run`: current run phase (reuse existing run transition module)
+   - `queue`: pending items
+   - `typing`: active/stopped/restart-pending
+   - `interaction`: permission/question/action-buttons pending markers.
+2. Keep transitions pure and named.
+3. Keep effects (Discord sends, API calls) outside transitions.
 
-### 3) Keep Discord side effects at the edge
+Acceptance:
+
+- No module-level mutable maps for thread queue/handler ownership.
+
+### Phase 3: One Event Pipeline Per Runtime
 
 Files:
 
 - `@discord/src/session-handler/thread-session-runtime.ts`
+- `@discord/src/session-handler.ts`
 
 Tasks:
 
-- Restrict Discord sends/reactions/typing to small effect functions.
-- Keep state transitions pure and easy to test.
+1. Start one long-lived event subscription in runtime.
+2. Remove per-message `event.subscribe` lifecycle from
+   `handleOpencodeSession`.
+3. Dispatch prompt/command without binding completion to prompt response.
+4. Derive completion from event/state timeline:
+   - `message.updated`
+   - `message.part.updated`
+   - `session.status` / `session.idle`
+   - `session.error`.
 
-### 4) Wire runtime registry
+Acceptance:
+
+- No per-message event handler wait chain.
+- Interrupt race test still passes.
+
+### Phase 4: Move Abort Ownership Into Runtime
+
+Files:
+
+- `@discord/src/session-handler.ts`
+- `@discord/src/commands/abort.ts`
+- `@discord/src/commands/restart-opencode-server.ts`
+- `@discord/src/commands/queue.ts`
+- `@discord/src/commands/action-buttons.ts`
+- `@discord/src/commands/merge-worktree.ts`
+
+Tasks:
+
+1. Replace direct `abortControllers` reads with runtime API:
+   - `runtime.abortActiveRun(reason)`
+   - `runtime.isBusy()`.
+2. Keep compatibility shim briefly, then remove global map.
+
+Acceptance:
+
+- Abort behavior unchanged for all commands.
+
+### Phase 5: Shrink `handleOpencodeSession` to Adapter
 
 Files:
 
@@ -145,42 +161,51 @@ Files:
 
 Tasks:
 
-- Create a `Map<threadId, ThreadSessionRuntime>` registry.
-- Reuse runtime for a thread until idle + queue empty + no pending prompts.
-- Cleanup registry entry on runtime shutdown.
+1. Keep exported function signature for callers.
+2. Internally delegate to runtime ingress and return minimal metadata.
+3. Remove recursive queue-drain + mixed ownership leftovers.
 
-## Test Plan
+Acceptance:
 
-Use existing e2e file and add focused cases only when behavior changes.
+- `session-handler.ts` becomes orchestration adapter, not state owner.
 
-Files:
+## Test Plan Per Phase
 
-- `@discord/src/thread-message-queue.e2e.test.ts`
-
-Checks:
-
-1. Interrupt during tool call still processes next message.
-2. Deferred idle before prompt resolve does not end fresh run early.
-3. Typing indicator stops on finish, abort, and error.
-4. Queue drains in order under rapid message bursts.
-
-Run:
+Primary suite:
 
 - `pnpm vitest --run src/thread-message-queue.e2e.test.ts`
 - `pnpm tsc`
 
-## Risks And Mitigations
+Add focused tests during migration:
 
-- **Risk:** Runtime object leaks by thread.
-  - **Mitigation:** explicit `shutdown()` and registry cleanup conditions.
-- **Risk:** Double-send footer on duplicate idle.
-  - **Mitigation:** phase guard (`finished`) before finish side effects.
-- **Risk:** Regressions in permission/question pauses.
-  - **Mitigation:** keep these flows unchanged, only move ownership boundary.
+- `discord/src/session-handler/state.test.ts`
+- `discord/src/session-handler/thread-session-runtime.test.ts`
 
-## Acceptance Criteria
+Key scenarios:
 
-- No stale-idle premature completion after interrupt.
-- Queue and interrupt behavior unchanged from user perspective.
-- Fewer mutable locals in `session-handler.ts`.
-- Runtime state readable from one normalized source of truth.
+1. Rapid message burst ordering.
+2. Interrupt during long tool call.
+3. Deferred idle before prompt resolve.
+4. Typing cleanup on finish/abort/error.
+5. Pending permission/question with queued follow-up message.
+
+## Risks And Guards
+
+- Runtime leak by thread
+  - guard: cleanup when no queue + no active handler + no active typing timer.
+- Duplicate footer or double completion
+  - guard: terminal phase checks in transition layer.
+- Regressions from mixed old/new paths
+  - guard: phase-by-phase cutover, no dual ownership after each phase.
+
+## Practical Next Commit
+
+Implement only Phase 1 in one commit:
+
+1. Add runtime ingress method.
+2. Route `discord-bot.ts` thread path through runtime.
+3. Remove `threadMessageQueue` from `discord-bot.ts`.
+4. Keep existing event + transition logic otherwise untouched.
+
+This gives immediate simplification with low risk and prepares full TUI-style
+runtime migration.
