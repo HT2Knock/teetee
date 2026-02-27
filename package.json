@@ -24,5 +24,10 @@
     "@opencode-ai/sdk": "^1.1.53",
     "string-dedent": "^3.0.2",
     "tiny-jsonc": "^1.0.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@discordjs/opus"
+    ]
   }
 }
