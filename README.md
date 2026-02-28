@@ -61,24 +61,24 @@ Each channel shows which bot (machine) it's connected to. You can have channels 
 
 ## Running Multiple Instances
 
-By default, Kimaki stores its data in `~/.kimaki`. To run multiple bot instances on the same machine (e.g., for different teams or projects), use the `--data-dir` option:
+By default, Kimaki stores its data in `~/.kimaki`. To run multiple bot instances on the same machine (e.g., for different teams or projects), use a separate `--data-dir` and optionally set `KIMAKI_LOCK_PORT` explicitly:
 
 ```bash
 # Instance 1 - uses default ~/.kimaki
 npx -y kimaki@latest
 
-# Instance 2 - separate data directory
-npx -y kimaki@latest --data-dir ~/work-bot
+# Instance 2 - separate data directory + explicit lock port
+KIMAKI_LOCK_PORT=31001 npx -y kimaki@latest --data-dir ~/work-bot
 
 # Instance 3 - another separate instance
-npx -y kimaki@latest --data-dir ~/personal-bot
+KIMAKI_LOCK_PORT=31002 npx -y kimaki@latest --data-dir ~/personal-bot
 ```
 
 Each instance has its own:
 
 - **Database** - Bot credentials, channel mappings, session history
 - **Projects directory** - Where `/create-new-project` creates new folders
-- **Lock port** - Derived from the data directory path, so instances don't conflict
+- **Lock port** - Derived from the data directory path by default; override with `KIMAKI_LOCK_PORT` when you need a specific port
 
 This lets you run completely isolated bots on the same machine, each with their own Discord app and configuration.
 
@@ -362,6 +362,8 @@ The AI can update this file to store learnings, decisions, preferences, and cont
 ## How It Works
 
 **SQLite Database** - Kimaki stores state in `<data-dir>/discord-sessions.db` (default: `~/.kimaki/discord-sessions.db`). This maps Discord threads to OpenCode sessions, channels to directories, and stores your bot credentials. Use `--data-dir` to change the location.
+
+**Lock Port** - Kimaki enforces single-instance behavior by binding a lock port. By default, the port is derived from `--data-dir`; set `KIMAKI_LOCK_PORT=<port>` to override it when running an additional Kimaki process on the same machine.
 
 **OpenCode Servers** - When you message a channel, Kimaki spawns (or reuses) an OpenCode server for that project directory. The server handles the actual AI coding session.
 
