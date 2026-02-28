@@ -171,6 +171,8 @@ for checkout validation requests, prefer non-recursive checks unless the user as
 
 the opencode plugin (`discord/src/opencode-plugin.ts`) runs inside the **opencode server process**, not the kimaki bot process. this means `config.ts` state (like `getDataDir()`, etc.) is not available there.
 
+**CRITICAL: never export utility functions from `opencode-plugin.ts`.** opencode's plugin loader calls every exported function in the module as a plugin initializer. if you export a helper like `condenseMemoryMd(content: string)`, it will be called with a PluginInput object instead of a string and crash. only the plugin entrypoint function should be exported. move any utilities to separate files (e.g. `condense-memory.ts`) and import them.
+
 to pass bot-process state to the plugin, use `KIMAKI_*` env vars set in `opencode.ts` when spawning the server process. current env vars:
 
 - `KIMAKI_DATA_DIR`: data directory path
