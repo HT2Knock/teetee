@@ -375,6 +375,8 @@ The AI can update this file to store learnings, decisions, preferences, and cont
 
 **Voice Processing** - Voice features run in a worker thread. Audio flows: Discord Opus → Decoder → Downsample (48kHz→16kHz) → Gemini API → Response → Upsample → Opus → Discord.
 
+**Log File** - Kimaki writes logs to `<data-dir>/kimaki.log` (default: `~/.kimaki/kimaki.log`). The log file is reset on every bot startup, so it only contains logs from the current run. Read this file to debug internal issues, session failures, or unexpected behavior.
+
 **Graceful Restart** - Send `SIGUSR2` to restart the bot with new code without losing connections.
 
 ## Tool Permissions
