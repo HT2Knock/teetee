@@ -1,5 +1,7 @@
 after every change always run tsc inside cli to validate your changes. try to never use as any
 
+always load the `changesets` skill before fixing bugs or adding features. User-facing fixes and features usually need a `.changeset/*.md` entry, and the skill explains package selection, issue references, descriptive filenames, and `.changeset/readme.md` expectations.
+
 do not use spawnSync. use our util execAsync. which uses spawn under the hood
 
 the important package in this repo is cli. it contains the discord bot code.
