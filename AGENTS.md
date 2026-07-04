@@ -223,6 +223,16 @@ do NOT add simple prisma query wrappers to database.ts. if a query is a straight
 
 prisma version in package.json MUST be pinned. no ^. this makes sure the generated prisma code is compatible with the prisma client used in the npm package
 
+## pre-publish checklist
+
+before publishing to npm, always sync skills as the first step:
+
+```bash
+cd cli && pnpm sync-skills
+```
+
+this ensures the npm package ships the latest synced skills from their source repos. commit any skill changes before proceeding with the publish.
+
 ## post-publish release notification
 
 after every publish, once the `gh release create` step is done:
