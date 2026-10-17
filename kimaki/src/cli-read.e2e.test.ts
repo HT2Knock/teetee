@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { afterAll, beforeAll, expect, test } from 'vitest'
 import type { BotHandle } from './main.ts'
-import { scriptedTurn, seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitForFooter, waitForSelectMenu, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
+import { cliCommand, scriptedTurn, seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitForFooter, waitForSelectMenu, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
 import { abort, send } from './prompt.ts'
 
 const exec = promisify(execFile)
@@ -24,7 +24,7 @@ afterAll(async () => {
   fs.rmSync(dataDir, { recursive: true, force: true })
 })
 function cli(args: string[]) {
-  return exec(process.execPath, ['--import', 'tsx', path.resolve('src/cli.ts'), ...args, '--data-dir', dataDir], {
+  return exec(...cliCommand([...args, '--data-dir', dataDir]), {
     cwd: process.cwd(), env: { ...process.env, KIMAKI_LOCK_PORT: String(bot.lock.port), KIMAKI_OPENCODE_SERVICE_FILE: server.serviceFile, KIMAKI_DISCORD_REST_URL: twin.discord.restUrl },
   })
 }
@@ -74,7 +74,7 @@ test('session wait returns for a real pending question; active discovery errors 
     Continue?"
   `)
   expect(result.stdout).toContain('Continue?')
-  const failure = await exec(process.execPath, ['--import', 'tsx', path.resolve('src/cli.ts'), 'session', 'list', '--active'], {
+  const failure = await exec(...cliCommand(['session', 'list', '--active']), {
     env: { ...process.env, KIMAKI_OPENCODE_SERVICE_FILE: path.join(server.root, 'missing-service.json') },
   }).catch((error: Error & { code: number }) => error)
   expect(failure instanceof Error && failure.code).toBe(64)

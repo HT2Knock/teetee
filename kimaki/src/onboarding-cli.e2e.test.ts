@@ -7,13 +7,13 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import fs from 'node:fs'
 import http from 'node:http'
-import { createRequire } from 'node:module'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { afterAll, beforeAll, expect, test } from 'vitest'
 
 import { createApi } from './project.ts'
 import {
+  cliCommand,
   freePort,
   startOpencodeTestServer,
   startTwin,
@@ -90,12 +90,10 @@ function sseEvents(stdout: string): Array<Record<string, unknown>> {
 }
 
 test('kimaki --gateway without a TTY installs, onboards and reports ready on stdout', async () => {
-  const require = createRequire(import.meta.url)
   const proxy = new URL('/', twin.discord.restUrl).toString()
   const lockPort = await freePort()
   child = spawn(
-    process.execPath,
-    ['--import', require.resolve('tsx'), path.resolve('src/cli.ts'), '--data-dir', dataDir, '--gateway', '--machine-name', 'test-machine'],
+    ...cliCommand(['--data-dir', dataDir, '--gateway', '--machine-name', 'test-machine']),
     {
       env: {
         ...process.env,
@@ -173,7 +171,7 @@ test('kimaki --gateway without a TTY installs, onboards and reports ready on std
   `)
 
   // `kimaki restart`: the supervisor starts a new bot process, which reports ready again.
-  const cli = (args: string[]) => execFileAsync(process.execPath, ['--import', require.resolve('tsx'), path.resolve('src/cli.ts'), ...args, '--data-dir', dataDir], {
+  const cli = (args: string[]) => execFileAsync(...cliCommand([...args, '--data-dir', dataDir]), {
     env: { ...process.env, KIMAKI_LOCK_PORT: String(lockPort) },
   })
   const before = JSON.parse((await cli(['status', '--json'])).stdout) as { pid: number }
@@ -188,14 +186,9 @@ test('kimaki --gateway without a TTY installs, onboards and reports ready on std
 
 test('--install-url --gateway prints the install URL with the callback and exits', async () => {
   const otherDataDir = tempDataDir()
-  const require = createRequire(import.meta.url)
   const result = await new Promise<{ code: number | null; stdout: string }>((resolve) => {
     const process_ = spawn(
-      process.execPath,
-      [
-        '--import', require.resolve('tsx'), path.resolve('src/cli.ts'),
-        '--data-dir', otherDataDir, '--install-url', '--gateway', '--gateway-callback-url', 'https://example.com/done',
-      ],
+      ...cliCommand(['--data-dir', otherDataDir, '--install-url', '--gateway', '--gateway-callback-url', 'https://example.com/done']),
       { env: { ...process.env, KIMAKI_WEBSITE_URL: 'https://kimaki.test' } },
     )
     const output = { stdout: '' }

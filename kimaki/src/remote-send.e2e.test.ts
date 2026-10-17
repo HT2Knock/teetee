@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { afterAll, beforeAll, expect, test } from 'vitest'
 import type { BotHandle } from './main.ts'
-import { seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitForFooter, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
+import { cliCommand, seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitForFooter, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
 
 const exec = promisify(execFile)
 const dataA = tempDataDir()
@@ -27,7 +27,7 @@ afterAll(async () => {
   fs.rmSync(dataB, { recursive: true, force: true })
 })
 function cli(args: string[]) {
-  return exec(process.execPath, ['--import', 'tsx', path.resolve('src/cli.ts'), ...args, '--data-dir', dataA], { env: { ...process.env, KIMAKI_LOCK_PORT: String(a.lock.port) } })
+  return exec(...cliCommand([...args, '--data-dir', dataA]), { env: { ...process.env, KIMAKI_LOCK_PORT: String(a.lock.port) } })
 }
 test('CLI remote envelope runs only on the owning bot and returns its IDs', async () => {
   const file = path.join(server.root, 'remote.txt')
@@ -60,7 +60,7 @@ test('CLI remote envelope runs only on the owning bot and returns its IDs', asyn
 test('CI send with only KIMAKI_BOT_TOKEN and no local bot reaches the owning bot', async () => {
   // Empty data dir and an unused lock port: no kimaki.db, no bot, like a CI runner.
   const ciDataDir = tempDataDir()
-  const sent = await exec(process.execPath, ['--import', 'tsx', path.resolve('src/cli.ts'), 'send', '--channel', twin.quietChannelId, '-p', 'From CI', '--data-dir', ciDataDir], {
+  const sent = await exec(...cliCommand(['send', '--channel', twin.quietChannelId, '-p', 'From CI', '--data-dir', ciDataDir]), {
     env: { ...process.env, KIMAKI_LOCK_PORT: '1', KIMAKI_BOT_TOKEN: twin.discord.botToken, KIMAKI_DISCORD_REST_URL: twin.discord.restUrl },
   })
   const ids = JSON.parse(sent.stdout) as { threadId: string; sessionId: string }

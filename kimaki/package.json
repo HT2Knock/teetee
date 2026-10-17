@@ -16,6 +16,7 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest",
+    "bun:check": "bun run scripts/bun-check.ts",
     "generate": "tsx scripts/generate-schema-sql.ts"
   },
   "dependencies": {

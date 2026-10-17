@@ -4,7 +4,7 @@ import { promisify } from 'node:util'
 import path from 'node:path'
 import { afterAll, beforeAll, expect, test } from 'vitest'
 import type { BotHandle } from './main.ts'
-import { TEST_USER_ID, seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitFor, waitForSelectMenu, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
+import { cliCommand, TEST_USER_ID, seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitFor, waitForSelectMenu, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
 
 const exec = promisify(execFile)
 const dataDir = tempDataDir()
@@ -50,7 +50,7 @@ test('/login API key stores an OpenCode credential and makes its provider availa
 })
 
 test('CLI login uses integration key login and credential activation without exposing the secret', async () => {
-  const result = await exec(process.execPath, ['--import', 'tsx', path.resolve('src/cli.ts'), 'login', 'anthropic', '--key', 'p7-anthropic-key', '--data-dir', dataDir], {
+  const result = await exec(...cliCommand(['login', 'anthropic', '--key', 'p7-anthropic-key', '--data-dir', dataDir]), {
     env: { ...process.env, KIMAKI_LOCK_PORT: String(bot.lock.port) },
   })
   expect(result.stdout).toContain('Connected')

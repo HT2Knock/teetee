@@ -13,6 +13,7 @@ import { ChannelType } from 'discord.js'
 import { afterAll, beforeAll, expect, test } from 'vitest'
 
 import type { BotHandle } from './main.ts'
+import { entryArgv } from './runtime.ts'
 import { kimakiShellCommand, runOnboarding } from './onboarding.ts'
 import {
   TEST_USER_ID,
@@ -41,7 +42,7 @@ beforeAll(async () => {
   twin = await startTwin({ gateway: true })
   const require = createRequire(import.meta.url)
   kimaki = kimakiShellCommand({
-    command: [process.execPath, require.resolve('tsx/cli'), path.join(import.meta.dirname, 'cli.ts')],
+    command: entryArgv(path.join(import.meta.dirname, 'cli.ts'), [], { tsxLoader: require.resolve('tsx') }),
   })
   otherProject = path.join(dataDir, 'other-project')
   fs.mkdirSync(otherProject)

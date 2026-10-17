@@ -12,6 +12,7 @@ import { afterAll, beforeAll, expect, test } from 'vitest'
 
 import type { BotHandle } from './main.ts'
 import {
+  cliCommand,
   TEST_USER_ID,
   seedProjectChannel,
   startFakeChatGPT,
@@ -56,7 +57,7 @@ beforeAll(async () => {
   await warmUp({ server })
   bot = await startTestBot({ dataDir, twin, server, openaiBaseUrl: openai.baseUrl, chatgptBaseUrl: chatgpt.baseUrl, opencodeDbFile })
   // Stored with the CLI, like a user would.
-  const { stdout } = await promisify(execFile)(process.execPath, ['--import', 'tsx', path.resolve('src/cli.ts'), 'bot', 'keys', 'set', '--openai', 'sk-test-openai-key', '--data-dir', dataDir])
+  const { stdout } = await promisify(execFile)(...cliCommand(['bot', 'keys', 'set', '--openai', 'sk-test-openai-key', '--data-dir', dataDir]))
   expect(stdout).toBe('Saved OpenAI API key\n')
 })
 

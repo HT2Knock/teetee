@@ -4,7 +4,6 @@
 
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
-import path from 'node:path'
 import { promisify } from 'node:util'
 import { ComponentType, type APIMessage } from 'discord.js'
 import * as orm from 'drizzle-orm'
@@ -14,6 +13,7 @@ import type { BotHandle } from './main.ts'
 import * as schema from './schema.ts'
 import { abort } from './prompt.ts'
 import {
+  cliCommand,
   TEST_USER_ID,
   manualClock,
   schedulingKit,
@@ -200,7 +200,7 @@ test('routine list/edit/run/delete and /routines with Run now and Delete buttons
   const later = await schedule({ prompt: 'Run me now', sendAt: '2030-02-01T00:00:00Z' })
   const ranNow = JSON.parse(await cli(['task', 'run', String(later.routineId)])) as { threadId: string }
   await waitForFooter({ discord, threadId: ranNow.threadId })
-  const failed = await promisify(execFile)(process.execPath, ['--import', 'tsx', path.resolve('src/cli.ts'), 'routine', 'delete', '999', '--data-dir', dataDir], {
+  const failed = await promisify(execFile)(...cliCommand(['routine', 'delete', '999', '--data-dir', dataDir]), {
     env: { ...process.env, KIMAKI_LOCK_PORT: String(bot.lock.port) },
   }).catch((error: { code: number; stderr: string }) => error)
   expect(failed.stderr).toMatchInlineSnapshot(`

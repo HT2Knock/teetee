@@ -15,6 +15,7 @@ import { parseDisabledSkills } from '../builtin-skills.ts'
 import { callBot, DEFAULT_LOCK_PORT, RESTART_EXIT_CODE, startLockServer } from '../lock-server.ts'
 import { parseDuration } from '../duration.ts'
 import { createLogger, setLogFile } from '../logger.ts'
+import { runtimeExecutable } from '../runtime.ts'
 import { action, DATA_DIR_HELP, dataDirOrDefault, discordApi, fail, openCliDb, printJson } from './shared.ts'
 
 const logger = createLogger('CLI')
@@ -60,7 +61,9 @@ async function supervise(): Promise<never> {
     process.on(signal, () => state.child?.kill('SIGTERM'))
   }
   while (true) {
-    const child = spawn(process.execPath, [...process.execArgv, ...process.argv.slice(1)], {
+    // Same argv on either runtime: Bun leaves execArgv empty and runs the
+    // TypeScript entry directly, Node keeps its loader flags in execArgv.
+    const child = spawn(runtimeExecutable(), [...process.execArgv, ...process.argv.slice(1)], {
       stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
       env: { ...process.env, KIMAKI_SUPERVISED: '1' },
     })
@@ -200,8 +203,8 @@ export function registerStartCommand(cli: Goke) {
       const distCli = distCliEntry()
       const kimaki = kimakiShellCommand({
         command: fs.existsSync(distCli)
-          ? [process.execPath, distCli]
-          : [process.execPath, ...process.execArgv, process.argv[1] ?? 'kimaki'],
+          ? [runtimeExecutable(), distCli]
+          : [runtimeExecutable(), ...process.execArgv, process.argv[1] ?? 'kimaki'],
       })
 
       const bot = await startBot({
@@ -330,7 +333,7 @@ export function registerToolCommands(cli: Goke) {
 
 // status, logs, bot token / keys set / install-url
 export function registerBotCommands(cli: Goke) {
-  cli.command('status', 'Bot health: running, pid, uptime, OpenCode URL and version, guilds')
+  cli.command('status', 'Bot health: running, pid, runtime, uptime, OpenCode URL and version, guilds')
     .option('--data-dir <path>', DATA_DIR_HELP)
     .option('--json', 'Output as JSON')
     .action(async (options) => {
@@ -344,6 +347,7 @@ export function registerBotCommands(cli: Goke) {
       if (options.json) return printJson(status)
       process.stdout.write(dedent`
         running: pid ${status.pid}, up ${status.uptimeSec}s, mode ${JSON.stringify(status.mode)}
+        runtime: ${status.runtime}
         opencode: ${JSON.stringify(status.opencode)}
         guilds: ${JSON.stringify(status.guilds)}
         data dir: ${JSON.stringify(status.dataDir)}

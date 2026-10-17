@@ -11,6 +11,7 @@ import { afterAll, beforeAll, expect, onTestFinished, test } from 'vitest'
 
 import { startLockServer } from './lock-server.ts'
 import type { BotHandle } from './main.ts'
+import { evalArgv } from './runtime.ts'
 import {
   startOpencodeTestServer,
   freePort,
@@ -95,7 +96,8 @@ test('a second bot on the same lock port stops the running one and takes over', 
     process.send({ ready: true })
     process.once('SIGTERM', async () => { await result.stop(); process.exit(0) })
   `
-  const child = spawn(process.execPath, ['--import', createRequire(import.meta.url).resolve('tsx'), '--input-type=module', '--eval', code], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] })
+  const argv = evalArgv(code, { tsxLoader: createRequire(import.meta.url).resolve('tsx') })
+  const child = spawn(argv[0] ?? 'kimaki', argv.slice(1), { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] })
   const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()))
   onTestFinished(async () => {
     if (child.exitCode === null && child.signalCode === null) { child.kill('SIGTERM'); await exited }
