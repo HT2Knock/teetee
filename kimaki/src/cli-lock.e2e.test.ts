@@ -337,7 +337,7 @@ test('CLI help documents the supported P7 commands', async () => {
         --speed <n>                     0.25 to 4.0 (OpenAI only, default: 1.25)
 
       Bot:
-      status                            Bot health: running, pid, uptime, OpenCode URL and version, guilds
+      status                            Bot health: running, pid, runtime, uptime, OpenCode URL and version, guilds
         --data-dir <path>               Data directory (default: ~/.kimaki)
         --json                          Output as JSON
 
