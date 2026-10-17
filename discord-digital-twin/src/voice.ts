@@ -75,6 +75,8 @@ export class DiscordVoiceServer {
   private udp: dgram.Socket | null = null
   private wsPort = 0
   private udpPort = 0
+  // Value of NODE_TLS_REJECT_UNAUTHORIZED before trustCertificate() on Bun.
+  private previousRejectUnauthorized: string | undefined
 
   get endpoint(): string {
     return `127.0.0.1:${this.wsPort}`
@@ -119,6 +121,9 @@ export class DiscordVoiceServer {
     this.connections.clear()
     this.wss?.close()
     this.udp?.close()
+    // Put the environment back, so a later test in this process verifies TLS again.
+    if (this.previousRejectUnauthorized === undefined) delete process.env['NODE_TLS_REJECT_UNAUTHORIZED']
+    else process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = this.previousRejectUnauthorized
     const httpsServer = this.https
     if (httpsServer) await new Promise<void>((resolve) => httpsServer.close(() => resolve()))
   }
@@ -126,12 +131,14 @@ export class DiscordVoiceServer {
   // Lets this process connect to the self-signed voice WebSocket.
   //
   // Node passes a certificate added here to the ws client. Bun's ws client does
-  // not see it, so on Bun the process also turns off certificate verification.
-  // Both are scoped to the test process: a real Discord voice server uses a
-  // public chain that both runtimes already trust.
+  // not see it, so on Bun the process also turns off certificate verification
+  // until stop(). Both are scoped to the test process: a real Discord voice
+  // server uses a public chain that both runtimes already trust.
   trustCertificate(): void {
     tls.setDefaultCACertificates([...tls.getCACertificates('default'), this.certificate])
-    if (process.versions['bun']) process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0'
+    if (!process.versions['bun']) return
+    this.previousRejectUnauthorized = process.env['NODE_TLS_REJECT_UNAUTHORIZED']
+    process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0'
   }
 
   // Called by the gateway on a voice join. The token goes into VOICE_SERVER_UPDATE.
