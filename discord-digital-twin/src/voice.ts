@@ -124,8 +124,14 @@ export class DiscordVoiceServer {
   }
 
   // Lets this process connect to the self-signed voice WebSocket.
+  //
+  // Node passes a certificate added here to the ws client. Bun's ws client does
+  // not see it, so on Bun the process also turns off certificate verification.
+  // Both are scoped to the test process: a real Discord voice server uses a
+  // public chain that both runtimes already trust.
   trustCertificate(): void {
     tls.setDefaultCACertificates([...tls.getCACertificates('default'), this.certificate])
+    if (process.versions['bun']) process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = '0'
   }
 
   // Called by the gateway on a voice join. The token goes into VOICE_SERVER_UPDATE.
