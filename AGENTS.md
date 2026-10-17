@@ -12,6 +12,8 @@ each kimaki e2e test file starts its own OpenCode server (~400 MB). `kimaki/vite
 
 kimaki CLI startup must stay light (~0.06s, ~70 MB): agents and tests call `kimaki` many times. `kimaki/src/cli/*.ts` must not import SQLite (`db.ts`, `schema.ts`, `credentials.ts`, `project.ts`, `voice.ts`) or `discord.js` at top level; `await import()` them inside the actions that need them. use `discord-api-types/v10` for enums like `ChannelType`.
 
+kimaki runs on node and on bun. anything that spawns a kimaki entrypoint goes through `src/runtime.ts` (`entryArgv`, `evalArgv`, `runtimePath`, `runtimeName`): bun runs typescript directly, node needs the tsx loader. never write `process.execPath --import tsx` by hand. e2e tests use `cliCommand()` from `src/test/harness.ts`, and `kimaki status` reports the runtime it is on. `bun run bun:check` inside `kimaki` runs the suite on bun; `vitest.config.ts` inlines dependencies whose import breaks on bun.
+
 for checkout validation requests, prefer non-recursive checks unless the user asks otherwise.
 
 ## task-specific docs
