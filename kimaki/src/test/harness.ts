@@ -33,6 +33,7 @@ import * as schema from '../schema.ts'
 import { startLockServer } from '../lock-server.ts'
 import { startBot, type BotHandle } from '../main.ts'
 import type { LockRouteInput, LockRouteName } from '../lock-routes.ts'
+import { entryArgv } from '../runtime.ts'
 import { listTasks, type Clock } from '../scheduler.ts'
 import type { RealtimeBaseUrls } from '../voice-call.ts'
 
@@ -58,6 +59,20 @@ export function opencodeBinary(): string {
   const require = createRequire(import.meta.url)
   const packageJsonPath = require.resolve('@opencode/cli/package.json')
   return path.join(path.dirname(packageJsonPath), 'bin/opencode.exe')
+}
+
+// Spread into execFile/exec: `execFile(...cliCommand(args), options)`. Runs the
+// Kimaki CLI from source on the runtime the suite runs on. Bun runs the
+// TypeScript directly; Node needs the tsx loader.
+export function cliCommand(args: readonly string[]): [string, string[]] {
+  const argv = entryArgv(path.resolve('src/cli.ts'), args, { tsxLoader: createRequire(import.meta.url).resolve('tsx') })
+  return [argv[0] ?? 'kimaki', argv.slice(1)]
+}
+
+// The same command as the shell string the bot hands to agents.
+export function cliShellCommand(args: readonly string[] = []): string {
+  const argv = entryArgv(path.resolve('src/cli.ts'), args, { tsxLoader: createRequire(import.meta.url).resolve('tsx') })
+  return argv.map((part) => `'${part.replaceAll("'", "'\\''")}'`).join(' ')
 }
 
 export type OpencodeTestServer = {
@@ -535,7 +550,7 @@ export async function startTestBot({
   if (lock instanceof Error) throw lock
   const bot = await startBot({
     dataDir,
-    kimakiCommand: `'${process.execPath}' --import '${createRequire(import.meta.url).resolve('tsx')}' '${path.resolve('src/cli.ts')}'`,
+    kimakiCommand: cliShellCommand(),
     token: credentials.token,
     appId: credentials.appId,
     lock,
@@ -593,7 +608,7 @@ export function schedulingKit({ suite, dataDir, clock }: {
     threadIds,
     async cli(args: string[]): Promise<string> {
       const { bot, server } = suite()
-      const result = await promisify(execFile)(process.execPath, ['--import', 'tsx', path.resolve('src/cli.ts'), ...args, '--data-dir', dataDir], {
+      const result = await promisify(execFile)(...cliCommand([...args, '--data-dir', dataDir]), {
         env: { ...process.env, KIMAKI_LOCK_PORT: String(bot.lock.port), KIMAKI_OPENCODE_SERVICE_FILE: server.serviceFile },
       })
       return result.stdout

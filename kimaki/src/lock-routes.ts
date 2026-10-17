@@ -20,6 +20,7 @@ import { channelWorktrees, manageWorktree, newWorktree, setAutoWorktrees } from 
 import { ConfigError, DbError, DiscordError, FilesystemError, OpenCodeUnavailableError } from './errors.ts'
 import { RESTART_EXIT_CODE } from './lock-server.ts'
 import { abort, cancelQueuedPrompt, clearQueue, send, shell, upload } from './prompt.ts'
+import { runtimeName } from './runtime.ts'
 import { createTask, deleteTask, editTask, runTaskNow } from './scheduler.ts'
 import * as schema from './schema.ts'
 import { channelForDirectory, channelForSession, fork, resume, sessionCwd } from './sessions.ts'
@@ -288,6 +289,8 @@ export const lockRoutes = {
       const endpoint = bot.opencode.endpoint
       return {
         pid: process.pid,
+        // node or bun: which runtime the bot process is on, for support and for the tests.
+        runtime: runtimeName(),
         uptimeSec: Math.round(process.uptime()),
         dataDir: bot.dataDir,
         mode: bot.token.includes(':') ? 'gateway' as const : 'self_hosted' as const,

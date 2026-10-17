@@ -23,5 +23,11 @@ export default defineConfig({
     pool: 'forks',
     maxWorkers: workers,
     minWorkers: 1,
+    // Vite externalises dependencies by default. Under Bun the externalised
+    // zod import resolves to a namespace without `z`, so `z.object` throws at
+    // import time in format-parts.ts and lock-routes.ts. Inlining it sends the
+    // import through the bundler on both runtimes, so the suite runs the same
+    // way on Node and Bun. Add a package here when it fails the same way.
+    server: { deps: { inline: ['zod'] } },
   },
 })

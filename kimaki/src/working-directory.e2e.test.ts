@@ -7,7 +7,7 @@ import { afterAll, beforeAll, expect, test } from 'vitest'
 
 import type { BotHandle } from './main.ts'
 import { git } from './worktrees.ts'
-import { TEST_USER_ID, scriptedTurn, seedProjectChannel, slowTextMatcher, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitForBotMessageContaining, waitForFooter, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
+import { cliCommand, TEST_USER_ID, scriptedTurn, seedProjectChannel, slowTextMatcher, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitForBotMessageContaining, waitForFooter, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
 import { manageWorktree, newWorktree, setAutoWorktrees } from './commands/worktree-commands.ts'
 import { runLockRoute } from './lock-routes.ts'
 import { send } from './prompt.ts'
@@ -138,7 +138,7 @@ test('new-worktree forks context, and CLI creation and worktree toggle use the s
   expect((await client.message.list({ sessionID: forkInfo.id })).data.some((message) => message.type === 'user' && message.text.includes('Remember fork context'))).toBe(true)
   const choices = await twin.discord.channel(twin.channelId).user(TEST_USER_ID).autocomplete({ name: 'resume', options: [{ name: 'session', type: 3, value: 'Remember fork context' }], focused: 'session' })
   expect(choices.some((choice) => choice.value === forkInfo.id)).toBe(true)
-  const result = await promisify(execFile)(process.execPath, ['--import', 'tsx', path.resolve('src/cli.ts'), 'send', '--channel', twin.channelId, '--worktree', 'cli-checkout', '--prompt', 'CLI isolation', '--data-dir', dataDir], { env: { ...process.env, KIMAKI_LOCK_PORT: String(bot.lock.port) } })
+  const result = await promisify(execFile)(...cliCommand(['send', '--channel', twin.channelId, '--worktree', 'cli-checkout', '--prompt', 'CLI isolation', '--data-dir', dataDir]), { env: { ...process.env, KIMAKI_LOCK_PORT: String(bot.lock.port) } })
   const created = JSON.parse(result.stdout) as { threadId: string; sessionId: string }
   await waitForFooter({ discord: twin.discord, threadId: created.threadId })
   expect(hide(await twin.discord.thread(created.threadId).text())).toMatchInlineSnapshot(`

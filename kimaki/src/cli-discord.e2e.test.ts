@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { afterAll, beforeAll, expect, test } from 'vitest'
 import type { BotHandle } from './main.ts'
-import { TEST_USER_ID, seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitForFooter, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
+import { cliCommand, TEST_USER_ID, seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitForFooter, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
 import { send } from './prompt.ts'
 
 const exec = promisify(execFile)
@@ -24,7 +24,7 @@ afterAll(async () => {
   fs.rmSync(dataDir, { recursive: true, force: true })
 })
 function cli(args: string[]) {
-  return exec(process.execPath, ['--import', 'tsx', path.resolve('src/cli.ts'), ...args, '--data-dir', dataDir], { env: {
+  return exec(...cliCommand([...args, '--data-dir', dataDir]), { env: {
     ...process.env, KIMAKI_LOCK_PORT: String(bot.lock.port), KIMAKI_DISCORD_REST_URL: twin.discord.restUrl,
   } })
 }

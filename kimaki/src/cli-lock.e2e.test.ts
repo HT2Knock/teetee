@@ -4,7 +4,8 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 import { afterAll, beforeAll, expect, test } from 'vitest'
 import type { BotHandle } from './main.ts'
-import { seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitFor, waitForFooter, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
+import { runtimeName } from './runtime.ts'
+import { cliCommand, seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitFor, waitForFooter, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
 
 const exec = promisify(execFile)
 const dataDir = tempDataDir()
@@ -25,7 +26,7 @@ afterAll(async () => {
 })
 
 function cli(args: string[]) {
-  return exec(process.execPath, ['--import', 'tsx', path.resolve('src/cli.ts'), ...args, '--data-dir', dataDir], {
+  return exec(...cliCommand([...args, '--data-dir', dataDir]), {
     env: { ...process.env, KIMAKI_LOCK_PORT: String(bot.lock.port), KIMAKI_OPENCODE_SERVICE_FILE: server.serviceFile },
   })
 }
@@ -456,7 +457,7 @@ test('send settings reach native session creation; notifications create no sessi
 test('status reports the running bot, logs prints and follows the log file', async () => {
   const running = JSON.parse((await cli(['status', '--json'])).stdout) as Record<string, unknown>
   const opencode = running['opencode'] as { url: string; version: string; connected: boolean }
-  expect({ ...running, mode: running['mode'] === (twin.discord.botToken.includes(':') ? 'gateway' : 'self_hosted'), guilds: (running['guilds'] as Array<{ id: string; name: string }>).map((guild) => ({ ...guild, id: guild.id === twin.discord.guildId })), pid: typeof running['pid'], uptimeSec: typeof running['uptimeSec'], dataDir: running['dataDir'] === dataDir, opencode: { ...opencode, url: opencode.url === bot.opencode.endpoint?.url, version: typeof opencode.version } }).toMatchInlineSnapshot(`
+  expect({ ...running, mode: running['mode'] === (twin.discord.botToken.includes(':') ? 'gateway' : 'self_hosted'), runtime: running['runtime'] === runtimeName(), guilds: (running['guilds'] as Array<{ id: string; name: string }>).map((guild) => ({ ...guild, id: guild.id === twin.discord.guildId })), pid: typeof running['pid'], uptimeSec: typeof running['uptimeSec'], dataDir: running['dataDir'] === dataDir, opencode: { ...opencode, url: opencode.url === bot.opencode.endpoint?.url, version: typeof opencode.version } }).toMatchInlineSnapshot(`
     {
       "analytics": false,
       "dataDir": true,
@@ -474,13 +475,14 @@ test('status reports the running bot, logs prints and follows the log file', asy
       },
       "pid": "number",
       "running": true,
+      "runtime": true,
       "uptimeSec": "number",
     }
   `)
 
   // A data dir without a running bot.
   const otherDir = tempDataDir()
-  const stopped = await exec(process.execPath, ['--import', 'tsx', path.resolve('src/cli.ts'), 'status', '--json', '--data-dir', otherDir]).catch((error: { code: number; stdout: string }) => error)
+  const stopped = await exec(...cliCommand(['status', '--json', '--data-dir', otherDir])).catch((error: { code: number; stdout: string }) => error)
   fs.rmSync(otherDir, { recursive: true, force: true })
   expect({ code: 'code' in stopped ? stopped.code : 0, stdout: JSON.parse(stopped.stdout) }).toMatchInlineSnapshot(`
     {
@@ -493,7 +495,7 @@ test('status reports the running bot, logs prints and follows the log file', asy
   `)
 
   expect((await cli(['logs'])).stdout.trim()).toBe(path.join(dataDir, 'kimaki.log'))
-  const follow = execFile(process.execPath, ['--import', 'tsx', path.resolve('src/cli.ts'), 'logs', '--follow', '--data-dir', dataDir])
+  const follow = execFile(...cliCommand(['logs', '--follow', '--data-dir', dataDir]))
   const output = { text: '' }
   follow.stdout?.on('data', (chunk: Buffer) => (output.text += chunk.toString()))
   fs.appendFileSync(path.join(dataDir, 'kimaki.log'), 'follow-marker-line\n')
