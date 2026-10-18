@@ -9,7 +9,7 @@ import fs from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import { afterAll, beforeAll, expect, test } from 'vitest'
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import { createApi } from './project.ts'
 import {

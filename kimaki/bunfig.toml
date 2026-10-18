@@ -1,0 +1,13 @@
+# Bun test config for kimaki.
+#
+# `bun run test` (scripts/run-tests.ts) adds the timeout and the worker cap:
+# `bun test` alone would use the 5s default and one worker per CPU.
+#
+# The preload sets KIMAKI_TEST=1, so the logger stays silent unless
+# KIMAKI_TEST_LOGS=1 (see logger.ts).
+#
+# dist/ holds the compiled tests (tsc builds the whole src/ tree). Vitest
+# excluded it by default; bun test does not.
+[test]
+preload = ["./scripts/test-env.ts"]
+pathIgnorePatterns = ["dist/**"]

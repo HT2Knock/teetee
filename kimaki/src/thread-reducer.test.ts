@@ -2,7 +2,7 @@
 // typing, and the explicit list of event types that produce effects.
 
 import type { JsonValue, V2Event } from '@opencode/client'
-import { expect, test } from 'vitest'
+import { expect, test } from 'bun:test'
 
 import { emptyView, reduce, type ThreadEvent } from './thread-reducer.ts'
 import { DEFAULT_PREFS, effectLines, loadFixture, replay, rootSessionId } from './test/replay.ts'
@@ -275,7 +275,7 @@ test('cache miss notice when the cached prefix shrinks, e.g. after the cache TTL
   const steps = events.flatMap((event, index) => (event.type === 'session.step.ended' && event.data.sessionID === sessionId ? [index] : []))
   const lastIndex = steps.at(-1)!
   const last = events[lastIndex]
-  if (last?.type !== 'session.step.ended') return expect.fail('fixture has no root step.ended')
+  if (last?.type !== 'session.step.ended') throw new Error('fixture has no root step.ended')
   // Same turn, but the last request found nothing in cache 10 minutes later.
   const missed = events.map((event, index) =>
     index === lastIndex ? { ...last, created: last.created + 600_000, data: { ...last.data, tokens: { ...last.data.tokens, cache: { read: 0, write: 0 } } } } : event,
@@ -314,7 +314,7 @@ test('snapshot closes the ack of an item promoted while disconnected, without an
   const events = loadFixture('queue-plain.events.jsonl')
   const index = events.findIndex((event) => event.type === 'session.inbox.enqueued' && event.data.item.delivery === 'queue')
   const enqueued = events[index]
-  if (enqueued?.type !== 'session.inbox.enqueued' || enqueued.data.item.type !== 'user') return expect.fail('fixture has no queued user item')
+  if (enqueued?.type !== 'session.inbox.enqueued' || enqueued.data.item.type !== 'user') throw new Error('fixture has no queued user item')
   const { view } = replay({ events: events.slice(0, index + 1) })
   expect(view.inbox[0]?.acked).toBe(true)
   const snapshot = {

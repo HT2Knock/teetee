@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { expect, test } from 'vitest'
+import { expect, test } from 'bun:test'
 
 import { entryArgv, evalArgv, RUNTIME_NAME, runtimeExecutable } from './runtime.ts'
 

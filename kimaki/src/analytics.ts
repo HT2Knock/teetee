@@ -200,7 +200,7 @@ export function createAnalytics({
   endpoint?: string
 }): Analytics {
   const disabledByEnv = ['0', 'false'].includes(process.env['KIMAKI_STRADA_ENABLED'] ?? '')
-  const underTest = process.env['KIMAKI_VITEST'] === '1' && !endpoint
+  const underTest = process.env['KIMAKI_TEST'] === '1' && !endpoint
   if (!enabled || disabledByEnv || underTest) return disabledAnalytics
   const installId = readInstallId(dataDir)
   if (installId instanceof Error) {

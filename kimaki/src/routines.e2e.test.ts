@@ -7,7 +7,7 @@ import fs from 'node:fs'
 import { promisify } from 'node:util'
 import { ComponentType, type APIMessage } from 'discord.js'
 import * as orm from 'drizzle-orm'
-import { afterAll, beforeAll, expect, test } from 'vitest'
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
 import * as schema from './schema.ts'

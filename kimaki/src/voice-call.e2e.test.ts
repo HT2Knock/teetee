@@ -9,7 +9,7 @@ import path from 'node:path'
 import { getVoiceConnection } from '@discordjs/voice'
 import type { DeterministicMatcher } from 'opencode-deterministic-provider'
 import prism from 'prism-media'
-import { afterAll, beforeAll, expect, test } from 'vitest'
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
 import { ensureVoiceChannels, saveVoiceCallVoice, voiceCallSettings } from './voice-call.ts'

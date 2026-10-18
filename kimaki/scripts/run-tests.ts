@@ -1,4 +1,4 @@
-// Runs the Kimaki suite on Bun: the bot and every CLI child process.
+// Runs the Kimaki suite with `bun test`: the bot and every CLI child process.
 //
 //   cd kimaki && bun run test
 //   cd kimaki && bun run test src/cli-read.e2e.test.ts
@@ -7,17 +7,22 @@
 // a green run proves every entrypoint works on Bun.
 
 import { execFile, spawn } from 'node:child_process'
-import { createRequire } from 'node:module'
+import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
 
 const root = path.resolve(import.meta.dirname, '..')
-const require = createRequire(import.meta.url)
 
 // A whole-suite timeout, so an unattended run cannot hang forever.
 const SUITE_TIMEOUT_MS = 45 * 60_000
+// Above the 10s waitFor clamp in the harness, so a slow wait fails with its own label.
+const TEST_TIMEOUT_MS = 30_000
+// Each e2e file starts its own OpenCode server (~400 MB, CPU-heavy cold start).
+// One worker per CPU starts them all at once and the machine thrashes. Cap the
+// file workers; KIMAKI_TEST_WORKERS overrides.
+const workers = Number(process.env['KIMAKI_TEST_WORKERS']) || Math.max(2, Math.floor(os.availableParallelism() / 3))
 
 function run(command: string, args: readonly string[], env: NodeJS.ProcessEnv = {}): Promise<number> {
   return new Promise((resolve) => {
@@ -62,11 +67,9 @@ async function main(): Promise<number> {
   const help = await cliPrintsHelp()
   if (help !== 0) return help
 
-  // Resolve the vitest entry the way its own npm bin does, then run it on Bun.
-  // `bun run vitest` would execute the sh wrapper, which starts Node.
-  const vitestEntry = path.join(path.dirname(require.resolve('vitest/package.json')), 'vitest.mjs')
-  const args = ['run', ...process.argv.slice(2), '--config', 'vitest.config.ts']
-  return run(bun, [vitestEntry, ...args])
+  const args = [`test`, `--timeout=${TEST_TIMEOUT_MS}`, `--parallel=${workers}`, ...process.argv.slice(2)]
+  // KIMAKI_TEST is also set by the bunfig preload; here so every child process sees it.
+  return run(bun, args, { KIMAKI_TEST: '1' })
 }
 
 process.exitCode = await main()

@@ -4,7 +4,7 @@
 import fs from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { MessageFlags } from 'discord.js'
-import { afterAll, beforeAll, expect, test } from 'vitest'
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
 import { sessionEventsFile } from './session-events.ts'

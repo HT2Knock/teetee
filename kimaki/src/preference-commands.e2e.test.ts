@@ -6,7 +6,7 @@ import fs from 'node:fs'
 import type { DeterministicMatcher } from 'opencode-deterministic-provider'
 import * as orm from 'drizzle-orm'
 import { ComponentType } from 'discord-api-types/v10'
-import { afterAll, beforeAll, expect, onTestFinished, test } from 'vitest'
+import { afterAll, beforeAll, expect, onTestFinished, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
 import * as schema from './schema.ts'

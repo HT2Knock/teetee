@@ -8,7 +8,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { Database } from 'bun:sqlite'
-import { afterEach, expect, test } from 'vitest'
+import { afterEach, expect, test } from 'bun:test'
 
 import { openDb, verbosityFromV1, verbosityToV1 } from './db.ts'
 import { LEGACY_DB_FILE } from './migrations.ts'

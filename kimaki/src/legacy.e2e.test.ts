@@ -8,7 +8,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { Database } from 'bun:sqlite'
 import { ChannelType } from 'discord.js'
-import { afterAll, beforeAll, expect, test } from 'vitest'
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
 import { LEGACY_DB_FILE } from './migrations.ts'

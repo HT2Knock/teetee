@@ -3,7 +3,7 @@
 // live ones, even though they arrive before OpenCode is connected.
 
 import fs from 'node:fs'
-import { afterAll, beforeAll, expect, test } from 'vitest'
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
 import {

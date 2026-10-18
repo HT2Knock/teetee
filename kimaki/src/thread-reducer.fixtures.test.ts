@@ -1,7 +1,7 @@
 // Recorded OpenCode V2 streams (docs/opencode-v2-events) replayed through the
 // reducer: what Discord gets for tools, subagents and interrupts (spec 29.3).
 
-import { expect, test } from 'vitest'
+import { expect, test } from 'bun:test'
 
 import { queuedItems } from './queue.ts'
 import { emptyView, isBusy, type ThreadEvent } from './thread-reducer.ts'
@@ -85,8 +85,10 @@ test('task-parallel: background children show start and end lines only, no foote
       "\\nBoth tasks are running. I’ll report the two results when they finish.",
       "\\n-# ┣ general **List repo folders**",
       "-# ┣ general ⋅ shell _find . -maxdepth 1 -type d -not -name . -print \\| sed 's#^./##' \\| sort_",
-      "\\n\`.ts\` files in \`cli/src/commands\`: 49  
-    Top-level folders: waiting for the second result.",
+      
+    "\\n\`.ts\` files in \`cli/src/commands\`: 49  
+    Top-level folders: waiting for the second result."
+    ,
       "-# ┣ general ⋅ shell _find . -maxdepth 1 -type d -not -name . -print \\| sed 's#^./##' \\| sort_",
     ]
   `)
@@ -268,15 +270,19 @@ test('question: one dropdown per question, typing off while waiting, edited on r
       "[typing on]",
       "-# *using openai/gpt-6-luna low ⋅ build*",
       "[typing off]",
-      "[show form:frm_0f1ff0402001MIUy5ATcEElGcr] **Color**
+      
+    "[show form:frm_0f1ff0402001MIUy5ATcEElGcr] **Color**
     Which color do you prefer? {Red/Green/Blue/Other} | **Fruits**
-    Which fruits do you like? {Apple/Pear/Kiwi/Other}",
+    Which fruits do you like? {Apple/Pear/Kiwi/Other}"
+    ,
       "[typing on]",
-      "[edit form:frm_0f1ff0402001MIUy5ATcEElGcr] **Color**
+      
+    "[edit form:frm_0f1ff0402001MIUy5ATcEElGcr] **Color**
     Which color do you prefer?
     ✓ _green_ | **Fruits**
     Which fruits do you like?
-    ✓ _apple, kiwi_",
+    ✓ _apple, kiwi_"
+    ,
       "You prefer green, and you like apples and kiwi.",
       "[typing off]",
       "-# *project ⋅ main ⋅ 5s ⋅ 6% ⋅ gpt-6-luna*",
@@ -294,24 +300,32 @@ test('permission: two requests, the rejected one fails its tool call', () => {
       "-# *using openai/gpt-6-luna low ⋅ build*",
       "-# ┣ shell _echo first_",
       "[typing off]",
-      "[show perm:per_0f202b5a4001acFP7sdJdnf7DQ] **Permission required**
+      
+    "[show perm:per_0f202b5a4001acFP7sdJdnf7DQ] **Permission required**
     **Type:** \`shell\`
-    **Pattern:** \`echo first\` {Accept, Accept Always, Deny}",
+    **Pattern:** \`echo first\` {Accept, Accept Always, Deny}"
+    ,
       "[typing on]",
-      "[edit perm:per_0f202b5a4001acFP7sdJdnf7DQ] **Permission required**
+      
+    "[edit perm:per_0f202b5a4001acFP7sdJdnf7DQ] **Permission required**
     **Type:** \`shell\`
     **Pattern:** \`echo first\`
-    ✓ _Accepted_",
+    ✓ _Accepted_"
+    ,
       "-# ┣ shell _echo second_",
       "[typing off]",
-      "[show perm:per_0f202be4b001DoNE0gpRKT1aa9] **Permission required**
+      
+    "[show perm:per_0f202be4b001DoNE0gpRKT1aa9] **Permission required**
     **Type:** \`shell\`
-    **Pattern:** \`echo second\` {Accept, Accept Always, Deny}",
+    **Pattern:** \`echo second\` {Accept, Accept Always, Deny}"
+    ,
       "[typing on]",
-      "[edit perm:per_0f202be4b001DoNE0gpRKT1aa9] **Permission required**
+      
+    "[edit perm:per_0f202be4b001DoNE0gpRKT1aa9] **Permission required**
     **Type:** \`shell\`
     **Pattern:** \`echo second\`
-    ✗ _Denied_",
+    ✗ _Denied_"
+    ,
       "-#  ⨯  shell _Unable to execute command: echo second_",
       "\\n\`echo first\` printed \`first\`; \`echo second\` failed to execute.",
       "[typing off]",
@@ -353,19 +367,23 @@ test('shell: user !cmd output while idle and while busy, synthetic items render 
   expect(effectLines(effects)).toMatchInlineSnapshot(`
     [
       "-# $ echo user-shell-idle && git log --oneline -1",
-      "\`\`\`
+      
+    "\`\`\`
     user-shell-idle
     05de62d feat: make external opencode session sync opt-in via --enable-sync
-    \`\`\`",
+    \`\`\`"
+    ,
       "» **user:** CONTEXT ONLY: the deploy tag is v9.9.9",
       "» **user:** What did my shell command print, and what is the deploy tag? Also run \`sleep 5\` with bash first.",
       "[typing on]",
       "-# *using openai/gpt-6-luna low ⋅ build*",
       "-# ┣ shell _sleep 5_",
       "-# $ echo user-shell-busy",
-      "\`\`\`
+      
+    "\`\`\`
     user-shell-busy
-    \`\`\`",
+    \`\`\`"
+    ,
       "\\nYour shell command printed \`user-shell-idle\` and \`05de62d feat: make external opencode session sync opt-in via --enable-sync\`. The deploy tag is \`v9.9.9\`.",
       "[typing off]",
       "-# *project ⋅ main ⋅ 9s ⋅ 6% ⋅ gpt-6-luna*",

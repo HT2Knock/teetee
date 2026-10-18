@@ -1,7 +1,7 @@
 // Prefixed logger. Writes plain lines to <dataDir>/kimaki.log and colored
 // clack-style lines to stderr, never stdout (CLI subcommands print
 // machine-readable output there).
-// Under vitest (KIMAKI_VITEST=1) stderr is silent unless KIMAKI_TEST_LOGS=1.
+// Under the test runner (KIMAKI_TEST=1) stderr is silent unless KIMAKI_TEST_LOGS=1.
 //
 //   ●  12:03:44  MAIN        bot ready as Kimaki#1234
 //   │  12:03:51  EVENTS      run started in thread 1557795126569476209 (ses_ee39ba467ff)
@@ -47,7 +47,7 @@ export function setLogFile({ dataDir }: { dataDir: string }): ConfigError | void
 }
 
 function stderrEnabled(): boolean {
-  if (process.env['KIMAKI_VITEST'] !== '1') return true
+  if (process.env['KIMAKI_TEST'] !== '1') return true
   return process.env['KIMAKI_TEST_LOGS'] === '1'
 }
 

@@ -1,7 +1,7 @@
 // Snapshot tests of the markdown pipeline on realistic model outputs.
 
 import dedent from 'string-dedent'
-import { expect, test } from 'vitest'
+import { expect, test } from 'bun:test'
 
 import { markdownPayloads } from './components.ts'
 import { renderMarkdown } from './render-markdown.ts'
@@ -56,16 +56,20 @@ test('GFM table with links and inline code becomes a table segment and component
           {
             "components": [
               {
-                "content": "**File** \`src/a.ts\`
-    **Change** added [docs](https://kimaki.dev) link",
+                "content": 
+    "**File** \`src/a.ts\`
+    **Change** added [docs](https://kimaki.dev) link"
+    ,
                 "type": 10,
               },
               {
                 "type": 14,
               },
               {
-                "content": "**File** \`src/b.ts\`
-    **Change** removed \`x | y\` escaping",
+                "content": 
+    "**File** \`src/b.ts\`
+    **Change** removed \`x | y\` escaping"
+    ,
                 "type": 10,
               },
             ],
@@ -109,9 +113,11 @@ test('callout shapes: own lines, no blank line, single line, list before close',
         "segments": [
           {
             "kind": "text",
-            "markdown": "## Tests not fully green
+            "markdown": 
+    "## Tests not fully green
 
-    - \`pnpm test\` failed in \`cli.test.ts\`",
+    - \`pnpm test\` failed in \`cli.test.ts\`"
+    ,
           },
         ],
       },
@@ -147,9 +153,11 @@ test('callout shapes: own lines, no blank line, single line, list before close',
       },
       {
         "kind": "text",
-        "markdown": "<callout accent="8b5cf6">
+        "markdown": 
+    "<callout accent="8b5cf6">
     hex without # is not a valid accent, so this stays text
-    </callout>",
+    </callout>"
+    ,
       },
     ]
   `)
@@ -170,14 +178,16 @@ test('malformed callouts stay text: missing close, inside a code fence, nested',
     [
       {
         "kind": "text",
-        "markdown": "\`\`\`md
+        "markdown": 
+    "\`\`\`md
     <callout accent="#ef4444">
     inside a fence
     </callout>
     \`\`\`
 
     <callout accent="#ef4444">
-    never closed",
+    never closed"
+    ,
       },
     ]
   `)
@@ -192,8 +202,10 @@ test('malformed callouts stay text: missing close, inside a code fence, nested',
     [
       {
         "kind": "text",
-        "markdown": "<callout accent="#ef4444">
-    outer",
+        "markdown": 
+    "<callout accent="#ef4444">
+    outer"
+    ,
       },
       {
         "accent": 3900150,
@@ -232,16 +244,20 @@ test('callout with a table renders rows inside the accented container', () => {
                 "type": 10,
               },
               {
-                "content": "**Step** build
-    **Command** \`pnpm build\`",
+                "content": 
+    "**Step** build
+    **Command** \`pnpm build\`"
+    ,
                 "type": 10,
               },
               {
                 "type": 14,
               },
               {
-                "content": "**Step** test
-    **Command** \`pnpm test\`",
+                "content": 
+    "**Step** test
+    **Command** \`pnpm test\`"
+    ,
                 "type": 10,
               },
             ],
@@ -269,14 +285,16 @@ test('code inside a list is lifted after its item, headings deeper than 3 are cl
     [
       {
         "kind": "text",
-        "markdown": "### Steps
+        "markdown": 
+    "### Steps
 
     1. Install:
     \`\`\`bash
     pnpm install
     \`\`\`
     2. Run the tests
-    - done",
+    - done"
+    ,
       },
     ]
   `)
@@ -331,9 +349,11 @@ test('backticks inside a code block keep the original fence', () => {
     [
       {
         "kind": "text",
-        "markdown": "\`\`\`\`md
+        "markdown": 
+    "\`\`\`\`md
     Use \`\`\`ts fences for code.
-    \`\`\`\`",
+    \`\`\`\`"
+    ,
       },
     ]
   `)
@@ -355,9 +375,11 @@ test('long paragraph splits by sentences, tight paragraph-list spacing is kept',
     [
       {
         "kind": "text",
-        "markdown": "Steps:
+        "markdown": 
+    "Steps:
     - one
-    - two",
+    - two"
+    ,
       },
     ]
   `)

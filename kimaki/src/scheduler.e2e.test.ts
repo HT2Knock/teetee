@@ -4,7 +4,7 @@
 
 import fs from 'node:fs'
 import { git } from './worktrees.ts'
-import { afterAll, beforeAll, expect, test } from 'vitest'
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
 import { send } from './prompt.ts'

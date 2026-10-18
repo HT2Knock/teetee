@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest'
+import { expect, test } from 'bun:test'
 
 import { BUILTIN_SKILL_IDS, disabledSkillRules, parseDisabledSkills, readBuiltinSkills } from './builtin-skills.ts'
 
