@@ -25,7 +25,7 @@ import dedent from 'string-dedent'
 import type { KimakiDb } from './db.ts'
 import { ConfigError, DbError } from './errors.ts'
 import { createLogger } from './logger.ts'
-import { parseRows, toDbDate, type BotTokenRow } from './rows.ts'
+import { parseRows, upsert, type BotTokenRow } from './rows.ts'
 
 const logger = createLogger('CREDS')
 const execFileAsync = promisify(execFile)
@@ -133,14 +133,8 @@ export async function saveCredentials({
       proxy_url: credentials.baseUrl,
     }),
   }
-  const entries = Object.entries(values).filter(([, value]) => value !== undefined)
-  const columns = entries.map(([column]) => column)
-  const bound = entries.map(([, value]) => (value instanceof Date ? toDbDate(value) : value))
-  const saved = await db.unsafe<unknown[]>(
-    `INSERT INTO bot_tokens (app_id, ${columns.join(', ')}) VALUES (?, ${columns.map(() => '?').join(', ')})
-     ON CONFLICT(app_id) DO UPDATE SET ${columns.map((column) => `${column} = ?`).join(', ')}`,
-    [credentials.appId, ...bound, ...bound],
-  ).catch((e) => new DbError({ operation: 'save bot_tokens', cause: e }))
+  const saved = await upsert({ db, table: 'bot_tokens', key: { column: 'app_id', value: credentials.appId }, values })
+    .catch((e) => new DbError({ operation: 'save bot_tokens', cause: e }))
   if (saved instanceof Error) return saved
 }
 

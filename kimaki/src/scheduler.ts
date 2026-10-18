@@ -467,11 +467,17 @@ export async function createTask(bot: Bot, { send: input, options }: { send: Sen
   return { routineId, schedule: when.kind === 'cron' ? when.cronExpr : 'once', nextRunAt: new Date(nextRunAt).toISOString() }
 }
 
-export async function editTask(bot: Bot, edit: TaskEdit) {
-  const rowRows = await bot.db<TaskRow[]>`SELECT * FROM scheduled_tasks WHERE id = ${edit.id} LIMIT 1`
+// One routine row, or undefined when it no longer exists.
+async function findTask(db: KimakiDb, id: number): Promise<DbError | ScheduledTaskRow | undefined> {
+  const rows = await db<TaskRow[]>`SELECT * FROM scheduled_tasks WHERE id = ${id} LIMIT 1`
     .catch((cause) => new DbError({ operation: 'read routine', cause }))
-  if (rowRows instanceof Error) return rowRows
-  const row = parseFirst<TaskRow>('scheduled_tasks', rowRows)
+  if (rows instanceof Error) return rows
+  return parseFirst<TaskRow>('scheduled_tasks', rows)
+}
+
+export async function editTask(bot: Bot, edit: TaskEdit) {
+  const row = await findTask(bot.db, edit.id)
+  if (row instanceof Error) return row
   if (!row) return new ConfigError({ reason: `Routine ${edit.id} not found. List routines with: kimaki routine list` })
   if (row.status !== 'planned') return new ConfigError({ reason: `Routine ${edit.id} is ${row.status}; only planned routines can be edited` })
   const job = decodeTaskPayload(row.payload_json)
@@ -526,10 +532,8 @@ export async function deleteTask(bot: Bot, id: number) {
 
 // The same claim ─▶ execute ─▶ finish path as a due task, now.
 export async function runTaskNow(bot: Bot, id: number) {
-  const rowRows = await bot.db<TaskRow[]>`SELECT * FROM scheduled_tasks WHERE id = ${id} LIMIT 1`
-    .catch((cause) => new DbError({ operation: 'read routine', cause }))
-  if (rowRows instanceof Error) return rowRows
-  const row = parseFirst<TaskRow>('scheduled_tasks', rowRows)
+  const row = await findTask(bot.db, id)
+  if (row instanceof Error) return row
   if (!row) return new ConfigError({ reason: `Routine ${id} not found. List routines with: kimaki routine list` })
   const outcome = await runTask(bot, { id, dueAt: null })
   if (outcome instanceof Error) return outcome

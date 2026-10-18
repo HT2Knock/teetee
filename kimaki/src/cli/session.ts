@@ -111,7 +111,7 @@ export function registerSessionQueryCommands(cli: Goke) {
       const opened = await openDb({ dataDir: dataDirOrDefault(options.dataDir), migrate: false })
       if (!(opened instanceof Error)) {
         const sessionIds = editors.map((editor) => editor.sessionId)
-        const rows = sessionIds.length === 0 ? [] : await opened.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions WHERE session_id IN ${opened.db(sessionIds)} ORDER BY updated_at DESC`.catch(() => [])
+        const rows = await opened.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions WHERE session_id IN ${opened.db(sessionIds)} ORDER BY updated_at DESC`.catch(() => [])
         for (const thread of parseRows<ThreadSessionRow>('thread_sessions', rows)) if (!titles.has(thread.session_id) && thread.last_synced_name) titles.set(thread.session_id, thread.last_synced_name)
         await opened.close()
       }
