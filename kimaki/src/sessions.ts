@@ -49,6 +49,18 @@ type ChannelDefaultsRow = ChannelDirectoryRow & {
   channel_worktree_enabled: number | null
 }
 
+// The nested one-to-one defaults the old `with: { channel_model, channel_agent,
+// channel_worktree }` loader returned; null when the related row is absent.
+function channelDefaults(row: ChannelDefaultsRow | undefined) {
+  if (!row) return undefined
+  return {
+    ...row,
+    channel_model: row.channel_model_id === null ? null : { model_id: row.channel_model_id, variant: row.channel_model_variant },
+    channel_agent: row.channel_agent_name === null ? null : { agent_name: row.channel_agent_name },
+    channel_worktree: row.channel_worktree_enabled === null ? null : { enabled: row.channel_worktree_enabled },
+  }
+}
+
 // Kimaki sessions ask with `kimaki buttons`. A wildcard deny removes the tool
 // from the model's tool list; forks and subagents inherit it, and later rules
 // (`--permission question:allow`) still win.
@@ -374,13 +386,7 @@ export async function startSession(
     WHERE channel_directories.channel_id = ${channelId} LIMIT 1`
     .catch((cause) => new DbError({ operation: 'read channel defaults', cause }))
   if (defaultRows instanceof Error) return defaultRows
-  const defaultRow = parseFirst<ChannelDefaultsRow>('channel_directories', defaultRows)
-  const defaults = defaultRow && {
-    ...defaultRow,
-    channel_model: defaultRow.channel_model_id === null ? null : { model_id: defaultRow.channel_model_id, variant: defaultRow.channel_model_variant },
-    channel_agent: defaultRow.channel_agent_name === null ? null : { agent_name: defaultRow.channel_agent_name },
-    channel_worktree: defaultRow.channel_worktree_enabled === null ? null : { enabled: defaultRow.channel_worktree_enabled },
-  }
+  const defaults = channelDefaults(parseFirst<ChannelDefaultsRow>('channel_directories', defaultRows))
   const text = routeText(route)
   const channelWorktrees = defaults?.channel_worktree ? defaults.channel_worktree.enabled === 1 : bot.autoWorktrees
   const useWorktree = typeof worktree === 'string' || (worktree !== false && channelWorktrees)

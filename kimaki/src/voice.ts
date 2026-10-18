@@ -34,7 +34,7 @@ import type { KimakiDb } from './db.ts'
 import { ConfigError, DbError } from './errors.ts'
 import { createLogger } from './logger.ts'
 import type { Route } from './routes.ts'
-import { parseFirst, type BotTokenRow } from './rows.ts'
+import { parseFirst, upsert, type BotTokenRow } from './rows.ts'
 
 const logger = createLogger('VOICE')
 const execFileAsync = promisify(execFile)
@@ -773,16 +773,7 @@ export async function saveAudioKeys({ db, token, openai, gemini }: { db: KimakiD
   const bot = parseFirst<BotTokenRow>('bot_tokens', tokenRows)
   if (!bot) return new ConfigError({ reason: 'No saved bot credentials. Start kimaki once to onboard.' })
   // bot_api_keys has no updated_at, so only the given columns change on conflict.
-  const entries = Object.entries(values).filter(([, value]) => value !== undefined)
-  const columns = entries.map(([column]) => column)
-  const bound = entries.map(([, value]) => value)
-  const saved = await db
-    .unsafe(
-      `INSERT INTO bot_api_keys (app_id, ${columns.join(', ')})
-       VALUES (?, ${columns.map(() => '?').join(', ')})
-       ON CONFLICT(app_id) DO UPDATE SET ${columns.map((column) => `${column} = ?`).join(', ')}`,
-      [bot.app_id, ...bound, ...bound],
-    )
+  const saved = await upsert({ db, table: 'bot_api_keys', key: { column: 'app_id', value: bot.app_id }, values })
     .then(() => undefined)
     .catch((cause) => new DbError({ operation: 'write bot_api_keys', cause }))
   if (saved instanceof Error) return saved

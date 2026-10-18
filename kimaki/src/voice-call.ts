@@ -47,7 +47,7 @@ import { DEFAULT_LIVE_URLS, DEFAULT_LIVE_VOICE, FRAME_BYTES, LIVE_VOICES, startL
 import { createLogger } from './logger.ts'
 import { addVoiceChannel, listProjects } from './project.ts'
 import { formatEcho } from './queue.ts'
-import { parseFirst, toDbDate, type BotTokenRow, type ChannelDirectoryRow } from './rows.ts'
+import { parseFirst, toDbDate, type BotSettingRow, type BotTokenRow, type ChannelDirectoryRow } from './rows.ts'
 import { catalogReady, primaryAgents } from './sessions.ts'
 import { liveCallInstructions, voiceCallInstructions, type VoiceCallContext } from './system-prompt.ts'
 import { createVoiceAgent, type AgentTool } from './voice-agent.ts'
@@ -116,12 +116,12 @@ export async function saveVoiceCallVoice({ db, appId, voice }: { db: Bot['db']; 
 // refreshes it (refresh tokens rotate); an expired token counts as signed out.
 // voiceNotice says why the saved voice is not used.
 // bot_tokens joined with its bot_settings row: the old `with: { settings: true }`.
-type BotTokenWithSettings = BotTokenRow & { settings_voice_call_voice: string | null }
+type BotTokenWithSettings = BotTokenRow & Pick<BotSettingRow, 'voice_call_voice'>
 
 export async function voiceCallSettings(bot: Pick<Bot, 'db' | 'token' | 'opencodeDbFile'>) {
   const [tokenRows, credential] = await Promise.all([
     bot.db<BotTokenWithSettings[]>`
-      SELECT t.*, s.voice_call_voice AS settings_voice_call_voice
+      SELECT t.*, s.voice_call_voice
       FROM bot_tokens t
       LEFT JOIN bot_settings s ON s.app_id = t.app_id
       WHERE t.token = ${bot.token}
@@ -133,7 +133,7 @@ export async function voiceCallSettings(bot: Pick<Bot, 'db' | 'token' | 'opencod
   if (credential instanceof Error) return credential
   if (!credential) return new NoChatGPTError()
   const row = parseFirst<BotTokenWithSettings>('bot_tokens', tokenRows)
-  const saved = row?.settings_voice_call_voice ?? null
+  const saved = row?.voice_call_voice ?? null
   const parsed = saved === null ? null : parseRealtimeVoice(saved)
   if (parsed instanceof Error) {
     const voiceNotice = `saved voice ${saved} is unknown, using ${DEFAULT_LIVE_VOICE}. Run kimaki --voice <name> to change it`

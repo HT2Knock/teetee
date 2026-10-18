@@ -8,7 +8,9 @@
 // write paths send toDbDate(). The tables keep the V1 columns unchanged
 // (migrations.ts imports a V1 discord-sessions.db into them).
 
-export const TABLES = [
+import type { SQL } from 'bun'
+
+const TABLES = [
   'bot_api_keys',
   'bot_settings',
   'bot_tokens',
@@ -143,13 +145,6 @@ export interface ChannelVerbosityRow {
   updated_at: Date | null
 }
 
-export interface ChannelMentionModeRow {
-  channel_id: string
-  enabled: number
-  created_at: Date | null
-  updated_at: Date | null
-}
-
 export interface ScheduledTaskRow {
   id: number
   status: TaskStatus
@@ -185,17 +180,42 @@ export interface SessionSleepRow {
 
 // 'YYYY-MM-DD HH:MM:SS' is UTC (SQLite CURRENT_TIMESTAMP); Drizzle read it the
 // same way. ISO strings parse as-is.
-export function toDate(value: string): Date {
+function toDate(value: string): Date {
   if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(value)) return new Date(`${value.replace(' ', 'T')}Z`)
   return new Date(value)
 }
 
-export function toDateOrNull(value: string | null): Date | null {
-  return value === null ? null : toDate(value)
-}
-
 export function toDbDate(value: Date): string {
   return value.toISOString()
+}
+
+// INSERT ... ON CONFLICT(key) DO UPDATE for exactly the given columns, with
+// every value bound. Column and table names come from code, never from data.
+// Used where the column set is built at runtime (keys a user did or did not
+// pass); a fixed set reads better as a plain tagged template.
+export function upsert({
+  db,
+  table,
+  key,
+  values,
+  updatedAt,
+}: {
+  db: SQL
+  table: string
+  key: { column: string; value: string }
+  values: Record<string, string | number | null | Date | undefined>
+  updatedAt?: Date
+}): SQL.Query<unknown[]> {
+  const entries = Object.entries(values).filter(([, value]) => value !== undefined)
+  const columns = entries.map(([column]) => column)
+  const inserted = entries.map(([, value]) => (value instanceof Date ? toDbDate(value) : value))
+  const assigned = [...inserted, ...(updatedAt ? [toDbDate(updatedAt)] : [])]
+  const sets = [...columns, ...(updatedAt ? ['updated_at'] : [])]
+  return db.unsafe(
+    `INSERT INTO ${table} (${key.column}, ${columns.join(', ')}) VALUES (?, ${columns.map(() => '?').join(', ')})
+     ON CONFLICT(${key.column}) DO UPDATE SET ${sets.map((column) => `${column} = ?`).join(', ')}`,
+    [key.value, ...inserted, ...assigned],
+  )
 }
 
 // Converts the datetime columns of the rows a query returned from text to Date.

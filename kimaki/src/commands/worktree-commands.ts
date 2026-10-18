@@ -13,7 +13,7 @@ import { oc, projectOf, rootSession, sessionDirectory, type Author, type Bot } f
 import { ConfigError, DbError } from '../errors.ts'
 import { canonicalPath } from '../file-edit-log.ts'
 import { authorOf, replyError, resolveTarget, type InteractionRoutes } from '../interaction-context.ts'
-import { parseFirst, toDbDate, type ChannelDirectoryRow } from '../rows.ts'
+import { parseFirst, toDbDate, type ChannelDirectoryRow, type ChannelWorktreeRow } from '../rows.ts'
 import { fork, sessionCwd, startSession } from '../sessions.ts'
 import {
   deleteWorktree,
@@ -75,7 +75,7 @@ export async function setAutoWorktrees(bot: Bot, { channelId, enabled }: { chann
 
 // Linked worktrees of the channel's project and whether new sessions get one.
 export async function channelWorktrees(bot: Bot, { channelId }: { channelId: string }) {
-  const rows = await bot.db<Array<ChannelDirectoryRow & { enabled: number | null }>>`
+  const rows = await bot.db<Array<ChannelDirectoryRow & Pick<ChannelWorktreeRow, 'enabled'>>>`
     SELECT d.*, w.enabled
     FROM channel_directories d
     LEFT JOIN channel_worktrees w ON w.channel_id = d.channel_id
@@ -83,7 +83,7 @@ export async function channelWorktrees(bot: Bot, { channelId }: { channelId: str
     LIMIT 1
   `.catch((cause) => new DbError({ operation: 'find worktree project', cause }))
   if (rows instanceof Error) return rows
-  const project = parseFirst<ChannelDirectoryRow & { enabled: number | null }>('channel_directories', rows)
+  const project = parseFirst<ChannelDirectoryRow & Pick<ChannelWorktreeRow, 'enabled'>>('channel_directories', rows)
   if (!project) return new ConfigError({ reason: 'Choose a project channel.' })
   const entries = await listWorktrees({ projectDirectory: project.directory })
   if (entries instanceof Error) return entries

@@ -286,6 +286,19 @@ export function registerLoginCommands(cli: Goke) {
 }
 
 // tunnel, tts
+// Any stored bot_api_keys row (imported from V1 `transcription-key`); a missing
+// database only skips it. The db module is imported lazily: a CLI call must not
+// pay for SQLite at startup.
+async function storedApiKeys(dataDir: string): Promise<BotApiKeyRow | null> {
+  const { openDb } = await import('../db.ts')
+  const opened = await openDb({ dataDir, migrate: false })
+  if (opened instanceof Error) return null
+  const rows = await opened.db<BotApiKeyRow[]>`SELECT * FROM bot_api_keys LIMIT 1`.catch(() => null)
+  await opened.close()
+  if (rows === null) return null
+  return parseFirst<BotApiKeyRow>('bot_api_keys', rows) ?? null
+}
+
 export function registerToolCommands(cli: Goke) {
   cli.command('tunnel', 'Run a command and expose its local port with a public URL. The child gets TRAFORO_URL')
     .option('-p, --port <port>', 'Local port (default: read from the command output)')
@@ -317,12 +330,8 @@ export function registerToolCommands(cli: Goke) {
       if (options.provider && options.provider !== 'openai' && options.provider !== 'gemini') fail(new Error('--provider must be openai or gemini'))
       const speed = options.speed ? Number(options.speed) : 1.25
       if (!(speed >= 0.25 && speed <= 4)) fail(new Error('--speed must be between 0.25 and 4'))
-      const [{ openDb }, { audioKeyCandidates, generateSpeech }] = await Promise.all([import('../db.ts'), import('../voice.ts')])
-      // Any stored bot_api_keys row (imported from V1 /transcription-key); a missing database only skips it.
-      const opened = await openDb({ dataDir: dataDirOrDefault(options.dataDir), migrate: false })
-      const rows = opened instanceof Error ? null : await opened.db<BotApiKeyRow[]>`SELECT * FROM bot_api_keys LIMIT 1`.catch(() => null)
-      const stored = rows === null ? null : parseFirst<BotApiKeyRow>('bot_api_keys', rows)
-      if (!(opened instanceof Error)) await opened.close()
+      const { audioKeyCandidates, generateSpeech } = await import('../voice.ts')
+      const stored = await storedApiKeys(dataDirOrDefault(options.dataDir))
       const key = audioKeyCandidates(stored).find((candidate) => !options.provider || candidate.provider === options.provider)
       if (!key) fail(new Error('No OpenAI or Gemini key. Set OPENAI_API_KEY or GEMINI_API_KEY'))
       const result = await generateSpeech({ text: input, apiKey: key.apiKey, provider: key.provider, voice: options.voice, instructions: options.instructions, speed })

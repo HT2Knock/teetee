@@ -62,6 +62,18 @@ type ChannelPreferencesRow = {
   variant: string | null
 }
 
+// The channel's agent and model defaults in one row (both are optional).
+function channelPreferences(bot: Bot, channelId: string) {
+  return bot.db<ChannelPreferencesRow[]>`
+    SELECT a.agent_name, m.model_id, m.variant
+    FROM channel_directories d
+    LEFT JOIN channel_agents a ON a.channel_id = d.channel_id
+    LEFT JOIN channel_models m ON m.channel_id = d.channel_id
+    WHERE d.channel_id = ${channelId}
+    LIMIT 1
+  `.catch((cause) => new DbError({ operation: 'read channel preferences', cause }))
+}
+
 function modelLabel(model: { providerID: string; id: string; variant?: string | null }): string {
   return `${model.providerID}/${model.id}${model.variant ? ` (${model.variant})` : ''}`
 }
@@ -139,14 +151,7 @@ async function current(bot: Bot, target: InteractionTarget) {
     if (info instanceof Error) return info
     return { scope: 'session' as const, modelScope: 'session' as const, agent: info.agent ?? null, model: info.model ?? null }
   }
-  const rows = await bot.db<ChannelPreferencesRow[]>`
-    SELECT a.agent_name, m.model_id, m.variant
-    FROM channel_directories d
-    LEFT JOIN channel_agents a ON a.channel_id = d.channel_id
-    LEFT JOIN channel_models m ON m.channel_id = d.channel_id
-    WHERE d.channel_id = ${target.channelId}
-    LIMIT 1
-  `.catch((cause) => new DbError({ operation: 'read channel preferences', cause }))
+  const rows = await channelPreferences(bot, target.channelId)
   if (rows instanceof Error) return rows
   const row = rows[0]
   const agent = row?.agent_name ?? null
@@ -164,14 +169,7 @@ async function current(bot: Bot, target: InteractionTarget) {
 // The model a new session of the channel starts with, like startSession:
 // channel model, channel agent model, global model, OpenCode default.
 async function channelDefaultModel(bot: Bot, target: InteractionTarget): Promise<Error | ModelChoice | null> {
-  const rows = await bot.db<ChannelPreferencesRow[]>`
-    SELECT a.agent_name, m.model_id, m.variant
-    FROM channel_directories d
-    LEFT JOIN channel_agents a ON a.channel_id = d.channel_id
-    LEFT JOIN channel_models m ON m.channel_id = d.channel_id
-    WHERE d.channel_id = ${target.channelId}
-    LIMIT 1
-  `.catch((cause) => new DbError({ operation: 'read channel preferences', cause }))
+  const rows = await channelPreferences(bot, target.channelId)
   if (rows instanceof Error) return rows
   const row = rows[0]
   const channel = parseModel(row?.model_id, row?.variant)
