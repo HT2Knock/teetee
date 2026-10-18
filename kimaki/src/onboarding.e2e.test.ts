@@ -6,7 +6,6 @@
 
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
-import { createRequire } from 'node:module'
 import path from 'node:path'
 import { API } from '@discordjs/core/http-only'
 import { ChannelType } from 'discord.js'
@@ -40,9 +39,8 @@ let otherProject: string
 beforeAll(async () => {
   dataDir = tempDataDir()
   twin = await startTwin({ gateway: true })
-  const require = createRequire(import.meta.url)
   kimaki = kimakiShellCommand({
-    command: entryArgv(path.join(import.meta.dirname, 'cli.ts'), [], { tsxLoader: require.resolve('tsx') }),
+    command: entryArgv(path.join(import.meta.dirname, 'cli.ts')),
   })
   otherProject = path.join(dataDir, 'other-project')
   fs.mkdirSync(otherProject)

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 // kimaki entrypoint. `kimaki` starts the bot and onboards on first start;
 // the subcommands live in src/cli/*.ts, one module per job.
 // Startup must stay light: bot modules (main.ts, onboarding.ts, scheduler.ts)

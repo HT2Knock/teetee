@@ -6,13 +6,13 @@ always load the `changesets` skill before fixing bugs or adding features. User-f
 
 never use `spawnSync` or `execSync`. use async `execFile` (`promisify(execFile)`) or `spawn` from `node:child_process`, with a timeout.
 
-after changes to message handling, queueing or the reducer run the full test suite inside `kimaki`: `pnpm run test --run -u`, then inspect snapshot updates in git diff. for one file, use `pnpm run test --run src/example.test.ts`. always include `run` after `pnpm`; `pnpm test --run` makes pnpm consume the flag, and `pnpm run test -- --run` passes a literal `--` that can make vitest ignore the filter.
+after changes to message handling, queueing or the reducer run the full test suite inside `kimaki`: `bun run test -u`, then inspect snapshot updates in git diff. for one file, use `bun run test src/example.test.ts`. `bun run test` runs vitest once (no watch): it starts the bot and every CLI child process from source on bun, so a green run proves the bun path.
 
 each kimaki e2e test file starts its own OpenCode server (~400 MB). `kimaki/vitest.config.ts` caps parallel files at a third of the CPUs; override with `KIMAKI_TEST_WORKERS`. other agents may run suites at the same time, so run single files while iterating and the full suite once at the end. timeouts in a full run on a loaded machine may be load-related: rerun the failing file alone before debugging.
 
 kimaki CLI startup must stay light (~0.06s, ~70 MB): agents and tests call `kimaki` many times. `kimaki/src/cli/*.ts` must not import SQLite (`db.ts`, `schema.ts`, `credentials.ts`, `project.ts`, `voice.ts`) or `discord.js` at top level; `await import()` them inside the actions that need them. use `discord-api-types/v10` for enums like `ChannelType`.
 
-kimaki runs on node and on bun. anything that spawns a kimaki entrypoint goes through `src/runtime.ts` (`entryArgv`, `evalArgv`, `runtimePath`, `runtimeName`): bun runs typescript directly, node needs the tsx loader. never write `process.execPath --import tsx` by hand. e2e tests use `cliCommand()` from `src/test/harness.ts`, and `kimaki status` reports the runtime it is on. `bun run bun:check` inside `kimaki` runs the suite on bun; `vitest.config.ts` inlines dependencies whose import breaks on bun.
+kimaki runs on bun only. anything that spawns a kimaki entrypoint goes through `src/runtime.ts` (`entryArgv`, `evalArgv`, `runtimeExecutable`): bun runs typescript directly, so there is no loader to add. never write `process.execPath` by hand in a spawn. e2e tests use `cliCommand()` from `src/test/harness.ts`, and `kimaki status` reports the runtime. `bun run test` inside `kimaki` runs the suite; `vitest.config.ts` inlines dependencies whose import breaks on bun.
 
 for checkout validation requests, prefer non-recursive checks unless the user asks otherwise.
 

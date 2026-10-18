@@ -62,16 +62,15 @@ export function opencodeBinary(): string {
 }
 
 // Spread into execFile/exec: `execFile(...cliCommand(args), options)`. Runs the
-// Kimaki CLI from source on the runtime the suite runs on. Bun runs the
-// TypeScript directly; Node needs the tsx loader.
+// Kimaki CLI from source on Bun, which runs TypeScript directly.
 export function cliCommand(args: readonly string[]): [string, string[]] {
-  const argv = entryArgv(path.resolve('src/cli.ts'), args, { tsxLoader: createRequire(import.meta.url).resolve('tsx') })
+  const argv = entryArgv(path.resolve('src/cli.ts'), args)
   return [argv[0] ?? 'kimaki', argv.slice(1)]
 }
 
 // The same command as the shell string the bot hands to agents.
 export function cliShellCommand(args: readonly string[] = []): string {
-  const argv = entryArgv(path.resolve('src/cli.ts'), args, { tsxLoader: createRequire(import.meta.url).resolve('tsx') })
+  const argv = entryArgv(path.resolve('src/cli.ts'), args)
   return argv.map((part) => `'${part.replaceAll("'", "'\\''")}'`).join(' ')
 }
 
