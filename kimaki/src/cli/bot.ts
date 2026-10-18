@@ -61,8 +61,8 @@ async function supervise(): Promise<never> {
     process.on(signal, () => state.child?.kill('SIGTERM'))
   }
   while (true) {
-    // Same argv on either runtime: Bun leaves execArgv empty and runs the
-    // TypeScript entry directly, Node keeps its loader flags in execArgv.
+    // Same argv as this supervisor: the Bun runtime flags stay in execArgv,
+    // and Bun runs the TypeScript entry directly.
     const child = spawn(runtimeExecutable(), [...process.execArgv, ...process.argv.slice(1)], {
       stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
       env: { ...process.env, KIMAKI_SUPERVISED: '1' },
@@ -199,7 +199,7 @@ export function registerStartCommand(cli: Goke) {
       const { credentials, install } = resolved
       const installUrl = installUrlFor({ credentials, website: urls.website, callbackUrl: options.gatewayCallbackUrl })
       // The agent calls this same install. Prefer the built dist entry, so agent
-      // commands skip the tsx loader also when the bot runs from src.
+      // commands work also when the bot runs from src.
       const distCli = distCliEntry()
       const kimaki = kimakiShellCommand({
         command: fs.existsSync(distCli)

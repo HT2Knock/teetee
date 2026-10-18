@@ -3,7 +3,6 @@
 // /queue-command. MCP prompts get no slash command; they run as messages.
 
 import fs from 'node:fs'
-import { createRequire } from 'node:module'
 import path from 'node:path'
 import type { DeterministicMatcher } from 'opencode-deterministic-provider'
 import { afterAll, beforeAll, expect, test } from 'vitest'
@@ -54,7 +53,7 @@ beforeAll(async () => {
         hello: { template: 'hello-template $ARGUMENTS', description: 'Say hello' },
         later: { template: 'queued-template $ARGUMENTS', description: 'Runs later' },
       },
-      mcp: { servers: { fake: { type: 'local', command: entryArgv(path.join(import.meta.dirname, 'test', 'fake-mcp-server.ts'), [], { tsxLoader: createRequire(import.meta.url).resolve('tsx') }) } } },
+      mcp: { servers: { fake: { type: 'local', command: entryArgv(path.join(import.meta.dirname, 'test', 'fake-mcp-server.ts')) } } },
     }),
     startTwin(),
   ])

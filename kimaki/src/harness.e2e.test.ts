@@ -5,7 +5,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
-import { createRequire } from 'node:module'
 import dedent from 'string-dedent'
 import { afterAll, beforeAll, expect, onTestFinished, test } from 'vitest'
 
@@ -96,7 +95,7 @@ test('a second bot on the same lock port stops the running one and takes over', 
     process.send({ ready: true })
     process.once('SIGTERM', async () => { await result.stop(); process.exit(0) })
   `
-  const argv = evalArgv(code, { tsxLoader: createRequire(import.meta.url).resolve('tsx') })
+  const argv = evalArgv(code)
   const child = spawn(argv[0] ?? 'kimaki', argv.slice(1), { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] })
   const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()))
   onTestFinished(async () => {

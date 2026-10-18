@@ -1,18 +1,15 @@
 // Runs the Kimaki suite on Bun: the bot and every CLI child process.
 //
-//   bun run bun:check
-//   bun run bun:check -- src/cli-read.e2e.test.ts
+//   cd kimaki && bun run test
+//   cd kimaki && bun run test src/cli-read.e2e.test.ts
 //
-// Node stays supported. This script only proves the Bun path works, so a
-// failure here is a Bun regression, not a change to the default runtime.
+// Kimaki runs on Bun only. The suite starts the bot and the CLI from source, so
+// a green run proves every entrypoint works on Bun.
 
-import { spawn } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import { execFile } from 'node:child_process'
-
-import { runtimeName } from '../src/runtime.ts'
 
 const execFileAsync = promisify(execFile)
 
@@ -54,8 +51,8 @@ async function cliPrintsHelp(): Promise<number> {
 }
 
 async function main(): Promise<number> {
-  if (runtimeName() !== 'bun') {
-    process.stderr.write(`bun:check must run under Bun, but it is running on ${runtimeName()}\n`)
+  if (!process.versions['bun']) {
+    process.stderr.write('Kimaki runs on Bun. Install it from https://bun.sh and run `bun run test` again.\n')
     return 1
   }
 
@@ -66,11 +63,10 @@ async function main(): Promise<number> {
   if (help !== 0) return help
 
   // Resolve the vitest entry the way its own npm bin does, then run it on Bun.
-  // `bun run test` would execute the sh wrapper, which starts Node.
+  // `bun run vitest` would execute the sh wrapper, which starts Node.
   const vitestEntry = path.join(path.dirname(require.resolve('vitest/package.json')), 'vitest.mjs')
   const args = ['run', ...process.argv.slice(2), '--config', 'vitest.config.ts']
-  // The runtime test asserts this, so a Node run cannot pass for a Bun run.
-  return run(bun, [vitestEntry, ...args], { KIMAKI_EXPECT_RUNTIME: 'bun' })
+  return run(bun, [vitestEntry, ...args])
 }
 
 process.exitCode = await main()
