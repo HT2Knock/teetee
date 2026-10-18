@@ -18,7 +18,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { createClient, type Client } from '@libsql/client'
+import { Database } from 'bun:sqlite'
 import * as errore from 'errore'
 
 import { DbError } from './errors.ts'
@@ -70,33 +70,38 @@ export function schemaStatements(): string[] {
     .filter((statement) => statement.length > 0)
 }
 
-async function columnsOf({ client, schema, table }: { client: Client; schema: 'main' | 'legacy'; table: string }) {
-  const rows = await client.execute(`PRAGMA ${schema}.table_info("${table}")`)
-  return rows.rows.map((row) => ({ name: String(row.name), notNull: Number(row.notnull) === 1 || Number(row.pk) > 0 }))
+function columnsOf({ client, schema, table }: { client: Database; schema: 'main' | 'legacy'; table: string }) {
+  const rows = client
+    .query<{ name: string; notnull: number; pk: number }, []>(`PRAGMA ${schema}.table_info("${table}")`)
+    .all()
+  return rows.map((row) => ({ name: row.name, notNull: row.notnull === 1 || row.pk > 0 }))
 }
 
 // One entry per FK column: the schema has only single-column foreign keys
 // with an explicit parent column. A composite FK would need grouping by `id`.
-async function foreignKeysOf({ client, table }: { client: Client; table: string }) {
-  const rows = await client.execute(`PRAGMA main.foreign_key_list("${table}")`)
-  return rows.rows.map((row) => ({ column: String(row.from), parent: String(row.table), parentColumn: String(row.to) }))
+function foreignKeysOf({ client, table }: { client: Database; table: string }) {
+  const rows = client
+    .query<{ from: string; table: string; to: string }, []>(`PRAGMA main.foreign_key_list("${table}")`)
+    .all()
+  return rows.map((row) => ({ column: row.from, parent: row.table, parentColumn: row.to }))
 }
 
 // Copies the V1 rows into `client` (an empty file with schema.sql applied).
 // Most V1 tables have no foreign keys, so real installs hold rows that point
 // at deleted channels or threads: a required reference skips the row, an
 // optional one becomes NULL (like ON DELETE SET NULL).
-async function copyLegacyRows({ client, legacyFile }: { client: Client; legacyFile: string }): Promise<void> {
-  await client.execute({ sql: 'ATTACH DATABASE ? AS legacy', args: [`file:${legacyFile}?mode=ro`] })
+function copyLegacyRows({ client, legacyFile }: { client: Database; legacyFile: string }): void {
+  // mode=ro: the V1 file is read-only, so its -wal is never checkpointed.
+  client.run('ATTACH DATABASE ? AS legacy', [`file:${legacyFile}?mode=ro`])
   for (const table of IMPORTED_TABLES) {
-    const legacyColumns = (await columnsOf({ client, schema: 'legacy', table })).map((column) => column.name)
+    const legacyColumns = columnsOf({ client, schema: 'legacy', table }).map((column) => column.name)
     if (legacyColumns.length === 0) {
       logger.log(`import ${table}: not in ${LEGACY_DB_FILE}, skipped`)
       continue
     }
     // Columns an older V1 file lacks get the kimaki default.
-    const columns = (await columnsOf({ client, schema: 'main', table })).filter((column) => legacyColumns.includes(column.name))
-    const foreignKeys = (await foreignKeysOf({ client, table })).filter((key) => legacyColumns.includes(key.column))
+    const columns = columnsOf({ client, schema: 'main', table }).filter((column) => legacyColumns.includes(column.name))
+    const foreignKeys = foreignKeysOf({ client, table }).filter((key) => legacyColumns.includes(key.column))
     const existsIn = (key: (typeof foreignKeys)[number]) => `"${key.column}" IN (SELECT "${key.parentColumn}" FROM main."${key.parent}")`
     const expressions = columns.map((column) => {
       const custom = IMPORT_EXPRESSIONS[table]?.[column.name]
@@ -107,25 +112,27 @@ async function copyLegacyRows({ client, legacyFile }: { client: Client; legacyFi
     })
     const required = foreignKeys.filter((key) => columns.some((column) => column.name === key.column && column.notNull))
     const where = required.length > 0 ? ` WHERE ${required.map(existsIn).join(' AND ')}` : ''
-    const inserted = await client.execute(
+    const inserted = client.run(
       `INSERT INTO main."${table}" (${columns.map((column) => `"${column.name}"`).join(', ')}) SELECT ${expressions.join(', ')} FROM legacy."${table}"${where}`,
     )
-    const total = await client.execute(`SELECT count(*) FROM legacy."${table}"`)
-    const skipped = Number(total.rows[0]?.[0] ?? 0) - inserted.rowsAffected
-    logger.log(`import ${table}: ${inserted.rowsAffected} rows${skipped > 0 ? `, ${skipped} skipped (missing parent row)` : ''}`)
+    const total = client.query<{ count: number }, []>(`SELECT count(*) AS count FROM legacy."${table}"`).get()
+    const skipped = Number(total?.count ?? 0) - inserted.changes
+    logger.log(`import ${table}: ${inserted.changes} rows${skipped > 0 ? `, ${skipped} skipped (missing parent row)` : ''}`)
   }
-  await client.execute('DETACH DATABASE legacy')
+  client.run('DETACH DATABASE legacy')
 }
 
-async function readDbVersion({ file }: { file: string }): Promise<DbError | number> {
-  const client = createClient({ url: `file:${file}` })
-  const version = await client
-    .execute('PRAGMA user_version')
-    .then((result) => Number(result.rows[0]?.[0] ?? 0))
+function readDbVersion({ file }: { file: string }): DbError | number {
+  return errore.try(
+    () => {
+      const client = new Database(file)
+      const row = client.query<{ user_version: number }, []>('PRAGMA user_version').get()
+      client.close()
+      return Number(row?.user_version ?? 0)
+    },
     // Not an SQLite file at all: unmarked too, so it is set aside like any stray file.
-    .catch((e) => (Reflect.get(e, 'code') === 'SQLITE_NOTADB' ? 0 : new DbError({ operation: `read version of ${file}`, cause: e })))
-  client.close()
-  return version
+    (e) => (Reflect.get(e, 'code') === 'SQLITE_NOTADB' ? 0 : new DbError({ operation: `read version of ${file}`, cause: e })),
+  )
 }
 
 // Renames file and its WAL files. The WAL files go first and keep their
@@ -144,14 +151,14 @@ function setAside({ file }: { file: string }): DbError | string {
 }
 
 // Picks or creates the database file. Returns its path.
-async function prepareDbFile({ dataDir }: { dataDir: string }): Promise<DbError | string> {
+function prepareDbFile({ dataDir }: { dataDir: string }): DbError | string {
   const file = path.join(dataDir, DB_FILE)
   const legacyFile = path.join(dataDir, LEGACY_DB_FILE)
   const hasLegacy = fs.existsSync(legacyFile)
   if (fs.existsSync(file)) {
     // Without a V1 file there is nothing to import: keep it, migrateSchema() marks it.
     if (!hasLegacy) return file
-    const version = await readDbVersion({ file })
+    const version = readDbVersion({ file })
     if (version instanceof Error) return version
     if (version >= DB_VERSION) return file
     const moved = setAside({ file })
@@ -162,10 +169,14 @@ async function prepareDbFile({ dataDir }: { dataDir: string }): Promise<DbError 
   logger.log(`first start of this version: importing ${legacyFile} into ${file}`)
   const target = `${file}.import`
   fs.rmSync(target, { force: true })
-  const client = createClient({ url: `file:${target}` })
-  const imported = await migrateSchema({ client })
-    .then(() => copyLegacyRows({ client, legacyFile }))
-    .catch((e) => new DbError({ operation: `import ${legacyFile}`, cause: e }))
+  const client = new Database(target)
+  const imported = errore.try(
+    () => {
+      migrateSchema({ client })
+      copyLegacyRows({ client, legacyFile })
+    },
+    (e) => new DbError({ operation: `import ${legacyFile}`, cause: e }),
+  )
   client.close()
   if (imported instanceof Error) {
     fs.rmSync(target, { force: true })
@@ -182,16 +193,16 @@ async function prepareDbFile({ dataDir }: { dataDir: string }): Promise<DbError 
 
 // Schema of an open kimaki.db: schema.sql is idempotent. Add future
 // ALTER TABLE migrations here, before schema.sql when a new index needs them.
-async function migrateSchema({ client }: { client: Client }): Promise<void> {
-  for (const statement of schemaStatements()) await client.execute(statement)
-  await client.execute(`PRAGMA user_version = ${DB_VERSION}`)
+function migrateSchema({ client }: { client: Database }): void {
+  for (const statement of schemaStatements()) client.run(statement)
+  client.run(`PRAGMA user_version = ${DB_VERSION}`)
 }
 
 export async function migrateDb({ dataDir }: { dataDir: string }): Promise<DbError | string> {
-  const file = await prepareDbFile({ dataDir })
+  const file = prepareDbFile({ dataDir })
   if (file instanceof Error) return file
-  const client = createClient({ url: `file:${file}` })
-  const migrated = await migrateSchema({ client }).catch((e) => new DbError({ operation: 'migrate schema', cause: e }))
+  const client = new Database(file)
+  const migrated = errore.try(() => migrateSchema({ client }), (e) => new DbError({ operation: 'migrate schema', cause: e }))
   client.close()
   if (migrated instanceof Error) return migrated
   return file

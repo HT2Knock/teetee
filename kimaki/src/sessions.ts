@@ -552,17 +552,23 @@ async function adoptSession(
     const messages = await oc(bot, 'message.list', (client) => client.message.list({ sessionID: sessionId, order: 'desc', limit: 100 }))
     if (messages instanceof Error) return messages
     // One thread per session: older threads of this session stop following it.
-    const moved = await bot.db
-      .batch([
-        bot.db
-          .delete(schema.thread_sessions)
-          .where(orm.eq(schema.thread_sessions.session_id, sessionId))
-          .returning({ threadId: schema.thread_sessions.thread_id }),
-        bot.db.insert(schema.thread_sessions).values({ thread_id: thread.id, session_id: sessionId, source: 'kimaki' }),
-      ])
-      .catch((cause) => new DbError({ operation: 'move thread_sessions', cause }))
+    const moved = (() => {
+      try {
+        return bot.db.transaction((tx) => {
+          const deleted = tx
+            .delete(schema.thread_sessions)
+            .where(orm.eq(schema.thread_sessions.session_id, sessionId))
+            .returning({ threadId: schema.thread_sessions.thread_id })
+            .all()
+          tx.insert(schema.thread_sessions).values({ thread_id: thread.id, session_id: sessionId, source: 'kimaki' }).run()
+          return deleted
+        })
+      } catch (cause) {
+        return new DbError({ operation: 'move thread_sessions', cause })
+      }
+    })()
     if (moved instanceof Error) return moved
-    return { history: [...messages.data].reverse(), previous: moved[0].map((row) => row.threadId) }
+    return { history: [...messages.data].reverse(), previous: moved.map((row) => row.threadId) }
   })()
   if (prepared instanceof Error) {
     await thread.delete('session adoption failed').catch(() => undefined)
