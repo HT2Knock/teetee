@@ -128,13 +128,15 @@ CLI subcommands talk to the bot through this port, so they need the same `KIMAKI
 
 sqlite preserves state between runs. the database must never have breaking changes: new kimaki versions must keep working with sqlite databases created by older versions. if a change would break this, ask the user whether it is ok to add a startup migration.
 
-- file: `<dataDir>/kimaki.db` (libSQL + Drizzle, `db.ts`). only the bot start migrates (`openDb({ migrate: true })`); subcommands never do.
-- schema: `kimaki/src/schema.ts`. `pnpm generate` inside kimaki writes `src/schema-sql.ts` (idempotent `CREATE ... IF NOT EXISTS`). never edit it by hand.
+- file: `<dataDir>/kimaki.db` (bun:sqlite + Drizzle, `db.ts`). only the bot start migrates (`openDb({ migrate: true })`); subcommands never do.
+- schema: `kimaki/src/schema.ts`. `bun run generate` inside kimaki writes `src/schema-sql.ts` (idempotent `CREATE ... IF NOT EXISTS`). never edit it by hand.
 - all migrations live in `kimaki/src/migrations.ts`. on first start it imports the V1 `discord-sessions.db` read-only into `kimaki.db`; the V1 file is never changed. `PRAGMA user_version` (`DB_VERSION`) marks a kimaki-made `kimaki.db`; an unmarked one next to a V1 file is renamed aside so it cannot block the import.
 
-**new tables**: add to `schema.ts`, run `pnpm generate`. schema-sql handles new and existing installs.
+**new tables**: add to `schema.ts`, run `bun run generate`. schema-sql handles new and existing installs.
 
 **new columns on existing tables**: `IF NOT EXISTS` skips the whole CREATE, so also add an `ALTER TABLE ... ADD COLUMN` in `migrateSchema()` in `migrations.ts`, ignoring the "duplicate column" error. if a generated index uses the new column, run the ALTER **before** the schema statements, otherwise existing DBs crash on startup (`SQLITE_ERROR: no such column`). add a `db.test.ts` case that opens an old-shaped database (see `fixtures/v1-schema.sql`).
+
+kimaki uses bun:sqlite (sync), not libSQL. opening a file that is not a database throws with `code === 'SQLITE_NOTADB'`, and the V1 import reads the old file through `ATTACH DATABASE 'file:<path>?mode=ro'`, so its WAL is never checkpointed.
 
 inline straightforward Drizzle queries (`db.query.*.findFirst`, `db.insert`, `db.update`) at the call site. no repository layer of query wrappers.
 

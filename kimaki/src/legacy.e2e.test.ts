@@ -6,7 +6,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { createClient } from '@libsql/client'
+import { Database } from 'bun:sqlite'
 import { ChannelType } from 'discord.js'
 import { afterAll, beforeAll, expect, test } from 'vitest'
 
@@ -56,20 +56,20 @@ test('bot starts on a V1 database and answers in an old thread with the old sess
   await client.session.wait({ sessionID: session.id })
 
   const schemaSql = fs.readFileSync(path.join(import.meta.dirname, 'fixtures/v1-schema.sql'), 'utf8')
-  const v1 = createClient({ url: `file:${path.join(dataDir, LEGACY_DB_FILE)}` })
-  await v1.executeMultiple(schemaSql)
-  await v1.execute({
-    sql: `INSERT INTO bot_tokens (app_id, token, created_at, bot_mode) VALUES (?, ?, '2025-09-30 15:18:00', 'self-hosted')`,
-    args: [discord.botUserId, discord.botToken],
-  })
-  await v1.execute({
-    sql: `INSERT INTO channel_directories (channel_id, directory, channel_type, created_at) VALUES (?, ?, 'text', '2025-09-30 16:45:03')`,
-    args: [twin.channelId, server.projectDirectory],
-  })
-  await v1.execute({
-    sql: `INSERT INTO thread_sessions (thread_id, session_id, created_at, source) VALUES (?, ?, '2026-10-01 07:15:53', 'kimaki')`,
-    args: [thread.id, session.id],
-  })
+  const v1 = new Database(path.join(dataDir, LEGACY_DB_FILE))
+  v1.run(schemaSql)
+  v1.run(
+    `INSERT INTO bot_tokens (app_id, token, created_at, bot_mode) VALUES (?, ?, '2025-09-30 15:18:00', 'self-hosted')`,
+    [discord.botUserId, discord.botToken],
+  )
+  v1.run(
+    `INSERT INTO channel_directories (channel_id, directory, channel_type, created_at) VALUES (?, ?, 'text', '2025-09-30 16:45:03')`,
+    [twin.channelId, server.projectDirectory],
+  )
+  v1.run(
+    `INSERT INTO thread_sessions (thread_id, session_id, created_at, source) VALUES (?, ?, '2026-10-01 07:15:53', 'kimaki')`,
+    [thread.id, session.id],
+  )
   v1.close()
 
   bot = await startTestBot({ dataDir, twin, server, saveTwinCredentials: false })

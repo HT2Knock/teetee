@@ -16,7 +16,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import { promisify } from 'node:util'
-import { createClient } from '@libsql/client'
+import { Database } from 'bun:sqlite'
 import * as errore from 'errore'
 import prism from 'prism-media'
 import dedent from 'string-dedent'
@@ -502,17 +502,26 @@ function chatGPTAccountId(accessToken: string): string | null {
 // The active (else newest) OpenAI OAuth credential, if not expired. null when OpenCode has none.
 export async function chatGPTCredential({ dbFile, now = Date.now() }: { dbFile: string; now?: number }): Promise<TranscriptionError | ChatGPTCredential | null> {
   if (!fs.existsSync(dbFile)) return null
-  const client = createClient({ url: ':memory:' })
-  const rows = await client
-    .execute({ sql: 'ATTACH DATABASE ? AS opencode', args: [`file:${dbFile}?mode=ro`] })
-    .then(() =>
-      client.execute(`SELECT value FROM opencode.credential WHERE integration_id = 'openai' ORDER BY active DESC, time_updated DESC`),
-    )
-    .catch((cause) => new TranscriptionError({ reason: `reading OpenCode credentials from ${dbFile} failed`, cause }))
-    .finally(() => client.close())
+  const rows = errore.try(
+    () => {
+      const client = new Database(':memory:')
+      try {
+        // mode=ro: OpenCode's own database is read-only here.
+        client.run('ATTACH DATABASE ? AS opencode', [`file:${dbFile}?mode=ro`])
+        return client
+          .query<{ value: unknown }, []>(
+            `SELECT value FROM opencode.credential WHERE integration_id = 'openai' ORDER BY active DESC, time_updated DESC`,
+          )
+          .all()
+      } finally {
+        client.close()
+      }
+    },
+    (cause) => new TranscriptionError({ reason: `reading OpenCode credentials from ${dbFile} failed`, cause }),
+  )
   if (rows instanceof Error) return rows
-  for (const row of rows.rows) {
-    const raw = row['value']
+  for (const row of rows) {
+    const raw = row.value
     const value = typeof raw === 'string' ? errore.try(() => JSON.parse(raw) as unknown, () => null) : null
     if (!isRecord(value) || value['type'] !== 'oauth' || typeof value['access'] !== 'string') continue
     if (typeof value['expires'] === 'number' && value['expires'] <= now + 60_000) {

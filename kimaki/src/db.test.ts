@@ -7,7 +7,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { createClient, type Client } from '@libsql/client'
+import { Database } from 'bun:sqlite'
 import { afterEach, expect, test } from 'vitest'
 
 import { openDb, verbosityFromV1, verbosityToV1 } from './db.ts'
@@ -27,11 +27,11 @@ afterEach(() => {
   }
 })
 
-async function tableNames(client: Client): Promise<string[]> {
-  const rows = await client.execute(
-    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
-  )
-  return rows.rows.map((row) => String(row.name))
+function tableNames(client: Database): string[] {
+  const rows = client
+    .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+    .all()
+  return rows.map((row) => row.name)
 }
 
 function fileHash(file: string): string {
@@ -65,10 +65,10 @@ const V1_ROWS = `
   INSERT INTO part_messages (part_id, message_id, thread_id) VALUES ('prt_1', '1555112336879259999', '1555112336879250001');
 `
 
-async function writeLegacyDb({ dataDir, sql }: { dataDir: string; sql: string }): Promise<string> {
+function writeLegacyDb({ dataDir, sql }: { dataDir: string; sql: string }): string {
   const file = path.join(dataDir, LEGACY_DB_FILE)
-  const legacy = createClient({ url: `file:${file}` })
-  await legacy.executeMultiple(sql)
+  const legacy = new Database(file)
+  legacy.run(sql)
   legacy.close()
   return file
 }
@@ -83,7 +83,7 @@ test('fresh install gets kimaki.db with the kimaki tables; subcommands never cre
 
   const opened = await openDb({ dataDir, migrate: true })
   if (opened instanceof Error) throw opened
-  expect(await tableNames(opened.client)).toMatchInlineSnapshot(`
+  expect(tableNames(opened.client)).toMatchInlineSnapshot(`
     [
       "bot_api_keys",
       "bot_settings",
@@ -111,10 +111,10 @@ test('first start imports the V1 database once and leaves it unchanged', async (
   const schemaSql = fs.readFileSync(path.join(import.meta.dirname, 'fixtures/v1-schema.sql'), 'utf8')
   // Like a real install: WAL mode, rows still in the -wal file, V1 connection open.
   const legacyFile = path.join(dataDir, LEGACY_DB_FILE)
-  const v1 = createClient({ url: `file:${legacyFile}` })
-  await v1.execute('PRAGMA journal_mode = WAL')
-  await v1.execute('PRAGMA wal_autocheckpoint = 0')
-  await v1.executeMultiple(`${schemaSql}\n${V1_ROWS}`)
+  const v1 = new Database(legacyFile)
+  v1.run('PRAGMA journal_mode = WAL')
+  v1.run('PRAGMA wal_autocheckpoint = 0')
+  v1.run(`${schemaSql}\n${V1_ROWS}`)
   const before = { db: fileHash(legacyFile), wal: fileHash(`${legacyFile}-wal`) }
 
   const opened = await openDb({ dataDir, migrate: true })
@@ -226,7 +226,7 @@ test('first start imports the V1 database once and leaves it unchanged', async (
     }
   `)
   // V1-only tables are not copied.
-  expect(await tableNames(opened.client)).not.toContain('part_messages')
+  expect(tableNames(opened.client)).not.toContain('part_messages')
   opened.close()
 
   expect(fs.readdirSync(dataDir).filter((name) => name.startsWith('kimaki')).sort()).toMatchInlineSnapshot(`
@@ -238,8 +238,8 @@ test('first start imports the V1 database once and leaves it unchanged', async (
   `)
 
   // Later starts never import again, even if V1 keeps writing its own file.
-  const later = createClient({ url: `file:${legacyFile}` })
-  await later.execute(`INSERT INTO thread_sessions (thread_id, session_id) VALUES ('1555112336879250003', 'ses_new_in_v1')`)
+  const later = new Database(legacyFile)
+  later.run(`INSERT INTO thread_sessions (thread_id, session_id) VALUES ('1555112336879250003', 'ses_new_in_v1')`)
   later.close()
   const reopened = await openDb({ dataDir, migrate: true })
   if (reopened instanceof Error) throw reopened
@@ -256,24 +256,24 @@ test('a stray kimaki.db without the version marker does not block the V1 import'
     INSERT INTO scheduled_tasks (status, schedule_kind, next_run_at, payload_json, prompt_preview, channel_id, thread_id)
       VALUES ('planned', 'at', '2026-10-05T09:00:00.000Z', '{}', 'orphan', '1422625308523100009', '1555112336879250009');
   `
-  await writeLegacyDb({ dataDir, sql: `${schemaSql}\n${V1_ROWS}\n${orphans}` })
+  writeLegacyDb({ dataDir, sql: `${schemaSql}\n${V1_ROWS}\n${orphans}` })
   // Like a real report: an old kimaki.db not made by this code, in WAL mode.
-  const stray = createClient({ url: `file:${path.join(dataDir, 'kimaki.db')}` })
-  await stray.execute('PRAGMA journal_mode = WAL')
-  await stray.execute('PRAGMA wal_autocheckpoint = 0')
-  await stray.execute(`CREATE TABLE notes (text TEXT)`)
-  await stray.execute(`INSERT INTO notes VALUES ('keep me')`)
+  const stray = new Database(path.join(dataDir, 'kimaki.db'))
+  stray.run('PRAGMA journal_mode = WAL')
+  stray.run('PRAGMA wal_autocheckpoint = 0')
+  stray.run(`CREATE TABLE notes (text TEXT)`)
+  stray.run(`INSERT INTO notes VALUES ('keep me')`)
   stray.close()
 
   const opened = await openDb({ dataDir, migrate: true })
   if (opened instanceof Error) throw opened
   const bots = await opened.db.query.bot_tokens.findMany({ orderBy: { app_id: 'asc' } })
-  const version = await opened.client.execute('PRAGMA user_version')
+  const version = opened.client.query<{ user_version: number }, []>('PRAGMA user_version').get()
   const agents = await opened.db.query.channel_agents.findMany()
   const tasks = await opened.db.query.scheduled_tasks.findMany({ orderBy: { id: 'asc' } })
   expect({
     bots: bots.map((row) => row.app_id),
-    version: version.rows[0]?.[0],
+    version: version?.user_version,
     agents: agents.length,
     tasks: tasks.map((row) => ({ preview: row.prompt_preview, channel: row.channel_id, thread: row.thread_id })),
   }).toMatchInlineSnapshot(`
@@ -303,8 +303,8 @@ test('a stray kimaki.db without the version marker does not block the V1 import'
   // The stray file is renamed, never deleted, and keeps its rows.
   const aside = fs.readdirSync(dataDir).filter((name) => name.startsWith('kimaki.db.unknown-') && !name.endsWith('-wal') && !name.endsWith('-shm'))
   expect(aside).toHaveLength(1)
-  const kept = createClient({ url: `file:${path.join(dataDir, aside[0] ?? '')}` })
-  expect((await kept.execute('SELECT text FROM notes')).rows.map((row) => row.text)).toEqual(['keep me'])
+  const kept = new Database(path.join(dataDir, aside[0] ?? ''))
+  expect(kept.query<{ text: string }, []>('SELECT text FROM notes').all().map((row) => row.text)).toEqual(['keep me'])
   kept.close()
 
   // The next start keeps the marked kimaki.db.
@@ -316,7 +316,7 @@ test('a stray kimaki.db without the version marker does not block the V1 import'
 
 test('a kimaki.db that is not an SQLite file is set aside before the V1 import', async () => {
   const dataDir = tempDataDir()
-  await writeLegacyDb({ dataDir, sql: `CREATE TABLE bot_tokens (app_id TEXT PRIMARY KEY, token TEXT NOT NULL); INSERT INTO bot_tokens VALUES ('1422625037164350001', 'fake-token');` })
+  writeLegacyDb({ dataDir, sql: `CREATE TABLE bot_tokens (app_id TEXT PRIMARY KEY, token TEXT NOT NULL); INSERT INTO bot_tokens VALUES ('1422625037164350001', 'fake-token');` })
   fs.writeFileSync(path.join(dataDir, 'kimaki.db'), 'not a database, just text that is long enough to have a header'.repeat(10))
   const opened = await openDb({ dataDir, migrate: true })
   if (opened instanceof Error) throw opened
@@ -328,7 +328,7 @@ test('a kimaki.db that is not an SQLite file is set aside before the V1 import',
 test('a V1 database from an older version imports with defaults for missing columns', async () => {
   const dataDir = tempDataDir()
   // Early V1 shape: no source/updated_at on thread_sessions, no bot_mode columns.
-  await writeLegacyDb({
+  writeLegacyDb({
     dataDir,
     sql: `
       CREATE TABLE thread_sessions (thread_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);

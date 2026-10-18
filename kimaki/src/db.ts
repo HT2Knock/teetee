@@ -1,4 +1,4 @@
-// SQLite access through Drizzle + libSQL, file <dataDir>/kimaki.db. Only the
+// SQLite access through Drizzle + bun:sqlite, file <dataDir>/kimaki.db. Only the
 // bot start opens with migrate: true (migrations.ts: V1 import + schema).
 // Subcommands open without migrating and fail with DbNotMigratedError when the
 // file or a table is missing; they never create the file, so the next bot
@@ -6,17 +6,17 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { createClient, type Client } from '@libsql/client'
+import { Database } from 'bun:sqlite'
 import * as orm from 'drizzle-orm'
 import * as errore from 'errore'
-import { drizzle } from 'drizzle-orm/libsql'
+import { drizzle } from 'drizzle-orm/bun-sqlite'
 import * as s from 'drizzle-orm/sqlite-core'
 
 import { DbError, DbNotMigratedError } from './errors.ts'
 import { DB_FILE, migrateDb } from './migrations.ts'
 import * as schema from './schema.ts'
 
-function createDrizzle(client: Client) {
+function createDrizzle(client: Database) {
   return drizzle({ client, schema, relations: schema.relations })
 }
 
@@ -24,7 +24,7 @@ export type KimakiDb = ReturnType<typeof createDrizzle>
 
 export type OpenedDb = {
   db: KimakiDb
-  client: Client
+  client: Database
   close: () => void
 }
 
@@ -56,13 +56,16 @@ export async function openDb({
     if (migrated instanceof Error) return migrated
   }
   if (!fs.existsSync(dbPath({ dataDir }))) return new DbNotMigratedError({ missing: DB_FILE })
-  const client = createClient({ url: `file:${dbPath({ dataDir })}` })
-  const setup = await (async () => {
-    await client.execute('PRAGMA journal_mode = WAL')
-    await client.execute('PRAGMA busy_timeout = 5000')
-    const rows = await client.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
-    return new Set(rows.rows.map((row) => String(row.name)))
-  })().catch((e) => new DbError({ operation: 'open', cause: e }))
+  const client = new Database(dbPath({ dataDir }))
+  const setup = errore.try(
+    () => {
+      client.run('PRAGMA journal_mode = WAL')
+      client.run('PRAGMA busy_timeout = 5000')
+      const rows = client.query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type = 'table'").all()
+      return new Set(rows.map((row) => row.name))
+    },
+    (e) => new DbError({ operation: 'open', cause: e }),
+  )
   if (setup instanceof Error) {
     client.close()
     return setup

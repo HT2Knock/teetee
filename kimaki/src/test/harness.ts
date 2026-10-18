@@ -15,7 +15,7 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { createClient } from '@libsql/client'
+import { Database } from 'bun:sqlite'
 import { OpenCode, type OpenCodeClient } from '@opencode/client'
 import { Service } from '@opencode/client/service'
 import { ChannelType, ComponentType, type APIMessage } from 'discord.js'
@@ -781,12 +781,12 @@ export async function startFakeChatGPT({ text }: { text: string }): Promise<Fake
 
 // An OpenCode database with only the credential table and one ChatGPT OAuth row.
 export async function writeOpencodeCredential({ file, access, expires }: { file: string; access: string; expires: number }) {
-  const client = createClient({ url: `file:${file}` })
-  await client.execute('CREATE TABLE credential (id text PRIMARY KEY, integration_id text, label text NOT NULL, value text NOT NULL, connector_id text, method_id text, active integer, time_created integer NOT NULL, time_updated integer NOT NULL)')
-  await client.execute({
-    sql: `INSERT INTO credential (id, integration_id, label, value, time_created, time_updated) VALUES ('cred_test', 'openai', 'OAuth', ?, 0, 0)`,
-    args: [JSON.stringify({ type: 'oauth', methodID: 'chatgpt-browser', access, refresh: 'refresh-test', expires })],
-  })
+  const client = new Database(file)
+  client.run('CREATE TABLE credential (id text PRIMARY KEY, integration_id text, label text NOT NULL, value text NOT NULL, connector_id text, method_id text, active integer, time_created integer NOT NULL, time_updated integer NOT NULL)')
+  client.run(
+    `INSERT INTO credential (id, integration_id, label, value, time_created, time_updated) VALUES ('cred_test', 'openai', 'OAuth', ?, 0, 0)`,
+    [JSON.stringify({ type: 'oauth', methodID: 'chatgpt-browser', access, refresh: 'refresh-test', expires })],
+  )
   client.close()
 }
 
