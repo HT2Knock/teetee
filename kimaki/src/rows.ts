@@ -192,29 +192,26 @@ export function toDbDate(value: Date): string {
 // INSERT ... ON CONFLICT(key) DO UPDATE for exactly the given columns, with
 // every value bound. Column and table names come from code, never from data.
 // Used where the column set is built at runtime (keys a user did or did not
-// pass); a fixed set reads better as a plain tagged template.
+// pass); a fixed set reads better as a plain tagged template. `values` needs at
+// least one entry, so the column list is never empty.
 export function upsert({
   db,
   table,
   key,
   values,
-  updatedAt,
 }: {
   db: SQL
   table: string
   key: { column: string; value: string }
   values: Record<string, string | number | null | Date | undefined>
-  updatedAt?: Date
 }): SQL.Query<unknown[]> {
   const entries = Object.entries(values).filter(([, value]) => value !== undefined)
   const columns = entries.map(([column]) => column)
   const inserted = entries.map(([, value]) => (value instanceof Date ? toDbDate(value) : value))
-  const assigned = [...inserted, ...(updatedAt ? [toDbDate(updatedAt)] : [])]
-  const sets = [...columns, ...(updatedAt ? ['updated_at'] : [])]
   return db.unsafe(
     `INSERT INTO ${table} (${key.column}, ${columns.join(', ')}) VALUES (?, ${columns.map(() => '?').join(', ')})
-     ON CONFLICT(${key.column}) DO UPDATE SET ${sets.map((column) => `${column} = ?`).join(', ')}`,
-    [key.value, ...inserted, ...assigned],
+     ON CONFLICT(${key.column}) DO UPDATE SET ${columns.map((column) => `${column} = ?`).join(', ')}`,
+    [key.value, ...inserted, ...inserted],
   )
 }
 
