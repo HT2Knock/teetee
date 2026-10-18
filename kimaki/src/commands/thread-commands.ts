@@ -14,7 +14,7 @@ import {
   type ChatInputCommandInteraction,
 } from 'discord.js'
 import * as errore from 'errore'
-import dedent from 'string-dedent'
+import dedent from 'dedent'
 
 import { oc, type Bot } from '../bot.ts'
 import { ConfigError, DiscordError } from '../errors.ts'
