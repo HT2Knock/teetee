@@ -2,7 +2,7 @@
 // product events one Kimaki thread produces, for the root and its subagents.
 
 import type { V2Event } from '@opencode/client'
-import { expect, test } from 'vitest'
+import { expect, test } from 'bun:test'
 
 import { foldAnalytics, type AnalyticsEvent, type UsageState } from './analytics.ts'
 import { eventSessionId } from './thread-reducer.ts'

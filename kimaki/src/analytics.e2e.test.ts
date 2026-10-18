@@ -5,7 +5,7 @@
 
 import fs from 'node:fs'
 import http from 'node:http'
-import { afterAll, beforeAll, expect, test } from 'vitest'
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import { createAnalytics } from './analytics.ts'
 import type { BotHandle } from './main.ts'

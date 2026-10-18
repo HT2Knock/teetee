@@ -6,7 +6,7 @@
 import fs from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { DeterministicMatcher } from 'opencode-deterministic-provider'
-import { afterAll, beforeAll, expect, test } from 'vitest'
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
 import {

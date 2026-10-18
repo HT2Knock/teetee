@@ -1,7 +1,7 @@
 // Dynamic slash command names: Discord allows lowercase [a-z0-9-] names of
 // at most 32 chars and 100 commands per guild.
 
-import { expect, test } from 'vitest'
+import { expect, test } from 'bun:test'
 
 import { buildCommands, createInteractionRegistry } from './slash-commands.ts'
 

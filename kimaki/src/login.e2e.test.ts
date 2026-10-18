@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import path from 'node:path'
-import { afterAll, beforeAll, expect, test } from 'vitest'
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 import type { BotHandle } from './main.ts'
 import { cliCommand, TEST_USER_ID, seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitFor, waitForSelectMenu, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
 

@@ -1,7 +1,7 @@
 // Pure scheduling: the next run of cron tasks, --send-at and sleep wake
 // times at a clock time, and the V1 task payload (spec 17, 30 Phase 8).
 
-import { expect, test } from 'vitest'
+import { expect, test } from 'bun:test'
 
 import { decodeTaskPayload, encodeTaskPayload, nextCronRun, nextRunOf, parseSendAt } from './scheduler.ts'
 import { parseWakeAt } from './sleeps.ts'
@@ -94,9 +94,9 @@ test('V1 task payloads decode to the send input of each run and encode back unch
   expect(encoded).toEqual([thread, channel])
   const empty = { ...channel, name: '', agent: '', model: '', userId: '', parentSessionId: '', permissions: [], cwd: '', baseBranch: '' }
   const emptyJob = decodeTaskPayload(JSON.stringify(empty))
-  if (emptyJob instanceof Error) return expect.fail(emptyJob.message)
+  if (emptyJob instanceof Error) throw new Error(emptyJob.message)
   const rewritten = encodeTaskPayload({ ...emptyJob, allowConcurrency: false })
-  if (rewritten instanceof Error) return expect.fail(rewritten.message)
+  if (rewritten instanceof Error) throw new Error(rewritten.message)
   expect(JSON.parse(rewritten)).toMatchInlineSnapshot(`
     {
       "agent": "",

@@ -6,13 +6,13 @@ always load the `changesets` skill before fixing bugs or adding features. User-f
 
 never use `spawnSync` or `execSync`. use async `execFile` (`promisify(execFile)`) or `spawn` from `node:child_process`, with a timeout.
 
-after changes to message handling, queueing or the reducer run the full test suite inside `kimaki`: `bun run test -u`, then inspect snapshot updates in git diff. for one file, use `bun run test src/example.test.ts`. `bun run test` runs vitest once (no watch): it starts the bot and every CLI child process from source on bun, so a green run proves the bun path.
+after changes to message handling, queueing or the reducer run the full test suite inside `kimaki`: `bun run test -u`, then inspect snapshot updates in git diff. for one file, use `bun run test src/example.test.ts`. `bun run test` runs the suite with `bun test` (no watch): it starts the bot and every CLI child process from source on bun, so a green run proves the bun path.
 
-each kimaki e2e test file starts its own OpenCode server (~400 MB). `kimaki/vitest.config.ts` caps parallel files at a third of the CPUs; override with `KIMAKI_TEST_WORKERS`. other agents may run suites at the same time, so run single files while iterating and the full suite once at the end. timeouts in a full run on a loaded machine may be load-related: rerun the failing file alone before debugging.
+each kimaki e2e test file starts its own OpenCode server (~400 MB). `scripts/run-tests.ts` caps parallel files at a third of the CPUs (`bun test --parallel`); override with `KIMAKI_TEST_WORKERS`. other agents may run suites at the same time, so run single files while iterating and the full suite once at the end. timeouts in a full run on a loaded machine may be load-related: rerun the failing file alone before debugging.
 
 kimaki CLI startup must stay light (~0.06s, ~70 MB): agents and tests call `kimaki` many times. `kimaki/src/cli/*.ts` must not import SQLite (`db.ts`, `schema.ts`, `credentials.ts`, `project.ts`, `voice.ts`) or `discord.js` at top level; `await import()` them inside the actions that need them. use `discord-api-types/v10` for enums like `ChannelType`.
 
-kimaki runs on bun only. anything that spawns a kimaki entrypoint goes through `src/runtime.ts` (`entryArgv`, `evalArgv`, `runtimeExecutable`): bun runs typescript directly, so there is no loader to add. never write `process.execPath` by hand in a spawn. e2e tests use `cliCommand()` from `src/test/harness.ts`, and `kimaki status` reports the runtime. `bun run test` inside `kimaki` runs the suite; `vitest.config.ts` inlines dependencies whose import breaks on bun.
+kimaki runs on bun only. anything that spawns a kimaki entrypoint goes through `src/runtime.ts` (`entryArgv`, `evalArgv`, `runtimeExecutable`): bun runs typescript directly, so there is no loader to add. never write `process.execPath` by hand in a spawn. e2e tests use `cliCommand()` from `src/test/harness.ts`, and `kimaki status` reports the runtime. `bun run test` inside `kimaki` runs the suite with `bun test`; `bunfig.toml` preloads the test env and excludes `dist/`.
 
 for checkout validation requests, prefer non-recursive checks unless the user asks otherwise.
 
@@ -198,7 +198,7 @@ thread events (root, subagents and `kimaki.*` internal events) are recorded in `
 anonymous install-level product events go to Strada via `kimaki/src/analytics.ts` (`bot_started`, `project_registered`, `session_created`, `turn_started`, `turn_completed`, `tokens_used`). no Discord IDs, paths, prompts, or secrets. metrics are **active installs**, not people. `tokens_used` sums `session.step.ended` and `session.step.failed` usage per execution (root and subagents), then emits on success, failure or interruption. executions not observed from their start are skipped after a bot restart.
 
 - prod project slug: `kimaki`
-- disable: `kimaki --no-analytics` or `KIMAKI_STRADA_ENABLED=0`. off under vitest.
+- disable: `kimaki --no-analytics` or `KIMAKI_STRADA_ENABLED=0`. off under tests.
 - query with `strada` CLI; login as the org owner (t.de Google account)
 
 full event schema, DAU/WAU/MAU, funnels, retention, completion rate, and copy-paste SQL: `docs/strada-product-analytics.md`.
@@ -400,8 +400,8 @@ always add `expect(await discord.thread(id).text()).toMatchInlineSnapshot()` (or
 - matchers that emit `tool-call` parts run **real tools** (for example `shell` + `sleep`). do not use long sleeps. prefer part delays for timing windows.
 - scope every matcher with an explicit marker in the latest user text. broad matchers cascade across unrelated turns, and matching the full history re-fires old markers after an abort and retry.
 - prefer content-aware polling ("does this user message have a bot reply after it?") over message counts. error messages from interrupted runs satisfy counts early.
-- test logs are suppressed by default (`KIMAKI_VITEST=1` in vitest.config.ts). rerun one test with `KIMAKI_TEST_LOGS=1` to see logger output, e.g. `KIMAKI_TEST_LOGS=1 pnpm run test --run src/queue.e2e.test.ts`.
-- if an e2e test file takes more than **~10 seconds**, split it so vitest parallelizes across files.
+- test logs are suppressed by default (`KIMAKI_TEST=1`, set by `bunfig.toml`). rerun one test with `KIMAKI_TEST_LOGS=1` to see logger output, e.g. `KIMAKI_TEST_LOGS=1 bun run test src/queue.e2e.test.ts`.
+- if an e2e test file takes more than **~10 seconds**, split it so bun test parallelizes across files.
 
 ## ai sdk provider stream protocol (v3)
 

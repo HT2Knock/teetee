@@ -1,6 +1,6 @@
 // One snapshot per V2 tool shape, with visibility at both verbosities.
 
-import { expect, test } from 'vitest'
+import { expect, test } from 'bun:test'
 
 import { formatToolFailed, formatToolLine, isToolVisible, type ToolCall } from './format-parts.ts'
 

@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest'
+import { expect, test } from 'bun:test'
 import { rewriteSubscriptionRequest } from './index.ts'
 
 // Regression: OpenCode's exact <env> block made Anthropic bill subscription requests as third-party usage.
@@ -26,11 +26,13 @@ test('subscription rewrite adds the identity first and re-wraps the OpenCode env
         "cache_control": {
           "type": "ephemeral",
         },
-        "text": "<environment>
+        "text": 
+    "<environment>
       Working directory: /repo
       Is directory a git repo: yes
     </environment>
-    more",
+    more"
+    ,
         "type": "text",
       },
     ]

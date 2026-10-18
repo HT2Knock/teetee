@@ -1,6 +1,6 @@
 // Every text input shape and the Route it becomes (spec 9.4).
 
-import { expect, test } from 'vitest'
+import { expect, test } from 'bun:test'
 
 import { parseTextMessage } from './routes.ts'
 
@@ -49,8 +49,7 @@ test('suffixes, shell and commands', () => {
         "kind": "steer",
         "text": "fix the test",
       },
-      "fix the test
-    queue": {
+      "fix the test\\nqueue": {
         "kind": "queue",
         "text": "fix the test",
       },
@@ -63,8 +62,7 @@ test('suffixes, shell and commands', () => {
         "text": "hello btw",
       },
       "queue": null,
-      "what is this
-    btw": {
+      "what is this\\nbtw": {
         "kind": "btw",
         "text": "what is this",
       },

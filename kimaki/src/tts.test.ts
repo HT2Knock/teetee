@@ -2,7 +2,7 @@
 // HTTP servers: the real requests and response parsing run, no network.
 
 import http from 'node:http'
-import { afterAll, beforeAll, expect, test } from 'vitest'
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import { freePort } from './test/harness.ts'
 import { generateSpeech } from './voice.ts'

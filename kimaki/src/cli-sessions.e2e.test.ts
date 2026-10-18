@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process'
 import os from 'node:os'
 import { eq } from 'drizzle-orm'
 import { promisify } from 'node:util'
-import { afterAll, beforeAll, expect, test } from 'vitest'
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import { openDb } from './db.ts'
 import type { BotHandle } from './main.ts'

@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, expect, test } from 'vitest'
+import { afterEach, expect, test } from 'bun:test'
 
 import { createWorktree, deleteWorktree, git, listWorktrees, mergeWorktree, resolveWorkingDirectory } from './worktrees.ts'
 

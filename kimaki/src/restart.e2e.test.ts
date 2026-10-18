@@ -2,7 +2,7 @@
 // continues the session of an existing thread.
 
 import fs from 'node:fs'
-import { afterAll, beforeAll, expect, test } from 'vitest'
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
 import {
@@ -70,7 +70,7 @@ test('restarted bot continues the session of an existing thread', async () => {
     -# *project ⋅ main ⋅ Ns ⋅ deterministic-v2*"
   `)
   const rows = await bot.db.query.thread_sessions.findMany()
-  expect(rows.map((row) => row.session_id)).toEqual([binding?.session_id])
+  expect(rows.map((row) => row.session_id)).toEqual([binding!.session_id])
   const client = await server.client()
   const messages = await client.message.list({ sessionID: binding!.session_id })
   expect(messages.data.filter((message) => message.type === 'user').length).toBe(2)
