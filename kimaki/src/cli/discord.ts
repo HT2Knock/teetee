@@ -5,7 +5,7 @@ import path from 'node:path'
 import { ChannelType } from 'discord-api-types/v10'
 import { wrapJsonSchema, type Goke } from 'goke'
 
-import dedent from 'dedent'
+import dedent from 'string-dedent'
 
 import { callBot } from '../lock-server.ts'
 import { action, DATA_DIR_HELP, dataDirOrDefault, discordApi, fail, isThread, printRows, SESSION_HELP, targetOrEnv } from './shared.ts'

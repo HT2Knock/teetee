@@ -19,7 +19,7 @@ import { promisify } from 'node:util'
 import { Database } from 'bun:sqlite'
 import * as errore from 'errore'
 import prism from 'prism-media'
-import dedent from 'dedent'
+import dedent from 'string-dedent'
 import {
   ActionRowBuilder,
   MessageFlags,

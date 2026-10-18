@@ -2,7 +2,7 @@
 // session (spec 5.4, section 26 #3) and a short per-turn <discord-user> block
 // the plugin adds to every Kimaki prompt from its metadata (turnContext()).
 
-import dedent from 'dedent'
+import dedent from 'string-dedent'
 import { z } from 'zod'
 
 export const INSTRUCTION_KEY = 'kimaki'
@@ -783,10 +783,6 @@ function voiceCallReference({
   const userList = users.map((user) => `- ${user.username} (Discord ID ${user.id})`).join('\n')
   const projectList = projects.map((project) => `- #${project.channelName}: channel ${project.channelId}, folder ${project.directory}`).join('\n')
   const agentList = agents.map((agent) => `- ${agent.name}${agent.description ? `: ${agent.description}` : ''}`).join('\n')
-  // How to write an apostrophe inside a single-quoted shell word: close the
-  // quote, escape one apostrophe, open the quote again. String.raw keeps the
-  // text as written, and dedent leaves an interpolated value alone.
-  const apostrophe = String.raw`'\''`
   const base = dedent`
     ## users in the call
 
@@ -835,7 +831,7 @@ function voiceCallReference({
     - --wait plus background: true is the default for every kimaki send. The shell tool returns at once, so the call goes on. When the thread finishes you get a <background-command> message with its transcript. You are notified and get the result in one step, so you can tell the users what the thread they just started did without running more commands.
     - Always pass every user of the call with --user, as above, so they see the new thread.
     - The thread has no memory of this call. Put every detail the user said in the prompt.
-    - Put single quotes around --prompt and other literal arguments, so the shell does not run backticks or expand $ in them. Write an apostrophe inside the prompt as ${apostrophe}.
+    - Put single quotes around --prompt and other literal arguments, so the shell does not run backticks or expand $ in them. Write an apostrophe inside the prompt as '\\''.
     - When the user asks to create a session or thread, that request is for you: kimaki send is what creates it. The prompt holds only the work itself. Never write "create a session" or "start a thread" in the prompt, or the new thread starts another one.
       User: "start a session in the website project to fix the signup link"
       You: kimaki send --channel <website channel ID> --prompt 'Fix the broken signup link on the website. ...' ${userArgs} --wait
