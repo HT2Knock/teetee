@@ -17,49 +17,50 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: pnpm/action-setup@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          version: 9.15.9
+          bun-version: 1.4.x
 
+      # Node is only for dependency lifecycle scripts (@opencode/cli runs
+      # `node ./postinstall.mjs`). The bot and the CLI run on Bun.
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       # Submodules have dist/ gitignored so they need to be built after checkout.
       # libsqlproxy is a workspace package that also needs building (exports from dist/).
       - name: Build workspace packages with dist/ exports
         run: |
-          pnpm --filter errore run build
-          pnpm --filter traforo run build
-          pnpm --filter opencode-injection-guard run build
-          pnpm --filter libsqlproxy run build
-          pnpm --filter @kimaki/realtime run build
+          bun run --filter errore build
+          bun run --filter traforo build
+          bun run --filter opencode-injection-guard build
+          bun run --filter libsqlproxy build
+          bun run --filter @kimaki/realtime build
 
       - name: Generate Prisma + SQL (discord-digital-twin)
-        run: pnpm generate
+        run: bun run generate
         working-directory: discord-digital-twin
 
       - name: Generate SQL (kimaki)
-        run: pnpm generate
+        run: bun run generate
         working-directory: kimaki
 
       - name: Build discord-digital-twin
-        run: pnpm build
+        run: bun run build
         working-directory: discord-digital-twin
 
       # The bot loads plugins from dist/ even when tests run from src/.
       - name: Build kimaki
-        run: pnpm build
+        run: bun run build
         working-directory: kimaki
 
-      # --retry 3: some e2e tests have timing sensitivity on CI hardware
+      # --retry=3: some e2e tests have timing sensitivity on CI hardware
       # (question tool cleanup races, reply ordering under slower I/O).
       - name: Run tests
-        run: pnpm run test --run --retry 3
+        run: bun run test -- --retry=3
         working-directory: kimaki
         env:
           NODE_ENV: test

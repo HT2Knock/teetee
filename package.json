@@ -1,10 +1,13 @@
 {
   "name": "root",
   "private": true,
-  "packageManager": "pnpm@9.15.9",
+  "workspaces": [
+    "./*",
+    "./traforo/website"
+  ],
   "scripts": {
-    "prepare": "pnpm -r --filter errore --filter libsqlproxy --filter opencode-injection-guard --filter traforo --filter fly-admin --filter profano --filter sigillo --filter discord-slack-bridge run build",
-    "test": "pnpm --filter kimaki run test"
+    "prepare": "bun run --filter errore --filter libsqlproxy --filter opencode-injection-guard --filter traforo --filter @fly.io/sdk --filter discord-slack-bridge build",
+    "test": "bun run --filter kimaki test"
   },
   "devDependencies": {
     "oxfmt": "^0.24.0",
@@ -22,23 +25,8 @@
     "string-dedent": "^3.0.2",
     "tiny-jsonc": "^1.0.2"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@discordjs/opus",
-      "@opencode/cli"
-    ],
-    "overrides": {},
-    "packageExtensions": {
-      "@holocron.so/vite": {
-        "peerDependencies": {
-          "spiceflow": "*"
-        }
-      },
-      "spiceflow": {
-        "peerDependencies": {
-          "vite": "*"
-        }
-      }
-    }
-  }
+  "trustedDependencies": [
+    "@discordjs/opus",
+    "@opencode/cli"
+  ]
 }
