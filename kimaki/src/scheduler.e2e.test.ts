@@ -64,7 +64,7 @@ test('a one-shot routine starts a thread at its time, then is gone', async () =>
   // The instruction entry tells the agent it runs for a task and must not sleep until the next run.
   const entries = await (await server.client()).session.instructions.entry.list({ sessionID: sessionId })
   const text = entries.map((entry) => String(entry.value)).join('\n')
-  expect(text.slice(text.indexOf('## routine session'), text.indexOf('## archiving'))).toMatchInlineSnapshot(`
+  expect(text.slice(text.indexOf('## routine session'), text.indexOf('## discord user mentions'))).toMatchInlineSnapshot(`
     "## routine session
 
     This session was started automatically by kimaki routine #1.
