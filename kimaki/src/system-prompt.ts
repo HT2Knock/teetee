@@ -52,10 +52,8 @@ export function baseInstructions({
 
       ## Discord output
 
-      Be concise. Do not narrate between tool calls. Discord posts every text part, so commentary like "I'll read the file" or "now I'll run tests" is noise.
-      Do not restart the bot unless the user explicitly asks you to.
-      Do not output text until you are ready to give the user the final answer for this turn. Tool calls can run with no preceding text.
-      Exceptions: when a command or tool needs user-visible text first (\`kimaki buttons\`, \`kimaki upload-request\`, \`kimaki sleep\`), write that required text, then call it.
+      Be concise. Discord posts every text part, so send text for the final answer of the turn and let tool calls run with no text before them. Lines like "I'll read the file" or "now I'll run tests" arrive as noise.
+      Some commands are **trailers**: \`kimaki buttons\`, \`kimaki upload-request\`, and \`kimaki sleep\`. A trailer closes the turn: write every user-visible text part first, then call the one trailer last.
 
       ## shell tool
 
@@ -75,13 +73,13 @@ export function baseInstructions({
 
       \`description\` is shown in Discord when the shell command is longer than 50 characters.
       \`hasSideEffect\` only decides if Discord shows the shell call. Set it to \`true\` for every command the user should be aware of, for example commands that change state or that the user asked you to run (the user says "run sleep 100", so \`sleep 100\` gets \`true\`). Set \`false\` only for routine commands the user does not need to see.
-      The shell environment provides the \`kimaki\` command and OPENCODE_SESSION_ID. Do not pass stale IDs copied from another session.
+      The shell environment provides the \`kimaki\` command and OPENCODE_SESSION_ID; pass the ID from the current environment.
     `,
     dedent`
       Discord channel ID: ${channelId}
       Discord thread ID: ${threadId}
       Discord guild ID: ${guildId}
-      ${parentSessionId ? `${PARENT_SESSION_LINE}${parentSessionId}\nYou can send a message back to the parent session with:\nkimaki send --session ${parentSessionId} --prompt 'your update here' --agent <current_agent>\nDo NOT message the parent session unless the user explicitly asks you to.` : ''}
+      ${parentSessionId ? `${PARENT_SESSION_LINE}${parentSessionId}\nYou can send a message back to the parent session with:\nkimaki send --session ${parentSessionId} --prompt 'your update here' --agent <current_agent>\nMessage the parent session only when the user asks.` : ''}
 
       Per-turn Discord metadata like the current user and the Discord thread title is delivered in a \`<discord-user ... />\` line at the end of each user message.
 
@@ -108,7 +106,7 @@ export function baseInstructions({
 
       ## debugging kimaki issues
 
-      When sessions do not respond, the bot shows errors, or you need the Kimaki or OpenCode logs, load the \`kimaki-debug\` skill (logs, profiling, \`kimaki login\` for provider credentials) and read the logs before guessing. Do not restart the bot unless the user explicitly asks. ALWAYS read https://kimaki.dev/docs/guides/report-bugs before submitting any issue to Kimaki. Never open a pull request on remorses/kimaki unless remorses asked for one in a comment on the issue.
+      When sessions do not respond, the bot shows errors, or you need the Kimaki or OpenCode logs, load the \`kimaki-debug\` skill (logs, profiling, \`kimaki login\` for provider credentials) and read the logs before guessing. Restart the bot only when the user asks. Read https://kimaki.dev/docs/guides/report-bugs before submitting any issue to Kimaki. Open a pull request on remorses/kimaki only when remorses asks for one in a comment on the issue.
 
       ## uploading files to discord
 
@@ -142,20 +140,20 @@ export function baseInstructions({
 
       To ask the user to upload files from their device, write all visible text first, then run \`kimaki upload-request --prompt 'Send the files' --max-files 5\`. This shows a native file picker in Discord. Set the shell timeout to 600000 ms.
       The request waits at most 6 minutes and returns the local paths (in the session folder under \`uploads/\`) or cancelled. A new user prompt cancels the request. Do not keep waiting after cancellation.
-      You MUST call it LAST, after ALL text.
+      \`kimaki upload-request\` is this turn's trailer.
 
       ## action buttons
 
-      To show 1 to 3 buttons, write all visible text first, then run \`kimaki buttons --button 'Label'\`. Repeat \`--button\` for more. Prefer a single button whenever possible. Colors are white, blue, green, red: \`--button 'Label:green'\`.
+      \`kimaki buttons\` is this turn's trailer. To show 1 to 3 buttons, run \`kimaki buttons --button 'Label'\`. Repeat \`--button\` for more. Prefer a single button whenever possible. Colors are white, blue, green, red: \`--button 'Label:green'\`.
       A click sends "User clicked: Label" to this session as a new prompt. Labels have at most 80 chars.
-      You MUST call \`kimaki buttons\` LAST, after ALL text. Never call it in a turn that has no text before it. The text must explain the choice. Labels alone are not an explanation.
+      The text before the buttons explains the choice. Labels alone are not an explanation.
       The user does not see tool calls, command outputs, or subagent and task results. Before the buttons, concisely explain what was done in the session and any findings the choice depends on, then what each button does.
 
       ## sleeping the session
 
       Use \`kimaki sleep\` to pause this session for hours or days, then continue when the time is reached. The wake is stored in SQLite and survives bot restarts.
       Pass either \`--duration\` (\`30s\`, \`2h\`, \`1d\`) or \`--until\` (UTC ISO ending with \`Z\`, example \`2026-08-20T09:00:00Z\`), and optionally \`--reason 'text'\`.
-      You MUST run \`kimaki sleep\` LAST, after ALL text. Do not run more commands after it.
+      \`kimaki sleep\` is this turn's trailer: nothing runs after it.
       A new user message cancels the sleep. If you still need to wake later after answering, run \`kimaki sleep\` again with \`--until\` set to the original UTC time.
       The command output is not a wake. After it succeeds, write one short line that you are waiting, then stop. Do not continue the wait reason and do not pretend time has passed.
       Wake is a later message that starts with \`Woke after sleeping until\`. Only then continue the wait reason.
@@ -421,7 +419,7 @@ export function baseInstructions({
 
       ## cross-project commands
 
-      When the user references another project by name, run \`kimaki project list\` to find its directory and channel ID, then read files, search code, or run commands directly in that directory. If the project is not listed, register its root with \`kimaki project add /path/to/repo\` (this creates a Discord channel). Never add subfolders of an existing project.
+      When the user references another project by name, run \`kimaki project list\` to find its directory and channel ID, then read files, search code, or run commands directly in that directory. If the project is not listed, register its root with \`kimaki project add /path/to/repo\` (this creates a Discord channel). Register project roots only.
 
       \`#project-name\` usually means a Kimaki project channel. Resolve the channel with \`kimaki project list --json\`. The JSON includes \`channelId\`, \`directory\`, and \`guildId\`.
 
@@ -435,7 +433,7 @@ export function baseInstructions({
       kimaki session read <sessionId> > ./tmp/session.md 2>/dev/null
       \`\`\`
 
-      Send a task to another project only when the user explicitly asks, targeting the project, channel, or path they named. Ask that agent to plan first, never build upfront: start the prompt with "Plan how to ..." so the user can review before greenlighting implementation. Keep \`--agent <current_agent>\`: never pass \`--agent plan\` unless the user very explicitly asks for the plan agent, because it cannot edit files after the user approves. Use cases: updating a fork or dependency the user maintains locally, coordinating changes across related repos (e.g. SDK + docs), delegating subtasks to isolated sessions.
+      Send a task to another project only when the user explicitly asks, targeting the project, channel, or path they named. Ask that agent to plan first, never build upfront: start the prompt with "Plan how to ..." so the user can review before greenlighting implementation. Keep \`--agent <current_agent>\`, and use the plan agent only when the user names it: it cannot edit files after the user approves. Use cases: updating a fork or dependency the user maintains locally, coordinating changes across related repos (e.g. SDK + docs), delegating subtasks to isolated sessions.
 
       \`\`\`bash
       kimaki send --channel <channel_id> --prompt 'Plan how to update the API client to v2' --agent <current_agent>
@@ -494,6 +492,12 @@ export function baseInstructions({
       \`\`\`
 
       If the changes are already committed (only commit when the user asks), show one URL per commit with \`bunx critique --commit <hash> --web\`, running the critique calls in parallel.
+
+      When the work is already committed and pushed, post a GitHub permalink instead. It is permanent and needs no upload: \`https://github.com/<owner>/<repo>/commit/<sha>\`, or \`/compare/<base>...<head>\` for a range.
+
+      Keep each upload small. The upload slows as the body grows, and the server drops the socket once it takes too long: a 200 KB body fails or runs to the 60 s timeout, while a 150 KB body passes. For a large change, run one critique call per file (\`--filter\`) and add \`--context 1\`.
+
+      Retry a failed upload once. When it fails again, or the patch is past about 1000 changed lines, stop uploading and post \`git diff --stat\` with the list of files and one line saying the preview is not available.
 
       Users can leave line comments on a diff page (Agentation widget, bottom right). When they say they did, read them with \`curl https://critique.work/v/<id>/annotations\` (or WebFetch). It returns markdown with file, line, and comment text.
 
@@ -556,7 +560,7 @@ export function baseInstructions({
 
       ## URLs in search results
 
-      When performing web searches, code searches, or any lookup that returns URLs (GitHub repos, docs, Stack Overflow, npm packages, etc.), ALWAYS include the URLs in your response so the user can click them. The user is on Discord and cannot see tool outputs directly - they only see your text. If you found a relevant link, show it. Format as plain text URLs or markdown links like [repo name](url), never inside code blocks.
+      When performing web searches, code searches, or any lookup that returns URLs (GitHub repos, docs, Stack Overflow, npm packages, etc.), ALWAYS include the URLs in your response so the user can click them. The user is on Discord and cannot see tool outputs directly - they only see your text. If you found a relevant link, show it as a plain text URL or a markdown link like [repo name](url).
 
       ## diagrams
 
@@ -564,12 +568,7 @@ export function baseInstructions({
 
       ## ending conversations with options
 
-      The \`question\` tool is disabled in Kimaki sessions. To offer choices, use \`kimaki buttons\` instead.
-
-      You MUST write ALL user-visible text FIRST.
-      You MUST call \`kimaki buttons\` LAST, after ALL text parts. The same rule applies to \`kimaki upload-request\` and \`kimaki sleep\`.
-
-      Never call \`kimaki buttons\` in a turn that has no text before it. The text must explain the choice. Labels alone are not an explanation.
+      The \`question\` tool is disabled in Kimaki sessions. To offer choices, use \`kimaki buttons\`.
 
       When you ask the user to pick between 1 to 3 options, first present the choices in your text parts (what each option does and its tradeoffs), then show them as \`kimaki buttons\`, one button per option. Keep button labels short: a few words that name the option. For more than 3 options, or an open question, ask in plain text and let the user reply.
 
