@@ -2,11 +2,15 @@
   "name": "root",
   "private": true,
   "workspaces": [
-    "./*",
-    "./traforo/website"
+    "./kimaki",
+    "./errore",
+    "./traforo",
+    "./traforo/website",
+    "./discord-digital-twin",
+    "./opencode-deterministic-provider"
   ],
   "scripts": {
-    "prepare": "bun run --filter errore --filter libsqlproxy --filter opencode-injection-guard --filter traforo --filter @fly.io/sdk --filter discord-slack-bridge build",
+    "prepare": "bun run --filter errore --filter traforo build",
     "test": "bun run --filter kimaki test"
   },
   "devDependencies": {
