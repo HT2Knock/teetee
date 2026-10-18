@@ -34,7 +34,7 @@ import type { KimakiDb } from './db.ts'
 import { ConfigError, DbError } from './errors.ts'
 import { createLogger } from './logger.ts'
 import type { Route } from './routes.ts'
-import * as schema from './schema.ts'
+import { parseFirst, type BotTokenRow } from './rows.ts'
 
 const logger = createLogger('VOICE')
 const execFileAsync = promisify(execFile)
@@ -592,16 +592,24 @@ type Transcriber =
 
 // Best first: OpenAI key (routing tool call), ChatGPT subscription and Gemini key, then hosted Whisper.
 // ChatGPT and Whisper only transcribe, so the route is always steer.
+// bot_tokens joined with its bot_api_keys row: the old `with: { api_keys: true }` (one row or none).
+type BotTokenWithKeys = BotTokenRow & { key_openai_api_key: string | null; key_gemini_api_key: string | null }
+
 async function transcribers({ db, token, opencodeDbFile }: { db: KimakiDb; token: string; opencodeDbFile: string }): Promise<DbError | Transcriber[]> {
-  const [row, credential] = await Promise.all([
-    db.query.bot_tokens
-      .findFirst({ where: { token }, with: { api_keys: true } })
+  const [tokenRows, credential] = await Promise.all([
+    db<BotTokenWithKeys[]>`
+      SELECT t.*, k.openai_api_key AS key_openai_api_key, k.gemini_api_key AS key_gemini_api_key
+      FROM bot_tokens t
+      LEFT JOIN bot_api_keys k ON k.app_id = t.app_id
+      WHERE t.token = ${token}
+      LIMIT 1`
       .catch((e) => new DbError({ operation: 'read transcription keys', cause: e })),
     chatGPTCredential({ dbFile: opencodeDbFile }),
   ])
-  if (row instanceof Error) return row
+  if (tokenRows instanceof Error) return tokenRows
   if (credential instanceof Error) logger.warn('ChatGPT credential not readable', credential)
-  const keys = audioKeyCandidates(row?.api_keys)
+  const row = parseFirst<BotTokenWithKeys>('bot_tokens', tokenRows)
+  const keys = audioKeyCandidates(row ? { openai_api_key: row.key_openai_api_key, gemini_api_key: row.key_gemini_api_key } : null)
   const openai = keys.find((key) => key.provider === 'openai')
   const gemini = keys.find((key) => key.provider === 'gemini')
   const credentials = row ? credentialsFromRow(row) : null
@@ -759,11 +767,22 @@ export const TRANSCRIPTION_KEY_MODAL = 'transcription_key_modal'
 export async function saveAudioKeys({ db, token, openai, gemini }: { db: KimakiDb; token: string; openai?: string; gemini?: string }): Promise<DbError | ConfigError | void> {
   const values = { ...(openai && { openai_api_key: openai }), ...(gemini && { gemini_api_key: gemini }) }
   if (Object.keys(values).length === 0) return new ConfigError({ reason: 'Pass --openai <key> or --gemini <key>' })
-  const bot = await db.query.bot_tokens.findFirst({ where: { token } }).catch((cause) => new DbError({ operation: 'read bot_tokens', cause }))
-  if (bot instanceof Error) return bot
+  const tokenRows = await db<BotTokenRow[]>`SELECT * FROM bot_tokens WHERE token = ${token} LIMIT 1`
+    .catch((cause) => new DbError({ operation: 'read bot_tokens', cause }))
+  if (tokenRows instanceof Error) return tokenRows
+  const bot = parseFirst<BotTokenRow>('bot_tokens', tokenRows)
   if (!bot) return new ConfigError({ reason: 'No saved bot credentials. Start kimaki once to onboard.' })
-  const saved = await db.insert(schema.bot_api_keys).values({ app_id: bot.app_id, ...values })
-    .onConflictDoUpdate({ target: schema.bot_api_keys.app_id, set: values })
+  // bot_api_keys has no updated_at, so only the given columns change on conflict.
+  const entries = Object.entries(values).filter(([, value]) => value !== undefined)
+  const columns = entries.map(([column]) => column)
+  const bound = entries.map(([, value]) => value)
+  const saved = await db
+    .unsafe(
+      `INSERT INTO bot_api_keys (app_id, ${columns.join(', ')})
+       VALUES (?, ${columns.map(() => '?').join(', ')})
+       ON CONFLICT(app_id) DO UPDATE SET ${columns.map((column) => `${column} = ?`).join(', ')}`,
+      [bot.app_id, ...bound, ...bound],
+    )
     .then(() => undefined)
     .catch((cause) => new DbError({ operation: 'write bot_api_keys', cause }))
   if (saved instanceof Error) return saved

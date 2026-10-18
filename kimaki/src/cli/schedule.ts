@@ -89,7 +89,7 @@ export function registerScheduleCommands(cli: Goke) {
         const { listTasks } = await import('../scheduler.ts')
         const opened = await openCliDb(options.dataDir)
         const routines = await listTasks({ db: opened.db, all: options.all })
-        opened.close()
+        await opened.close()
         if (routines instanceof Error) fail(routines)
         if (options.json) return printJson(routines)
         if (routines.length === 0) {

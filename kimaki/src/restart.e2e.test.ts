@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
+import { parseRows, type ThreadSessionRow } from './rows.ts'
 import {
   TEST_USER_ID,
   seedProjectChannel,
@@ -48,7 +49,7 @@ test('restarted bot continues the session of an existing thread', async () => {
   await discord.channel(channelId).user(TEST_USER_ID).sendMessage({ content: 'first message before restart' })
   const thread = await discord.channel(channelId).waitForThread({ timeout: 8_000 })
   await waitForFooter({ discord, threadId: thread.id })
-  const [binding] = await bot.db.query.thread_sessions.findMany()
+  const [binding] = parseRows<ThreadSessionRow>('thread_sessions', await bot.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions`)
 
   await bot.stop()
   bot = await startTestBot({ dataDir, twin, server })
@@ -69,7 +70,7 @@ test('restarted bot continues the session of an existing thread', async () => {
     ok
     -# *project ⋅ main ⋅ Ns ⋅ deterministic-v2*"
   `)
-  const rows = await bot.db.query.thread_sessions.findMany()
+  const rows = parseRows<ThreadSessionRow>('thread_sessions', await bot.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions`)
   expect(rows.map((row) => row.session_id)).toEqual([binding!.session_id])
   const client = await server.client()
   const messages = await client.message.list({ sessionID: binding!.session_id })

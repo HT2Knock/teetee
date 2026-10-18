@@ -8,6 +8,7 @@ import type { DeterministicMatcher } from 'opencode-deterministic-provider'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
+import { parseFirst, type BotApiKeyRow, type BotTokenRow } from './rows.ts'
 import { TRANSCRIPTION_KEY_MODAL } from './voice.ts'
 import {
   TEST_USER_ID,
@@ -76,8 +77,11 @@ beforeAll(async () => {
   await twin.discord.channel(twin.channelId).waitForInteractionAck({ interactionId: id })
   await user.submitModal({ customId: TRANSCRIPTION_KEY_MODAL, fields: [{ customId: 'apikey', value: 'AIza-test-gemini-key' }] })
   await waitForBotMessageContaining({ discord: twin.discord, threadId: twin.channelId, text: 'Gemini API key saved' })
-  const savedBot = await bot.db.query.bot_tokens.findFirst({ with: { api_keys: true } })
-  expect(savedBot?.api_keys?.gemini_api_key).toBe('AIza-test-gemini-key')
+  const savedBot = parseFirst<BotTokenRow>('bot_tokens', await bot.db<BotTokenRow[]>`SELECT * FROM bot_tokens LIMIT 1`)
+  const savedKeys = savedBot
+    ? parseFirst<BotApiKeyRow>('bot_api_keys', await bot.db<BotApiKeyRow[]>`SELECT * FROM bot_api_keys WHERE app_id = ${savedBot.app_id} LIMIT 1`)
+    : undefined
+  expect(savedKeys?.gemini_api_key).toBe('AIza-test-gemini-key')
 })
 
 afterAll(async () => {

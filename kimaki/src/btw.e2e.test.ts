@@ -6,6 +6,7 @@ import type { DeterministicMatcher } from 'opencode-deterministic-provider'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
+import { parseRows, type ThreadSessionRow } from './rows.ts'
 import {
   TEST_USER_ID,
   seedProjectChannel,
@@ -96,7 +97,7 @@ test('. btw forks into a side thread while the source run continues', async () =
     side answer
     -# *project ⋅ main ⋅ Ns ⋅ N% ⋅ deterministic-v2*"
   `)
-  const rows = await bot.db.query.thread_sessions.findMany({ where: { thread_id: fork.id } })
+  const rows = parseRows<ThreadSessionRow>('thread_sessions', await bot.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions WHERE thread_id = ${fork.id}`)
   expect(rows.length).toBe(1)
   // The plugin only exports KIMAKI_TOOL_CALL to shells when the marker has the CLI context,
   // so `kimaki buttons` failed on the first turn of every fork.

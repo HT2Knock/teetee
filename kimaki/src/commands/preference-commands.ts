@@ -16,7 +16,6 @@
 
 import crypto from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
-import * as orm from 'drizzle-orm'
 import {
   SlashCommandBuilder,
   type ButtonInteraction,
@@ -30,7 +29,7 @@ import { verbosityFromV1, verbosityToV1, type Verbosity } from '../db.ts'
 import { ConfigError, DbError } from '../errors.ts'
 import { button, buttonRow, paginate, selectedPage, selectRow, type UiMessage } from '../format-parts.ts'
 import { replyError, resolveTarget, type InteractionRoutes, type InteractionTarget } from '../interaction-context.ts'
-import * as schema from '../schema.ts'
+import { parseFirst, toDbDate, type ChannelModelRow } from '../rows.ts'
 import { agentSelection, primaryAgents, switchAgent } from '../sessions.ts'
 
 const AGENT_PREFIX = 'agent:'
@@ -55,6 +54,14 @@ type ModelWizard = {
 
 type Step = 'provider' | 'model' | 'variant' | 'scope'
 
+// channel_directories joined with its channel_agents and channel_models rows:
+// the shape findFirst({ with: { channel_agent: true, channel_model: true } }) returned.
+type ChannelPreferencesRow = {
+  agent_name: string | null
+  model_id: string | null
+  variant: string | null
+}
+
 function modelLabel(model: { providerID: string; id: string; variant?: string | null }): string {
   return `${model.providerID}/${model.id}${model.variant ? ` (${model.variant})` : ''}`
 }
@@ -70,53 +77,54 @@ export async function switchModel(bot: Bot, { sessionId, model }: { sessionId: s
 
 // Default model of new sessions in the channel.
 export async function setChannelModel(bot: Bot, { channelId, model }: { channelId: string; model: ModelChoice }): Promise<DbError | void> {
-  const values = { model_id: `${model.providerID}/${model.id}`, variant: model.variant ?? null }
-  const result = await bot.db
-    .insert(schema.channel_models)
-    .values({ channel_id: channelId, ...values })
-    .onConflictDoUpdate({ target: schema.channel_models.channel_id, set: values })
-    .catch((cause) => new DbError({ operation: 'write channel_models', cause }))
+  const modelId = `${model.providerID}/${model.id}`
+  const variant = model.variant ?? null
+  const result = await bot.db<unknown[]>`
+    INSERT INTO channel_models (channel_id, model_id, variant)
+    VALUES (${channelId}, ${modelId}, ${variant})
+    ON CONFLICT(channel_id) DO UPDATE SET model_id = ${modelId}, variant = ${variant}, updated_at = ${toDbDate(new Date())}
+  `.catch((cause) => new DbError({ operation: 'write channel_models', cause }))
   if (result instanceof Error) return result
 }
 
 // New sessions of the channel fall back to the agent model or the global one.
 async function clearChannelModel(bot: Bot, { channelId }: { channelId: string }): Promise<DbError | void> {
-  const result = await bot.db
-    .delete(schema.channel_models)
-    .where(orm.eq(schema.channel_models.channel_id, channelId))
-    .catch((cause) => new DbError({ operation: 'delete channel_models', cause }))
+  const result = await bot.db<unknown[]>`
+    DELETE FROM channel_models WHERE channel_id = ${channelId}
+  `.catch((cause) => new DbError({ operation: 'delete channel_models', cause }))
   if (result instanceof Error) return result
 }
 
 // Default model of new sessions in channels without a channel model.
 export async function setGlobalModel(bot: Bot, { model }: { model: ModelChoice }): Promise<DbError | void> {
-  const values = { model_id: `${model.providerID}/${model.id}`, variant: model.variant ?? null }
-  const result = await bot.db
-    .insert(schema.global_models)
-    .values({ app_id: bot.appId, ...values })
-    .onConflictDoUpdate({ target: schema.global_models.app_id, set: values })
-    .catch((cause) => new DbError({ operation: 'write global_models', cause }))
+  const modelId = `${model.providerID}/${model.id}`
+  const variant = model.variant ?? null
+  const result = await bot.db<unknown[]>`
+    INSERT INTO global_models (app_id, model_id, variant)
+    VALUES (${bot.appId}, ${modelId}, ${variant})
+    ON CONFLICT(app_id) DO UPDATE SET model_id = ${modelId}, variant = ${variant}, updated_at = ${toDbDate(new Date())}
+  `.catch((cause) => new DbError({ operation: 'write global_models', cause }))
   if (result instanceof Error) return result
 }
 
 // Applies to running sessions of the channel too, from their next event.
 export async function setVerbosity(bot: Bot, { channelId, verbosity }: { channelId: string; verbosity: Verbosity }): Promise<DbError | void> {
   const value = verbosityToV1(verbosity)
-  const result = await bot.db
-    .insert(schema.channel_verbosity)
-    .values({ channel_id: channelId, verbosity: value })
-    .onConflictDoUpdate({ target: schema.channel_verbosity.channel_id, set: { verbosity: value } })
-    .catch((cause) => new DbError({ operation: 'write channel_verbosity', cause }))
+  const result = await bot.db<unknown[]>`
+    INSERT INTO channel_verbosity (channel_id, verbosity)
+    VALUES (${channelId}, ${value})
+    ON CONFLICT(channel_id) DO UPDATE SET verbosity = ${value}, updated_at = ${toDbDate(new Date())}
+  `.catch((cause) => new DbError({ operation: 'write channel_verbosity', cause }))
   if (result instanceof Error) return result
   bot.store.setState((current) => ({ verbosity: { ...current.verbosity, [channelId]: verbosity } }))
 }
 
 export async function setChannelAgent(bot: Bot, { channelId, agent }: { channelId: string; agent: string }): Promise<DbError | void> {
-  const result = await bot.db
-    .insert(schema.channel_agents)
-    .values({ channel_id: channelId, agent_name: agent })
-    .onConflictDoUpdate({ target: schema.channel_agents.channel_id, set: { agent_name: agent } })
-    .catch((cause) => new DbError({ operation: 'write channel_agents', cause }))
+  const result = await bot.db<unknown[]>`
+    INSERT INTO channel_agents (channel_id, agent_name)
+    VALUES (${channelId}, ${agent})
+    ON CONFLICT(channel_id) DO UPDATE SET agent_name = ${agent}, updated_at = ${toDbDate(new Date())}
+  `.catch((cause) => new DbError({ operation: 'write channel_agents', cause }))
   if (result instanceof Error) return result
 }
 
@@ -131,12 +139,18 @@ async function current(bot: Bot, target: InteractionTarget) {
     if (info instanceof Error) return info
     return { scope: 'session' as const, modelScope: 'session' as const, agent: info.agent ?? null, model: info.model ?? null }
   }
-  const row = await bot.db.query.channel_directories
-    .findFirst({ where: { channel_id: target.channelId }, with: { channel_agent: true, channel_model: true } })
-    .catch((cause) => new DbError({ operation: 'read channel preferences', cause }))
-  if (row instanceof Error) return row
-  const agent = row?.channel_agent?.agent_name ?? null
-  const model = parseModel(row?.channel_model?.model_id, row?.channel_model?.variant)
+  const rows = await bot.db<ChannelPreferencesRow[]>`
+    SELECT a.agent_name, m.model_id, m.variant
+    FROM channel_directories d
+    LEFT JOIN channel_agents a ON a.channel_id = d.channel_id
+    LEFT JOIN channel_models m ON m.channel_id = d.channel_id
+    WHERE d.channel_id = ${target.channelId}
+    LIMIT 1
+  `.catch((cause) => new DbError({ operation: 'read channel preferences', cause }))
+  if (rows instanceof Error) return rows
+  const row = rows[0]
+  const agent = row?.agent_name ?? null
+  const model = parseModel(row?.model_id, row?.variant)
   if (model) return { scope: 'channel' as const, modelScope: 'channel' as const, agent, model }
   const global = await globalModel(bot)
   if (global instanceof Error) return global
@@ -150,13 +164,19 @@ async function current(bot: Bot, target: InteractionTarget) {
 // The model a new session of the channel starts with, like startSession:
 // channel model, channel agent model, global model, OpenCode default.
 async function channelDefaultModel(bot: Bot, target: InteractionTarget): Promise<Error | ModelChoice | null> {
-  const row = await bot.db.query.channel_directories
-    .findFirst({ where: { channel_id: target.channelId }, with: { channel_agent: true, channel_model: true } })
-    .catch((cause) => new DbError({ operation: 'read channel preferences', cause }))
-  if (row instanceof Error) return row
-  const channel = parseModel(row?.channel_model?.model_id, row?.channel_model?.variant)
+  const rows = await bot.db<ChannelPreferencesRow[]>`
+    SELECT a.agent_name, m.model_id, m.variant
+    FROM channel_directories d
+    LEFT JOIN channel_agents a ON a.channel_id = d.channel_id
+    LEFT JOIN channel_models m ON m.channel_id = d.channel_id
+    WHERE d.channel_id = ${target.channelId}
+    LIMIT 1
+  `.catch((cause) => new DbError({ operation: 'read channel preferences', cause }))
+  if (rows instanceof Error) return rows
+  const row = rows[0]
+  const channel = parseModel(row?.model_id, row?.variant)
   if (channel) return { ...channel, variant: channel.variant ?? null }
-  const agent = row?.channel_agent?.agent_name
+  const agent = row?.agent_name
   const selected = agent ? await agentSelection(bot, { directory: target.directory, agent }) : null
   if (selected instanceof Error) return selected
   if (selected?.model) return selected.model
@@ -177,14 +197,15 @@ function sameModel(a: { providerID: string; id: string; variant?: string | null 
 // differs from the channel default, and the channel model.
 async function resetButtons(bot: Bot, { target, hash }: { target: InteractionTarget; hash: string }) {
   const sessionId = target.sessionId
-  const [row, session, fallback] = await Promise.all([
-    bot.db.query.channel_models
-      .findFirst({ where: { channel_id: target.channelId } })
-      .catch((cause) => new DbError({ operation: 'read channel_models', cause })),
+  const [rows, session, fallback] = await Promise.all([
+    bot.db<ChannelModelRow[]>`
+      SELECT * FROM channel_models WHERE channel_id = ${target.channelId} LIMIT 1
+    `.catch((cause) => new DbError({ operation: 'read channel_models', cause })),
     sessionId ? oc(bot, 'session.get', (client) => client.session.get({ sessionID: sessionId })) : null,
     sessionId ? channelDefaultModel(bot, target) : null,
   ])
-  if (row instanceof Error) return row
+  if (rows instanceof Error) return rows
+  const row = parseFirst<ChannelModelRow>('channel_models', rows)
   if (session instanceof Error) return session
   if (fallback instanceof Error) return fallback
   const buttons = [

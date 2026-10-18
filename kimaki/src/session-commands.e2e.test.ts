@@ -8,6 +8,7 @@ import type { DeterministicMatcher } from 'opencode-deterministic-provider'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
+import { parseRows, type ThreadSessionRow } from './rows.ts'
 import {
   TEST_USER_ID,
   scriptedTurn,
@@ -191,7 +192,7 @@ test('/resume binds an existing session to a new thread and moves the binding', 
   await waitFor({ label: 'second resume note', check: async () => (await discord.thread(moved.id).text()).includes('Session resumed') })
   const { roots } = bot.store.getState()
   expect({ old: roots[resumed.id] ?? null, moved: roots[moved.id] === tui.id }).toEqual({ old: null, moved: true })
-  const rows = await bot.db.query.thread_sessions.findMany({ where: { session_id: tui.id } })
+  const rows = parseRows<ThreadSessionRow>('thread_sessions', await bot.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions WHERE session_id = ${tui.id}`)
   expect(rows.map((row) => row.thread_id)).toEqual([moved.id])
   expect(hide(await discord.channel(channelId).text())).toContain('Resumed session "TUI work" in <#THREAD>')
 })

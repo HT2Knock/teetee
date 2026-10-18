@@ -4,12 +4,11 @@
 
 import fs from 'node:fs'
 import type { DeterministicMatcher } from 'opencode-deterministic-provider'
-import * as orm from 'drizzle-orm'
 import { ComponentType } from 'discord-api-types/v10'
 import { afterAll, beforeAll, expect, onTestFinished, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
-import * as schema from './schema.ts'
+import { parseFirst, type ChannelAgentRow, type ChannelModelRow, type ChannelVerbosityRow } from './rows.ts'
 import {
   TEST_USER_ID,
   scriptedTurn,
@@ -296,7 +295,7 @@ test('/model with channel scope sets the model of new sessions', async () => {
     ok
     -# *project ⋅ main ⋅ Ns ⋅ deterministic-thinker ⋅ plan*"
   `)
-  const row = await bot.db.query.channel_models.findFirst({ where: { channel_id: channelId } })
+  const row = parseFirst<ChannelModelRow>('channel_models', await bot.db<ChannelModelRow[]>`SELECT * FROM channel_models WHERE channel_id = ${channelId} LIMIT 1`)
   expect({ model: row?.model_id, variant: row?.variant }).toMatchInlineSnapshot(`
     {
       "model": "deterministic-provider/deterministic-thinker",
@@ -314,7 +313,7 @@ test('/model with channel scope sets the model of new sessions', async () => {
     "Channel model removed. New sessions in this channel will use:
     \`deterministic-provider/deterministic-v2\`"
   `)
-  expect(await bot.db.query.channel_models.findFirst({ where: { channel_id: channelId } })).toBeUndefined()
+  expect(parseFirst<ChannelModelRow>('channel_models', await bot.db<ChannelModelRow[]>`SELECT * FROM channel_models WHERE channel_id = ${channelId} LIMIT 1`)).toBeUndefined()
 })
 
 test('/verbosity applies to running sessions of the channel at once', async () => {
@@ -322,7 +321,7 @@ test('/verbosity applies to running sessions of the channel at once', async () =
   const thread = await newThread(channelId, 'Show tools-marker')
   await discord.channel(channelId).user(TEST_USER_ID).runSlashCommand({ name: 'verbosity' })
   const { message } = await waitForSelectMenu({ discord, channelId, prefix: 'verbosity:' })
-  const previous = await bot.db.query.channel_verbosity.findFirst({ where: { channel_id: twin.quietChannelId } })
+  const previous = parseFirst<ChannelVerbosityRow>('channel_verbosity', await bot.db<ChannelVerbosityRow[]>`SELECT * FROM channel_verbosity WHERE channel_id = ${twin.quietChannelId} LIMIT 1`)
   await discord.channel(channelId).user(TEST_USER_ID).selectMenu({
     messageId: message.id,
     customId: `verbosity:${twin.quietChannelId}`,
@@ -366,7 +365,7 @@ test('/verbosity applies to running sessions of the channel at once', async () =
     Applies immediately, including active sessions.
     Run /verbosity in the target channel"
   `)
-  expect(await bot.db.query.channel_verbosity.findFirst({ where: { channel_id: twin.quietChannelId } })).toEqual(previous)
+  expect(parseFirst<ChannelVerbosityRow>('channel_verbosity', await bot.db<ChannelVerbosityRow[]>`SELECT * FROM channel_verbosity WHERE channel_id = ${twin.quietChannelId} LIMIT 1`)).toEqual(previous)
 })
 
 test('/<agent>-agent variant: sets the thinking level with the agent, per session or channel', async () => {
@@ -517,7 +516,7 @@ test('agent selection replaces a stale model and uses the agent model for varian
   `)
 
   await discord.channel(channelId).user(TEST_USER_ID).runSlashCommand({ name: 'thinker-agent' })
-  await waitFor({ label: 'channel agent saved', check: async () => (await bot.db.query.channel_agents.findFirst({ where: { channel_id: channelId } }))?.agent_name === 'thinker' })
+  await waitFor({ label: 'channel agent saved', check: async () => parseFirst<ChannelAgentRow>('channel_agents', await bot.db<ChannelAgentRow[]>`SELECT * FROM channel_agents WHERE channel_id = ${channelId} LIMIT 1`)?.agent_name === 'thinker' })
   const fresh = await newThread(channelId, 'Uses the agent model default')
   expect(await discord.thread(fresh.id).text()).toMatchInlineSnapshot(`
     "--- from: user (tommy)
@@ -530,7 +529,7 @@ test('agent selection replaces a stale model and uses the agent model for varian
   expect((await sessionModel(fresh.id)).model).toEqual({ providerID: 'deterministic-provider', id: 'deterministic-thinker', variant: 'high' })
 
   await discord.channel(channelId).user(TEST_USER_ID).runSlashCommand({ name: 'thinker-agent', options: [{ name: 'variant', type: 3, value: 'low' }] })
-  await waitFor({ label: 'channel variant saved', check: async () => (await bot.db.query.channel_models.findFirst({ where: { channel_id: channelId } }))?.variant === 'low' })
+  await waitFor({ label: 'channel variant saved', check: async () => parseFirst<ChannelModelRow>('channel_models', await bot.db<ChannelModelRow[]>`SELECT * FROM channel_models WHERE channel_id = ${channelId} LIMIT 1`)?.variant === 'low' })
   const low = await newThread(channelId, 'Uses the channel thinking level')
   expect(await discord.thread(low.id).text()).toMatchInlineSnapshot(`
     "--- from: user (tommy)
@@ -546,10 +545,10 @@ test('agent selection replaces a stale model and uses the agent model for varian
 test('/model with all channels scope sets the model of channels without their own', async () => {
   const { discord, channelId } = twin
   // Earlier tests saved a model and agent for this channel.
-  await bot.db.delete(schema.channel_models).where(orm.eq(schema.channel_models.channel_id, channelId))
-  await bot.db.delete(schema.channel_agents).where(orm.eq(schema.channel_agents.channel_id, channelId))
+  await bot.db`DELETE FROM channel_models WHERE channel_id = ${channelId}`
+  await bot.db`DELETE FROM channel_agents WHERE channel_id = ${channelId}`
   onTestFinished(async () => {
-    await bot.db.delete(schema.global_models)
+    await bot.db`DELETE FROM global_models`
   })
   const quiet = twin.quietChannelId
   await discord.channel(quiet).user(TEST_USER_ID).runSlashCommand({ name: 'model' })

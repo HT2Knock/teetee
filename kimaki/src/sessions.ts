@@ -7,7 +7,6 @@ import crypto from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { SessionMetadata } from '@opencode/client'
 import type { TextChannel, ThreadChannel } from 'discord.js'
-import * as orm from 'drizzle-orm'
 
 import {
   cliContext,
@@ -31,8 +30,8 @@ import { createLogger } from './logger.ts'
 import type { OpenCodeClient, OpencodeEndpoint } from './opencode-server.ts'
 import { prompt, runInSession } from './prompt.ts'
 import { formatEcho } from './queue.ts'
+import { parseFirst, parseRows, type ChannelDirectoryRow } from './rows.ts'
 import type { Route } from './routes.ts'
-import * as schema from './schema.ts'
 import { disabledSkillRules } from './builtin-skills.ts'
 import { baseInstructions, INSTRUCTION_KEY, type ScheduledRun } from './system-prompt.ts'
 import { createWorktree, resolveWorkingDirectory } from './worktrees.ts'
@@ -40,6 +39,15 @@ import { createWorktree, resolveWorkingDirectory } from './worktrees.ts'
 const logger = createLogger('SESSIONS')
 
 type PermissionRules = NonNullable<NonNullable<Parameters<OpenCodeClient['session']['create']>[0]>['permissions']>
+
+// channel_directories plus its one-to-one channel defaults, what the old
+// `with: { channel_model, channel_agent, channel_worktree }` loaded.
+type ChannelDefaultsRow = ChannelDirectoryRow & {
+  channel_model_id: string | null
+  channel_model_variant: string | null
+  channel_agent_name: string | null
+  channel_worktree_enabled: number | null
+}
 
 // Kimaki sessions ask with `kimaki buttons`. A wildcard deny removes the tool
 // from the model's tool list; forks and subagents inherit it, and later rules
@@ -111,9 +119,7 @@ async function bindThread(
   bot: Bot,
   { threadId, sessionId, channelId, directory, isNew }: { threadId: string; sessionId: string; channelId: string; directory: string; isNew: boolean },
 ): Promise<DbError | void> {
-  const inserted = await bot.db
-    .insert(schema.thread_sessions)
-    .values({ thread_id: threadId, session_id: sessionId, source: 'kimaki' })
+  const inserted = await bot.db<unknown[]>`INSERT INTO thread_sessions (thread_id, session_id, source) VALUES (${threadId}, ${sessionId}, ${'kimaki'})`
     .catch((cause) => new DbError({ operation: 'insert thread_sessions', cause }))
   if (inserted instanceof Error) return inserted
   await bot.eventLoop.bind({ threadId, sessionId, channelId, directory, isNew })
@@ -358,10 +364,23 @@ export async function startSession(
     run?: boolean
   },
 ): Promise<Error | { threadId: string; sessionId: string }> {
-  const defaults = await bot.db.query.channel_directories
-    .findFirst({ where: { channel_id: channelId }, with: { channel_model: true, channel_agent: true, channel_worktree: true } })
+  const defaultRows = await bot.db<ChannelDefaultsRow[]>`SELECT channel_directories.*,
+      channel_models.model_id AS channel_model_id, channel_models.variant AS channel_model_variant,
+      channel_agents.agent_name AS channel_agent_name, channel_worktrees.enabled AS channel_worktree_enabled
+    FROM channel_directories
+    LEFT JOIN channel_models ON channel_models.channel_id = channel_directories.channel_id
+    LEFT JOIN channel_agents ON channel_agents.channel_id = channel_directories.channel_id
+    LEFT JOIN channel_worktrees ON channel_worktrees.channel_id = channel_directories.channel_id
+    WHERE channel_directories.channel_id = ${channelId} LIMIT 1`
     .catch((cause) => new DbError({ operation: 'read channel defaults', cause }))
-  if (defaults instanceof Error) return defaults
+  if (defaultRows instanceof Error) return defaultRows
+  const defaultRow = parseFirst<ChannelDefaultsRow>('channel_directories', defaultRows)
+  const defaults = defaultRow && {
+    ...defaultRow,
+    channel_model: defaultRow.channel_model_id === null ? null : { model_id: defaultRow.channel_model_id, variant: defaultRow.channel_model_variant },
+    channel_agent: defaultRow.channel_agent_name === null ? null : { agent_name: defaultRow.channel_agent_name },
+    channel_worktree: defaultRow.channel_worktree_enabled === null ? null : { enabled: defaultRow.channel_worktree_enabled },
+  }
   const text = routeText(route)
   const channelWorktrees = defaults?.channel_worktree ? defaults.channel_worktree.enabled === 1 : bot.autoWorktrees
   const useWorktree = typeof worktree === 'string' || (worktree !== false && channelWorktrees)
@@ -552,15 +571,11 @@ async function adoptSession(
     const messages = await oc(bot, 'message.list', (client) => client.message.list({ sessionID: sessionId, order: 'desc', limit: 100 }))
     if (messages instanceof Error) return messages
     // One thread per session: older threads of this session stop following it.
-    const moved = (() => {
+    const moved = await (async () => {
       try {
-        return bot.db.transaction((tx) => {
-          const deleted = tx
-            .delete(schema.thread_sessions)
-            .where(orm.eq(schema.thread_sessions.session_id, sessionId))
-            .returning({ threadId: schema.thread_sessions.thread_id })
-            .all()
-          tx.insert(schema.thread_sessions).values({ thread_id: thread.id, session_id: sessionId, source: 'kimaki' }).run()
+        return await bot.db.begin(async (tx) => {
+          const deleted = await tx<{ thread_id: string }[]>`DELETE FROM thread_sessions WHERE session_id = ${sessionId} RETURNING thread_id`
+          await tx`INSERT INTO thread_sessions (thread_id, session_id, source) VALUES (${thread.id}, ${sessionId}, ${'kimaki'})`
           return deleted
         })
       } catch (cause) {
@@ -568,7 +583,7 @@ async function adoptSession(
       }
     })()
     if (moved instanceof Error) return moved
-    return { history: [...messages.data].reverse(), previous: moved.map((row) => row.threadId) }
+    return { history: [...messages.data].reverse(), previous: moved.map((row) => row.thread_id) }
   })()
   if (prepared instanceof Error) {
     await thread.delete('session adoption failed').catch(() => undefined)
@@ -600,10 +615,10 @@ export async function channelForSession(bot: Bot, sessionId: string) {
 }
 
 export async function channelForDirectory(bot: Bot, directory: string) {
-  const projects = await bot.db.query.channel_directories
-    .findMany()
+  const rows = await bot.db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories`
     .catch((cause) => new DbError({ operation: 'read channel_directories', cause }))
-  if (projects instanceof Error) return projects
+  if (rows instanceof Error) return rows
+  const projects = parseRows<ChannelDirectoryRow>('channel_directories', rows)
   projects.sort((a, b) => b.directory.length - a.directory.length)
   // Stored directories may be symlink aliases of the real path.
   const matches = await Promise.all(

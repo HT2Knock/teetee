@@ -26,7 +26,6 @@ import {
   type ChatInputCommandInteraction,
 } from 'discord.js'
 import * as errore from 'errore'
-import * as orm from 'drizzle-orm'
 
 import { oc, projectOf, threadOfSession, type Bot } from './bot.ts'
 import type { KimakiDb } from './db.ts'
@@ -35,7 +34,7 @@ import type { InteractionRoutes } from './interaction-context.ts'
 import { createLogger } from './logger.ts'
 import type { SendInput } from './lock-routes.ts'
 import { send } from './prompt.ts'
-import * as schema from './schema.ts'
+import { parseFirst, parseRows, toDbDate, type ChannelDirectoryRow, type ScheduledTaskRow } from './rows.ts'
 import { parseFutureUtc, runDueWakes } from './sleeps.ts'
 
 const logger = createLogger('ROUTINE')
@@ -54,7 +53,7 @@ const MAX_TASK_ROWS = 7
 const TASK_RUN_PREFIX = 'routine_run:'
 const TASK_DELETE_PREFIX = 'routine_delete:'
 
-type TaskRow = typeof schema.scheduled_tasks.$inferSelect
+type TaskRow = ScheduledTaskRow
 
 // --- Pure time logic.
 
@@ -237,11 +236,22 @@ export type TaskListItem = {
 // `guildId`: only tasks of that guild's channels (Discord /routines). Channels
 // stored before guild_id existed belong to every guild.
 export async function listTasks({ db, guildId = null, all = false }: { db: KimakiDb; guildId?: string | null; all?: boolean }): Promise<DbError | TaskListItem[]> {
-  const rows = await db.query.scheduled_tasks
-    .findMany({ where: all ? {} : { status: { in: ['planned', 'running', 'failed'] } }, orderBy: { next_run_at: 'asc', id: 'asc' }, with: { channel: true } })
-    .catch((cause) => new DbError({ operation: 'read scheduled_tasks', cause }))
+  const filters: string[] = []
+  const values: unknown[] = []
+  if (!all) {
+    filters.push('scheduled_tasks.status IN (?, ?, ?)')
+    values.push('planned', 'running', 'failed')
+  }
+  const where = filters.length > 0 ? ` WHERE ${filters.join(' AND ')}` : ''
+  const rows = await db.unsafe<(TaskRow & { channel_linked_id: string | null; channel_guild_id: string | null })[]>(
+    `SELECT scheduled_tasks.*, channel_directories.channel_id AS channel_linked_id, channel_directories.guild_id AS channel_guild_id
+     FROM scheduled_tasks LEFT JOIN channel_directories ON channel_directories.channel_id = scheduled_tasks.channel_id${where}
+     ORDER BY next_run_at ASC, id ASC`,
+    values,
+  ).catch((cause) => new DbError({ operation: 'read scheduled_tasks', cause }))
   if (rows instanceof Error) return rows
-  const visible = guildId === null ? rows : rows.filter((row) => row.channel && (!row.channel.guild_id || row.channel.guild_id === guildId))
+  const tasks = parseRows<TaskRow & { channel_linked_id: string | null; channel_guild_id: string | null }>('scheduled_tasks', rows)
+  const visible = guildId === null ? tasks : tasks.filter((row) => row.channel_linked_id !== null && (!row.channel_guild_id || row.channel_guild_id === guildId))
   return visible.map((row) => {
     const decoded = decodeTaskPayload(row.payload_json)
     const job = decoded instanceof Error ? null : decoded
@@ -303,10 +313,10 @@ async function execute(bot: Bot, row: TaskRow): Promise<Error | RunOutcome> {
   if (checked instanceof Error) return checked
   if ('skip' in checked) return { kind: 'skipped', reason: checked.skip }
   // Deleted or edited during the pre-run: this occurrence no longer exists.
-  const current = await bot.db.query.scheduled_tasks
-    .findFirst({ where: { id: row.id }, columns: { status: true } })
+  const currentRows = await bot.db<Pick<TaskRow, 'status'>[]>`SELECT status FROM scheduled_tasks WHERE id = ${row.id} LIMIT 1`
     .catch((cause) => new DbError({ operation: `recheck routine ${row.id}`, cause }))
-  if (current instanceof Error) return current
+  if (currentRows instanceof Error) return currentRows
+  const current = parseFirst<Pick<TaskRow, 'status'>>('scheduled_tasks', currentRows)
   if (current?.status !== 'running') return { kind: 'skipped', reason: 'deleted while its pre-run ran' }
   const task = { id: row.id, cronExpr: row.schedule_kind === 'cron' ? row.cron_expr : null, timezone: row.timezone }
   const input = {
@@ -326,17 +336,21 @@ async function execute(bot: Bot, row: TaskRow): Promise<Error | RunOutcome> {
   return { kind: 'ran', threadId: sent.threadId, sessionId: sent.sessionId }
 }
 
-const running = orm.eq(schema.scheduled_tasks.status, 'running')
-
 async function finish(
   bot: Bot,
   { row, nextRunAt, outcome }: { row: TaskRow; nextRunAt: ConfigError | number | null; outcome: Error | RunOutcome },
 ): Promise<DbError | void> {
   const at = new Date(bot.clock.now())
-  const where = orm.and(orm.eq(schema.scheduled_tasks.id, row.id), running)
-  const update = (set: Partial<typeof schema.scheduled_tasks.$inferInsert>) =>
-    bot.db.update(schema.scheduled_tasks).set({ running_started_at: null, ...set }).where(where).then(() => undefined)
+  const update = (set: Partial<TaskRow>) => {
+    const entries = Object.entries({ running_started_at: null, ...set, updated_at: toDbDate(new Date()) }).filter(([, value]) => value !== undefined)
+    const columns = entries.map(([column]) => column)
+    const bound = entries.map(([, value]) => (value instanceof Date ? toDbDate(value) : value))
+    return bot.db.unsafe(
+      `UPDATE scheduled_tasks SET ${columns.map((column) => `${column} = ?`).join(', ')} WHERE id = ? AND status = ?`,
+      [...bound, row.id, 'running'],
+    ).then(() => undefined)
       .catch((cause) => new DbError({ operation: `finish routine ${row.id}`, cause }))
+  }
   const next = nextRunAt instanceof Error || nextRunAt === null ? null : new Date(nextRunAt)
   if (outcome instanceof Error) {
     logger.warn(`routine ${row.id} failed`, outcome)
@@ -353,7 +367,7 @@ async function finish(
   }
   const ran = outcome.kind === 'ran' && outcome.sessionId ? { session_id: outcome.sessionId, thread_id: outcome.threadId } : {}
   if (row.schedule_kind === 'at') {
-    const removed = await bot.db.delete(schema.scheduled_tasks).where(where)
+    const removed = await bot.db<unknown[]>`DELETE FROM scheduled_tasks WHERE id = ${row.id} AND status = ${'running'}`
       .catch((cause) => new DbError({ operation: `delete routine ${row.id}`, cause }))
     if (removed instanceof Error) return removed
     return
@@ -367,17 +381,14 @@ async function finish(
 // now, once. `dueAt`: only claim the occurrence the due list saw; null runs now.
 async function runTask(bot: Bot, { id, dueAt }: { id: number; dueAt: Date | null }): Promise<Error | RunOutcome> {
   const time = bot.clock.now()
-  const claimed = await bot.db.update(schema.scheduled_tasks)
-    .set({ status: 'running', running_started_at: new Date(time) })
-    .where(orm.and(
-      orm.eq(schema.scheduled_tasks.id, id),
-      orm.eq(schema.scheduled_tasks.status, 'planned'),
-      ...(dueAt ? [orm.eq(schema.scheduled_tasks.next_run_at, dueAt), orm.lte(schema.scheduled_tasks.next_run_at, new Date(time))] : []),
-    ))
-    .returning()
-    .catch((cause) => new DbError({ operation: `claim routine ${id}`, cause }))
+  const claimed = await bot.db.unsafe<TaskRow[]>(
+    `UPDATE scheduled_tasks SET status = ?, running_started_at = ?, updated_at = ? WHERE id = ? AND status = ?${dueAt ? ' AND next_run_at = ? AND next_run_at <= ?' : ''} RETURNING *`,
+    dueAt
+      ? ['running', toDbDate(new Date(time)), toDbDate(new Date()), id, 'planned', toDbDate(dueAt), toDbDate(new Date(time))]
+      : ['running', toDbDate(new Date(time)), toDbDate(new Date()), id, 'planned'],
+  ).catch((cause) => new DbError({ operation: `claim routine ${id}`, cause }))
   if (claimed instanceof Error) return claimed
-  const row = claimed[0]
+  const row = parseFirst<TaskRow>('scheduled_tasks', claimed)
   if (!row) return new ConfigError({ reason: `Routine #${id} is already running or no longer planned` })
   logger.log(`running routine ${row.id}`)
   const outcome = await execute(bot, row)
@@ -392,10 +403,10 @@ async function runTask(bot: Bot, { id, dueAt }: { id: number; dueAt: Date | null
 async function runDueTasks(bot: Bot): Promise<void> {
   const time = bot.clock.now()
   await runDueWakes(bot, { time, limit: DUE_BATCH })
-  const tasks = await bot.db.query.scheduled_tasks
-    .findMany({ where: { status: 'planned', next_run_at: { lte: new Date(time) } }, orderBy: { next_run_at: 'asc', id: 'asc' }, limit: DUE_BATCH })
+  const rows = await bot.db<TaskRow[]>`SELECT * FROM scheduled_tasks WHERE status = ${'planned'} AND next_run_at <= ${toDbDate(new Date(time))} ORDER BY next_run_at ASC, id ASC LIMIT ${DUE_BATCH}`
     .catch((cause) => new DbError({ operation: 'read due routines', cause }))
-  if (tasks instanceof Error) return logger.error(tasks)
+  if (rows instanceof Error) return logger.error(rows)
+  const tasks = parseRows<TaskRow>('scheduled_tasks', rows)
   for (const row of tasks) {
     const ran = await runTask(bot, { id: row.id, dueAt: row.next_run_at })
     if (ran instanceof Error) logger.warn(ran)
@@ -426,9 +437,12 @@ export async function createTask(bot: Bot, { send: input, options }: { send: Sen
       if (!thread?.isThread() || !thread.parentId) return null
       return projectOf(bot, thread.parentId)
     }
-    return bot.db.query.channel_directories
-      .findFirst({ where: input.channelId ? { channel_id: input.channelId } : { directory: path.resolve(input.project!) } })
-      .catch((cause) => new DbError({ operation: 'resolve routine project', cause }))
+    const rows = await (input.channelId
+      ? bot.db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories WHERE channel_id = ${input.channelId} LIMIT 1`
+      : bot.db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories WHERE directory = ${path.resolve(input.project!)} LIMIT 1`
+    ).catch((cause) => new DbError({ operation: 'resolve routine project', cause }))
+    if (rows instanceof Error) return rows
+    return parseFirst<ChannelDirectoryRow>('channel_directories', rows)
   })()
   if (project instanceof Error) return project
   if (!project) return new ConfigError({ reason: 'Schedule routines on the machine that owns the channel (no local project for it)' })
@@ -443,20 +457,10 @@ export async function createTask(bot: Bot, { send: input, options }: { send: Sen
   })
   if (payload instanceof Error) return payload
   const nextRunAt = when.kind === 'at' ? when.runAt : when.nextRunAt
-  const inserted = await bot.db.insert(schema.scheduled_tasks).values({
-    status: 'planned',
-    schedule_kind: when.kind,
-    run_at: when.kind === 'at' ? new Date(when.runAt) : null,
-    cron_expr: when.kind === 'cron' ? when.cronExpr : null,
-    timezone: when.kind === 'cron' ? 'UTC' : null,
-    next_run_at: new Date(nextRunAt),
-    payload_json: payload,
-    prompt_preview: preview(input.prompt),
-    channel_id: project.channel_id,
-    thread_id: threadId ?? null,
-    session_id: threadId ? roots[threadId]! : null,
-    project_directory: project.directory,
-  }).returning({ id: schema.scheduled_tasks.id }).catch((cause) => new DbError({ operation: 'insert routine', cause }))
+  const inserted = await bot.db<{ id: number }[]>`INSERT INTO scheduled_tasks (status, schedule_kind, run_at, cron_expr, timezone, next_run_at, payload_json, prompt_preview, channel_id, thread_id, session_id, project_directory)
+    VALUES (${'planned'}, ${when.kind}, ${when.kind === 'at' ? toDbDate(new Date(when.runAt)) : null}, ${when.kind === 'cron' ? when.cronExpr : null}, ${when.kind === 'cron' ? 'UTC' : null}, ${toDbDate(new Date(nextRunAt))}, ${payload}, ${preview(input.prompt)}, ${project.channel_id}, ${threadId ?? null}, ${threadId ? roots[threadId]! : null}, ${project.directory})
+    RETURNING id`
+    .catch((cause) => new DbError({ operation: 'insert routine', cause }))
   if (inserted instanceof Error) return inserted
   const routineId = inserted[0]!.id
   logger.log(`scheduled routine ${routineId} (${when.kind}) for ${new Date(nextRunAt).toISOString()}`)
@@ -464,8 +468,10 @@ export async function createTask(bot: Bot, { send: input, options }: { send: Sen
 }
 
 export async function editTask(bot: Bot, edit: TaskEdit) {
-  const row = await bot.db.query.scheduled_tasks.findFirst({ where: { id: edit.id } }).catch((cause) => new DbError({ operation: 'read routine', cause }))
-  if (row instanceof Error) return row
+  const rowRows = await bot.db<TaskRow[]>`SELECT * FROM scheduled_tasks WHERE id = ${edit.id} LIMIT 1`
+    .catch((cause) => new DbError({ operation: 'read routine', cause }))
+  if (rowRows instanceof Error) return rowRows
+  const row = parseFirst<TaskRow>('scheduled_tasks', rowRows)
   if (!row) return new ConfigError({ reason: `Routine ${edit.id} not found. List routines with: kimaki routine list` })
   if (row.status !== 'planned') return new ConfigError({ reason: `Routine ${edit.id} is ${row.status}; only planned routines can be edited` })
   const job = decodeTaskPayload(row.payload_json)
@@ -498,19 +504,20 @@ export async function editTask(bot: Bot, edit: TaskEdit) {
     timezone: when.kind === 'cron' ? 'UTC' : null,
     next_run_at: new Date(when.kind === 'at' ? when.runAt : when.nextRunAt),
   }
-  const saved = await bot.db.update(schema.scheduled_tasks)
-    .set({ payload_json: payload, prompt_preview: preview(prompt), ...schedule })
-    .where(orm.and(orm.eq(schema.scheduled_tasks.id, edit.id), orm.eq(schema.scheduled_tasks.status, 'planned')))
-    .returning({ id: schema.scheduled_tasks.id })
-    .catch((cause) => new DbError({ operation: 'update routine', cause }))
+  const entries = Object.entries({ payload_json: payload, prompt_preview: preview(prompt), ...schedule })
+  const columns = entries.map(([column]) => column)
+  const bound = entries.map(([, value]) => (value instanceof Date ? toDbDate(value) : value))
+  const saved = await bot.db.unsafe<{ id: number }[]>(
+    `UPDATE scheduled_tasks SET ${columns.map((column) => `${column} = ?`).join(', ')}, updated_at = ? WHERE id = ? AND status = ? RETURNING id`,
+    [...bound, toDbDate(new Date()), edit.id, 'planned'],
+  ).catch((cause) => new DbError({ operation: 'update routine', cause }))
   if (saved instanceof Error) return saved
   if (saved.length === 0) return new ConfigError({ reason: `Routine ${edit.id} started running meanwhile; edit it again later` })
   return { routineId: edit.id, updated: Object.entries(edit).filter(([key, value]) => key !== 'id' && value !== undefined).map(([key]) => key) }
 }
 
 export async function deleteTask(bot: Bot, id: number) {
-  const removed = await bot.db.delete(schema.scheduled_tasks).where(orm.eq(schema.scheduled_tasks.id, id))
-    .returning({ id: schema.scheduled_tasks.id })
+  const removed = await bot.db<{ id: number }[]>`DELETE FROM scheduled_tasks WHERE id = ${id} RETURNING id`
     .catch((cause) => new DbError({ operation: 'delete routine', cause }))
   if (removed instanceof Error) return removed
   if (removed.length === 0) return new ConfigError({ reason: `Routine ${id} not found. List routines with: kimaki routine list` })
@@ -519,8 +526,10 @@ export async function deleteTask(bot: Bot, id: number) {
 
 // The same claim ─▶ execute ─▶ finish path as a due task, now.
 export async function runTaskNow(bot: Bot, id: number) {
-  const row = await bot.db.query.scheduled_tasks.findFirst({ where: { id } }).catch((cause) => new DbError({ operation: 'read routine', cause }))
-  if (row instanceof Error) return row
+  const rowRows = await bot.db<TaskRow[]>`SELECT * FROM scheduled_tasks WHERE id = ${id} LIMIT 1`
+    .catch((cause) => new DbError({ operation: 'read routine', cause }))
+  if (rowRows instanceof Error) return rowRows
+  const row = parseFirst<TaskRow>('scheduled_tasks', rowRows)
   if (!row) return new ConfigError({ reason: `Routine ${id} not found. List routines with: kimaki routine list` })
   const outcome = await runTask(bot, { id, dueAt: null })
   if (outcome instanceof Error) return outcome
@@ -628,8 +637,7 @@ export function createScheduler({
     runDueTasks: () => runDueTasks(bot),
     // A bot that died mid-run left its tasks "running"; this process runs none yet.
     async start(): Promise<DbError | void> {
-      const recovered = await bot.db.update(schema.scheduled_tasks).set({ status: 'planned', running_started_at: null })
-        .where(running).returning({ id: schema.scheduled_tasks.id })
+      const recovered = await bot.db<{ id: number }[]>`UPDATE scheduled_tasks SET status = ${'planned'}, running_started_at = ${null}, updated_at = ${toDbDate(new Date())} WHERE status = ${'running'} RETURNING id`
         .catch((cause) => new DbError({ operation: 'recover running routines', cause }))
       if (recovered instanceof Error) return recovered
       if (recovered.length > 0) logger.warn(`recovered ${recovered.length} routine(s) left running by a previous bot`)

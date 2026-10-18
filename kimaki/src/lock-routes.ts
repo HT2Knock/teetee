@@ -9,7 +9,6 @@ import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import v8 from 'node:v8'
 import * as errore from 'errore'
-import * as orm from 'drizzle-orm'
 import { z } from 'zod'
 
 import { parseButton } from './agent-ui.ts'
@@ -22,7 +21,6 @@ import { RESTART_EXIT_CODE } from './lock-server.ts'
 import { abort, cancelQueuedPrompt, clearQueue, send, shell, upload } from './prompt.ts'
 import { RUNTIME_NAME } from './runtime.ts'
 import { createTask, deleteTask, editTask, runTaskNow } from './scheduler.ts'
-import * as schema from './schema.ts'
 import { channelForDirectory, channelForSession, fork, resume, sessionCwd } from './sessions.ts'
 import { createSleep } from './sleeps.ts'
 import { worktreeName } from './worktrees.ts'
@@ -138,15 +136,16 @@ async function projectChannel(bot: Bot, input: { channelId?: string; directory?:
 }
 
 async function clearChannel(bot: Bot, { channelId, table }: { channelId: string; table: 'agent' | 'model' }) {
-  const target = table === 'agent' ? schema.channel_agents : schema.channel_models
-  const result = await bot.db.delete(target).where(orm.eq(target.channel_id, channelId))
+  // The table name is a constant of this file, never user input.
+  const target = table === 'agent' ? 'channel_agents' : 'channel_models'
+  const result = await bot.db.unsafe(`DELETE FROM ${target} WHERE channel_id = ?`, [channelId])
     .catch((cause) => new DbError({ operation: `clear ${table}`, cause }))
   if (result instanceof Error) return result
   return { cleared: true }
 }
 
 async function clearGlobalModel(bot: Bot) {
-  const result = await bot.db.delete(schema.global_models).where(orm.eq(schema.global_models.app_id, bot.appId))
+  const result = await bot.db`DELETE FROM global_models WHERE app_id = ${bot.appId}`
     .catch((cause) => new DbError({ operation: 'clear global model', cause }))
   if (result instanceof Error) return result
   return { cleared: true }

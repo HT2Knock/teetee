@@ -11,6 +11,7 @@ import { wrapJsonSchema, type Goke } from 'goke'
 import { parseDuration } from '../duration.ts'
 import { OpenCodeError } from '../errors.ts'
 import { editorsForFile, loadFileEditEvents } from '../file-edit-log.ts'
+import { parseRows, type ThreadSessionRow } from '../rows.ts'
 import { allMessages, allSessions, readSessionMarkdown, sessionEventsFile, syncTranscripts, transcriptsDir } from '../session-events.ts'
 import {
   action,
@@ -109,9 +110,10 @@ export function registerSessionQueryCommands(cli: Goke) {
       const { openDb } = await import('../db.ts')
       const opened = await openDb({ dataDir: dataDirOrDefault(options.dataDir), migrate: false })
       if (!(opened instanceof Error)) {
-        const threads = await opened.db.query.thread_sessions.findMany({ where: { session_id: { in: editors.map((editor) => editor.sessionId) } }, orderBy: { updated_at: 'desc' } }).catch(() => [])
-        for (const thread of threads) if (!titles.has(thread.session_id) && thread.last_synced_name) titles.set(thread.session_id, thread.last_synced_name)
-        opened.close()
+        const sessionIds = editors.map((editor) => editor.sessionId)
+        const rows = sessionIds.length === 0 ? [] : await opened.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions WHERE session_id IN ${opened.db(sessionIds)} ORDER BY updated_at DESC`.catch(() => [])
+        for (const thread of parseRows<ThreadSessionRow>('thread_sessions', rows)) if (!titles.has(thread.session_id) && thread.last_synced_name) titles.set(thread.session_id, thread.last_synced_name)
+        await opened.close()
       }
       const rows = editors.map((editor) => ({ sessionId: editor.sessionId, title: titles.get(editor.sessionId) ?? '-', editedAt: new Date(editor.at).toISOString() }))
       printRows({ json: options.json, rows, line: (row) => `${row.sessionId} | ${row.title} | ${row.editedAt}` })

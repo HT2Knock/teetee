@@ -47,7 +47,7 @@ import { DEFAULT_LIVE_URLS, DEFAULT_LIVE_VOICE, FRAME_BYTES, LIVE_VOICES, startL
 import { createLogger } from './logger.ts'
 import { addVoiceChannel, listProjects } from './project.ts'
 import { formatEcho } from './queue.ts'
-import * as schema from './schema.ts'
+import { parseFirst, toDbDate, type BotTokenRow, type ChannelDirectoryRow } from './rows.ts'
 import { catalogReady, primaryAgents } from './sessions.ts'
 import { liveCallInstructions, voiceCallInstructions, type VoiceCallContext } from './system-prompt.ts'
 import { createVoiceAgent, type AgentTool } from './voice-agent.ts'
@@ -104,8 +104,9 @@ export function parseRealtimeVoice(name: string): UnknownVoiceError | { voice: s
 
 // The --voice start flag: a voice saves it, "default" clears it.
 export async function saveVoiceCallVoice({ db, appId, voice }: { db: Bot['db']; appId: string; voice: string | null }): Promise<DbError | void> {
-  const saved = await db.insert(schema.bot_settings).values({ app_id: appId, voice_call_voice: voice })
-    .onConflictDoUpdate({ target: schema.bot_settings.app_id, set: { voice_call_voice: voice } })
+  const saved = await db`INSERT INTO bot_settings (app_id, voice_call_voice)
+    VALUES (${appId}, ${voice})
+    ON CONFLICT(app_id) DO UPDATE SET voice_call_voice = ${voice}, updated_at = ${toDbDate(new Date())}`
     .then(() => undefined)
     .catch((cause) => new DbError({ operation: 'write bot_settings', cause }))
   if (saved instanceof Error) return saved
@@ -114,17 +115,25 @@ export async function saveVoiceCallVoice({ db, appId, voice }: { db: Bot['db']; 
 // The ChatGPT token stored by OpenCode pays for the voice and the backend. Kimaki never
 // refreshes it (refresh tokens rotate); an expired token counts as signed out.
 // voiceNotice says why the saved voice is not used.
+// bot_tokens joined with its bot_settings row: the old `with: { settings: true }`.
+type BotTokenWithSettings = BotTokenRow & { settings_voice_call_voice: string | null }
+
 export async function voiceCallSettings(bot: Pick<Bot, 'db' | 'token' | 'opencodeDbFile'>) {
-  const [row, credential] = await Promise.all([
-    bot.db.query.bot_tokens
-      .findFirst({ where: { token: bot.token }, with: { settings: true } })
+  const [tokenRows, credential] = await Promise.all([
+    bot.db<BotTokenWithSettings[]>`
+      SELECT t.*, s.voice_call_voice AS settings_voice_call_voice
+      FROM bot_tokens t
+      LEFT JOIN bot_settings s ON s.app_id = t.app_id
+      WHERE t.token = ${bot.token}
+      LIMIT 1`
       .catch((cause) => new DbError({ operation: 'read voice call settings', cause })),
     chatGPTCredential({ dbFile: bot.opencodeDbFile }),
   ])
-  if (row instanceof Error) return row
+  if (tokenRows instanceof Error) return tokenRows
   if (credential instanceof Error) return credential
   if (!credential) return new NoChatGPTError()
-  const saved = row?.settings?.voice_call_voice ?? null
+  const row = parseFirst<BotTokenWithSettings>('bot_tokens', tokenRows)
+  const saved = row?.settings_voice_call_voice ?? null
   const parsed = saved === null ? null : parseRealtimeVoice(saved)
   if (parsed instanceof Error) {
     const voiceNotice = `saved voice ${saved} is unknown, using ${DEFAULT_LIVE_VOICE}. Run kimaki --voice <name> to change it`
@@ -340,9 +349,11 @@ export function createVoiceCalls({ opencodeConfigDir }: { opencodeConfigDir: str
   }
 
   async function voiceChannelOf(bot: Bot, guildId: string) {
-    return bot.db.query.channel_directories
-      .findFirst({ where: { guild_id: guildId, channel_type: 'voice' } })
+    const rows = await bot.db<ChannelDirectoryRow[]>`
+      SELECT * FROM channel_directories WHERE guild_id = ${guildId} AND channel_type = ${'voice'} LIMIT 1`
       .catch((cause) => new DbError({ operation: 'read voice channel', cause }))
+    if (rows instanceof Error) return rows
+    return parseFirst<ChannelDirectoryRow>('channel_directories', rows)
   }
 
   async function permittedUsers(bot: Bot, { guild, channelId }: { guild: Guild; channelId: string }) {

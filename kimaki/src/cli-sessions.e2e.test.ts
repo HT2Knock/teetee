@@ -4,13 +4,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
 import os from 'node:os'
-import { eq } from 'drizzle-orm'
 import { promisify } from 'node:util'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import { openDb } from './db.ts'
 import type { BotHandle } from './main.ts'
-import * as schema from './schema.ts'
 import { cliCommand, scriptedTurn, seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, textParts, waitForFooter, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
 import { send } from './prompt.ts'
 
@@ -103,7 +101,7 @@ test('session resume finds the project channel when SQLite stores a symlink alia
   fs.symlinkSync(server.projectDirectory, alias)
   const opened = await openDb({ dataDir, migrate: false })
   if (opened instanceof Error) throw opened
-  await opened.db.update(schema.channel_directories).set({ directory: alias }).where(eq(schema.channel_directories.channel_id, twin.channelId))
+  await opened.db`UPDATE channel_directories SET directory = ${alias} WHERE channel_id = ${twin.channelId}`
   opened.close()
   try {
     const source = await newSession('alias-source')
@@ -112,7 +110,7 @@ test('session resume finds the project channel when SQLite stores a symlink alia
   } finally {
     const restore = await openDb({ dataDir, migrate: false })
     if (restore instanceof Error) throw restore
-    await restore.db.update(schema.channel_directories).set({ directory: server.projectDirectory }).where(eq(schema.channel_directories.channel_id, twin.channelId))
+    await restore.db`UPDATE channel_directories SET directory = ${server.projectDirectory} WHERE channel_id = ${twin.channelId}`
     restore.close()
     fs.rmSync(path.dirname(alias), { recursive: true, force: true })
   }

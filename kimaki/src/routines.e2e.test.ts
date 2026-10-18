@@ -6,12 +6,11 @@ import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import { promisify } from 'node:util'
 import { ComponentType, type APIMessage } from 'discord.js'
-import * as orm from 'drizzle-orm'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
-import * as schema from './schema.ts'
 import { abort } from './prompt.ts'
+import { parseFirst, toDbDate, type ScheduledTaskRow } from './rows.ts'
 import {
   cliCommand,
   TEST_USER_ID,
@@ -84,10 +83,10 @@ test('a routine row written by V1 runs unchanged', async () => {
     agent: null, model: null, username: 'tommy', userId: TEST_USER_ID, permissions: null, injectionGuardPatterns: null, parentSessionId: null,
     preRunCommand: null, allowConcurrency: false,
   }
-  const [row] = await bot.db.insert(schema.scheduled_tasks).values({
-    status: 'planned', schedule_kind: 'cron', cron_expr: '0 9 * * 1', timezone: 'UTC', next_run_at: new Date('2030-01-07T09:00:00.000Z'),
-    payload_json: JSON.stringify(payload), prompt_preview: 'V1 weekly check', channel_id: twin.channelId, project_directory: server.projectDirectory,
-  }).returning()
+  const rows = await bot.db<ScheduledTaskRow[]>`INSERT INTO scheduled_tasks (status, schedule_kind, cron_expr, timezone, next_run_at, payload_json, prompt_preview, channel_id, project_directory)
+    VALUES (${'planned'}, ${'cron'}, ${'0 9 * * 1'}, ${'UTC'}, ${toDbDate(new Date('2030-01-07T09:00:00.000Z'))}, ${JSON.stringify(payload)}, ${'V1 weekly check'}, ${twin.channelId}, ${server.projectDirectory})
+    RETURNING *`
+  const row = parseFirst<ScheduledTaskRow>('scheduled_tasks', rows)
   const [threadId] = await tick('2030-01-07T09:00:00Z')
   await waitForFooter({ discord: twin.discord, threadId: threadId! })
   expect(await twin.discord.thread(threadId!).text()).toMatchInlineSnapshot(`
@@ -99,7 +98,7 @@ test('a routine row written by V1 runs unchanged', async () => {
   `)
   expect((await listTasks()).find((task) => task.id === row!.id)).toMatchObject({ status: 'planned', nextRunAt: '2030-01-14T09:00:00.000Z' })
   // V1 history: finished rows only show with the V1 `task list --all`.
-  await bot.db.update(schema.scheduled_tasks).set({ status: 'completed' }).where(orm.eq(schema.scheduled_tasks.id, row!.id))
+  await bot.db`UPDATE scheduled_tasks SET status = ${'completed'}, updated_at = ${toDbDate(new Date())} WHERE id = ${row!.id}`
   const listed = async (args: string[]) => (JSON.parse(await cli(['task', 'list', '--json', ...args])) as Array<{ id: number; status: string }>).map(({ id, status }) => ({ id, status }))
   expect({ default: await listed([]), all: await listed(['--all']) }).toMatchInlineSnapshot(`
     {

@@ -8,6 +8,7 @@ import type { DeterministicMatcher } from 'opencode-deterministic-provider'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
+import { parseFirst, type SessionSleepRow } from './rows.ts'
 import {
   TEST_USER_ID,
   manualClock,
@@ -73,7 +74,7 @@ async function start(prompt: string) {
 }
 
 async function sleepRow(sessionId: string) {
-  return bot.db.query.session_sleeps.findFirst({ where: { session_id: sessionId } })
+  return parseFirst<SessionSleepRow>('session_sleeps', await bot.db<SessionSleepRow[]>`SELECT * FROM session_sleeps WHERE session_id = ${sessionId} LIMIT 1`)
 }
 
 test('kimaki sleep wakes the same thread at the clock time', async () => {

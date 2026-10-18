@@ -40,7 +40,7 @@ export function registerProjectCommands(cli: Goke) {
       const { listProjects } = await import('../project.ts')
       const opened = await openCliDb(options.dataDir)
       const rows = await listProjects({ db: opened.db })
-      opened.close()
+      await opened.close()
       if (rows instanceof Error) fail(rows)
       if (options.json) return printJson(rows.map((row) => ({ channelId: row.channel_id, directory: row.directory, guildId: row.guild_id })))
       for (const row of rows) process.stdout.write(`<#${row.channel_id}> ${row.directory}\n`)
@@ -60,7 +60,7 @@ export function registerProjectCommands(cli: Goke) {
         directory: path.resolve(directory ?? process.cwd()),
         machine: options.machineName ?? defaultMachineName(),
       })
-      opened.close()
+      await opened.close()
       if (result instanceof Error) fail(result)
       process.stdout.write(`${result.created ? 'Added' : 'Already added'} <#${result.channelId}> for ${result.directory}\n`)
     })
