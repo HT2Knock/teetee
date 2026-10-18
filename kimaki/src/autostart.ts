@@ -18,7 +18,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import dedent from 'string-dedent'
+import dedent from 'dedent'
 
 import { runtimeExecutable } from './runtime.ts'
 

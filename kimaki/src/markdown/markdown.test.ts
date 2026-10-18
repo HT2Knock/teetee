@@ -1,19 +1,21 @@
 // Snapshot tests of the markdown pipeline on realistic model outputs.
 
-import dedent from 'string-dedent'
+import dedent from 'dedent'
 import { expect, test } from 'bun:test'
 
 import { markdownPayloads } from './components.ts'
 import { renderMarkdown } from './render-markdown.ts'
 
 test('GFM table with links and inline code becomes a table segment and components', () => {
+  // dedent treats the template text as written (it only handles \n, \t, \u…,
+  // \` and \${), so these escapes are the markdown escapes, not JS ones.
   const text = dedent`
     Here is the summary:
 
     | File | Change |
     | --- | --- |
     | \`src/a.ts\` | added [docs](https://kimaki.dev) link |
-    | \`src/b.ts\` | removed \`x \\| y\` escaping |
+    | \`src/b.ts\` | removed \`x \| y\` escaping |
 
     Done.
   `
