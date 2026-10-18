@@ -1709,9 +1709,12 @@ scheduled_tasks     tasks
 session_sleeps      sleeps
 ```
 
-The V2 Drizzle schema (`kimaki/src/schema.ts`) declares **only the used tables**, copied
-from the V1 schema with identical column names, types, and the same custom `datetime`
-type, so the import is one `INSERT … SELECT` per table:
+The V2 schema (`kimaki/src/rows.ts`, row types; `kimaki/src/schema-sql.ts`, the DDL)
+declares **only the used tables**, copied from the V1 schema with identical column
+names and types, so the import is one `INSERT … SELECT` per table. The datetime
+columns stay `datetime` text on disk; read paths run the rows through
+`parseRows()`, which applies the same conversion the V2 driver's custom `datetime`
+type did:
 
 | Data dir | First V2 start |
 |---|---|
@@ -1836,7 +1839,7 @@ cli/src/
   cli/                   goke commands (send, session, project, task, …)
   scheduler.ts           scheduled tasks + sleeps, calls startSession / dispatch in-process
   lock-server.ts         /health, POST /kimaki/send (token auth)
-  db/                    drizzle schema: subset of the V1 tables, same file
+  db/                    row types + DDL: subset of the V1 tables, same file
 ```
 
 The bot process has exactly one loop that matters:
