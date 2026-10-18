@@ -1,6 +1,6 @@
 the important package in this repo is `kimaki/`: the Kimaki Discord bot and `kimaki` CLI (npm package `kimaki`), built on OpenCode V2. it replaced the V1 `cli/` package; `kimaki/CHANGELOG.md` keeps the V1 release history. this branch supports OpenCode V2 only. the legacy OpenCode V1 compatible codebase lives in the `cli/` folder of the `v1` branch (https://github.com/remorses/kimaki/tree/v1/cli); read it there with `git show v1:cli/<path>`, never re-add V1 support here.
 
-after every change and every feature run `pnpm build` (tsc) inside `kimaki`. it validates types and keeps `kimaki/dist` up to date: the OpenCode plugin autostarts the bot from `dist/cli.js` (`src/autostart.ts`), so a stale dist starts old code. try to never use `as any`.
+after every change and every feature run `bun run build` (tsc) inside `kimaki`. it validates types and keeps `kimaki/dist` up to date: the OpenCode plugin autostarts the bot from `dist/cli.js` (`src/autostart.ts`), so a stale dist starts old code. try to never use `as any`.
 
 always load the `changesets` skill before fixing bugs or adding features. User-facing fixes and features usually need a `.changeset/*.md` entry, and the skill explains package selection, issue references, descriptive filenames, and `.changeset/readme.md` expectations.
 
@@ -205,7 +205,7 @@ full event schema, DAU/WAU/MAU, funnels, retention, completion rate, and copy-pa
 
 ## opencode plugin
 
-`kimaki/src/plugin/` runs inside the **OpenCode server process**, not the bot. on start the bot writes a shim per plugin into `<opencode config dir>/plugins/<name>/index.js` that re-exports `dist/plugin/` of the running Kimaki install (`installPluginShim` in `opencode-server.ts`), also when the bot runs from `src`: OpenCode watches plugin files and reloads on change, so a `src` target would load half-edited code on every save. run `pnpm build` to ship plugin changes. no opencode.json edit. writing the shim only when its content changes matters: any change in that folder reloads every location and cancels pending forms.
+`kimaki/src/plugin/` runs inside the **OpenCode server process**, not the bot. on start the bot writes a shim per plugin into `<opencode config dir>/plugins/<name>/index.js` that re-exports `dist/plugin/` of the running Kimaki install (`installPluginShim` in `opencode-server.ts`), also when the bot runs from `src`: OpenCode watches plugin files and reloads on change, so a `src` target would load half-edited code on every save. run `bun run build` to ship plugin changes. no opencode.json edit. writing the shim only when its content changes matters: any change in that folder reloads every location and cancels pending forms.
 
 - `plugin/index.ts` (`kimaki`): git branch reminder, `<discord-user>` turn context rendered from `metadata.discord` into the model request only (stored prompt text stays clean for the TUI), extra `description` / `hasSideEffect` tool inputs, shell env, file edit log.
 - `plugin/anthropic/index.ts` (`kimaki-anthropic`): Claude Pro/Max OAuth for every session, TUI included.
@@ -407,7 +407,7 @@ always add `expect(await discord.thread(id).text()).toMatchInlineSnapshot()` (or
 
 `opencode-deterministic-provider` implements `@ai-sdk/provider` v3. when editing matchers or debugging stream behavior, confirm the stream part shapes from the installed types:
 
-- `node_modules/.pnpm/@ai-sdk+provider@3*/node_modules/@ai-sdk/provider/dist/index.d.ts` (`LanguageModelV3StreamPart`)
+- `node_modules/.bun/@ai-sdk+provider@3*/node_modules/@ai-sdk/provider/dist/index.d.ts` (`LanguageModelV3StreamPart`)
 
 realistic assistant output shapes:
 
