@@ -20,7 +20,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { promisify } from 'node:util'
 import * as clack from '@clack/prompts'
 import { OAuth2Scopes, PermissionFlagsBits } from 'discord.js'
-import dedent from 'dedent'
+import dedent from 'string-dedent'
 
 import type { KimakiDb } from './db.ts'
 import { ConfigError, DbError } from './errors.ts'

@@ -17,7 +17,7 @@ import { promisify } from 'node:util'
 import * as clack from '@clack/prompts'
 import { ChannelType, Events, type Client, type Guild } from 'discord.js'
 import * as errore from 'errore'
-import dedent from 'dedent'
+import dedent from 'string-dedent'
 
 import { API } from '@discordjs/core/http-only'
 

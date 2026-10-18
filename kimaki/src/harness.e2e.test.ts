@@ -5,7 +5,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
-import dedent from 'dedent'
+import dedent from 'string-dedent'
 import { afterAll, beforeAll, expect, onTestFinished, test } from 'bun:test'
 
 import { startLockServer } from './lock-server.ts'
