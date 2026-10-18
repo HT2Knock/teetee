@@ -19,6 +19,7 @@ import type { OpenCodeClient } from '@opencode/client'
 import type { KimakiDb } from './db.ts'
 import { ConfigError, DbError, OpenCodeError } from './errors.ts'
 import { createLogger } from './logger.ts'
+import { parseFirst, type ThreadSessionRow } from './rows.ts'
 import type { ThreadEvent } from './thread-reducer.ts'
 
 const logger = createLogger('EVENTS')
@@ -99,10 +100,10 @@ export async function resolveSession({
   db: KimakiDb
   id: string
 }): Promise<DbError | ConfigError | ResolvedSession> {
-  const row = await db.query.thread_sessions
-    .findFirst({ where: { OR: [{ thread_id: id }, { session_id: id }] }, orderBy: { updated_at: 'desc' } })
+  const rows = await db<ThreadSessionRow[]>`SELECT * FROM thread_sessions WHERE (thread_id = ${id}) OR (session_id = ${id}) ORDER BY updated_at DESC LIMIT 1`
     .catch((e) => new DbError({ operation: 'read thread_sessions', cause: e }))
-  if (row instanceof Error) return row
+  if (rows instanceof Error) return rows
+  const row = parseFirst<ThreadSessionRow>('thread_sessions', rows)
   if (!row) return new ConfigError({ reason: `No Kimaki thread for ${id}. Pass a root session id or thread id.` })
   return { threadId: row.thread_id, sessionId: row.session_id }
 }

@@ -25,7 +25,7 @@ import dedent from 'string-dedent'
 import type { KimakiDb } from './db.ts'
 import { ConfigError, DbError } from './errors.ts'
 import { createLogger } from './logger.ts'
-import * as schema from './schema.ts'
+import { parseRows, toDbDate, type BotTokenRow } from './rows.ts'
 
 const logger = createLogger('CREDS')
 const execFileAsync = promisify(execFile)
@@ -73,7 +73,7 @@ export function appIdFromToken(token: string): string | null {
   return /^\d{17,20}$/.test(decoded) ? decoded : null
 }
 
-export function credentialsFromRow(row: typeof schema.bot_tokens.$inferSelect): Credentials | null {
+export function credentialsFromRow(row: BotTokenRow): Credentials | null {
   if (row.bot_mode === 'self_hosted') {
     return row.token ? { mode: 'self_hosted', appId: row.app_id, token: row.token, baseUrl: null } : null
   }
@@ -100,11 +100,17 @@ export async function readSavedCredentials({
   db: KimakiDb
   mode?: BotMode
 }): Promise<DbError | Credentials | null> {
-  const rows = await db.query.bot_tokens
-    .findMany({ ...(mode && { where: { bot_mode: mode } }), orderBy: { last_used_at: 'desc', created_at: 'desc' } })
+  const filters: string[] = []
+  const values: unknown[] = []
+  if (mode) {
+    filters.push('bot_mode = ?')
+    values.push(mode)
+  }
+  const where = filters.length > 0 ? ` WHERE ${filters.join(' AND ')}` : ''
+  const rows = await db.unsafe<BotTokenRow[]>(`SELECT * FROM bot_tokens${where} ORDER BY last_used_at DESC, created_at DESC`, values)
     .catch((e) => new DbError({ operation: 'read bot_tokens', cause: e }))
   if (rows instanceof Error) return rows
-  return rows.map(credentialsFromRow).find((credentials) => credentials !== null) ?? null
+  return parseRows<BotTokenRow>('bot_tokens', rows).map(credentialsFromRow).find((credentials) => credentials !== null) ?? null
 }
 
 // Same columns V1 writes for each mode.
@@ -127,11 +133,14 @@ export async function saveCredentials({
       proxy_url: credentials.baseUrl,
     }),
   }
-  const saved = await db
-    .insert(schema.bot_tokens)
-    .values({ app_id: credentials.appId, ...values })
-    .onConflictDoUpdate({ target: schema.bot_tokens.app_id, set: values })
-    .catch((e) => new DbError({ operation: 'save bot_tokens', cause: e }))
+  const entries = Object.entries(values).filter(([, value]) => value !== undefined)
+  const columns = entries.map(([column]) => column)
+  const bound = entries.map(([, value]) => (value instanceof Date ? toDbDate(value) : value))
+  const saved = await db.unsafe<unknown[]>(
+    `INSERT INTO bot_tokens (app_id, ${columns.join(', ')}) VALUES (?, ${columns.map(() => '?').join(', ')})
+     ON CONFLICT(app_id) DO UPDATE SET ${columns.map((column) => `${column} = ?`).join(', ')}`,
+    [credentials.appId, ...bound, ...bound],
+  ).catch((e) => new DbError({ operation: 'save bot_tokens', cause: e }))
   if (saved instanceof Error) return saved
 }
 

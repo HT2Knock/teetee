@@ -6,7 +6,6 @@
 // Any new input in the thread cancels the sleep (prompt.ts dispatch).
 
 import crypto from 'node:crypto'
-import * as orm from 'drizzle-orm'
 import dedent from 'string-dedent'
 
 import { fetchThread, threadOfSession, type Bot } from './bot.ts'
@@ -15,14 +14,14 @@ import { ConfigError, DbError } from './errors.ts'
 import { asSubtext } from './format-parts.ts'
 import { createLogger } from './logger.ts'
 import { prompt } from './prompt.ts'
-import * as schema from './schema.ts'
+import { parseFirst, parseRows, toDbDate, type SessionSleepRow } from './rows.ts'
 
 const logger = createLogger('TASK')
 
 const WAKE_RETRY_MS = 30_000
 const WAKE_MAX_ATTEMPTS = 5
 
-type SleepRow = typeof schema.session_sleeps.$inferSelect
+type SleepRow = SessionSleepRow
 
 const UTC_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?Z$/
 
@@ -85,12 +84,10 @@ export function createSleepLock(): SleepLock {
   }
 }
 
+// WHERE clause of the planned sleep of one delivery, in the raw `?` form
+// `db.unsafe` takes: the values go with it in the same order.
 function sleepRow(sessionId: string, deliveryId: string) {
-  return orm.and(
-    orm.eq(schema.session_sleeps.session_id, sessionId),
-    orm.eq(schema.session_sleeps.delivery_id, deliveryId),
-    orm.eq(schema.session_sleeps.status, 'planned'),
-  )
+  return { where: 'session_id = ? AND delivery_id = ? AND status = ?', values: [sessionId, deliveryId, 'planned'] }
 }
 
 // New input supersedes a pending sleep of the session (prompt.ts dispatch, /abort).
@@ -98,9 +95,7 @@ export async function cancelSleep(bot: Bot, sessionId: string): Promise<void> {
   const cancelled = await bot.features.withSleepLock({
     sessionId,
     run: () =>
-      bot.db.update(schema.session_sleeps).set({ status: 'cancelled' })
-        .where(orm.and(orm.eq(schema.session_sleeps.session_id, sessionId), orm.eq(schema.session_sleeps.status, 'planned')))
-        .returning({ sessionId: schema.session_sleeps.session_id })
+      bot.db<{ session_id: string }[]>`UPDATE session_sleeps SET status = ${'cancelled'} WHERE session_id = ${sessionId} AND status = ${'planned'} RETURNING session_id`
         .catch((cause) => new DbError({ operation: 'cancel sleep', cause })),
   })
   if (cancelled instanceof Error) return logger.warn(cancelled)
@@ -134,8 +129,16 @@ export async function createSleep(
   const saved = await bot.features.withSleepLock({
     sessionId: root,
     run: () =>
-      bot.db.insert(schema.session_sleeps).values({ session_id: root, ...values })
-        .onConflictDoUpdate({ target: schema.session_sleeps.session_id, set: values })
+      bot.db`INSERT INTO session_sleeps (session_id, wake_at, reason, status, delivery_id, attempts, last_attempt_at, created_at)
+        VALUES (${root}, ${toDbDate(values.wake_at)}, ${values.reason}, ${values.status}, ${values.delivery_id}, ${values.attempts}, ${values.last_attempt_at}, ${toDbDate(values.created_at)})
+        ON CONFLICT(session_id) DO UPDATE SET
+          wake_at = ${toDbDate(values.wake_at)},
+          reason = ${values.reason},
+          status = ${values.status},
+          delivery_id = ${values.delivery_id},
+          attempts = ${values.attempts},
+          last_attempt_at = ${values.last_attempt_at},
+          created_at = ${toDbDate(values.created_at)}`
         .catch((cause) => new DbError({ operation: 'write session_sleeps', cause })),
   })
   if (saved instanceof Error) return saved
@@ -161,19 +164,21 @@ async function wake(bot: Bot, row: SleepRow): Promise<Error | void> {
     Continue the work you were waiting for.
   `
   const deliver = async () => {
-    const claimed = await bot.db.update(schema.session_sleeps)
-      .set({ attempts: orm.sql`${schema.session_sleeps.attempts} + 1`, last_attempt_at: new Date(time) })
-      .where(orm.and(
-        sleepRow(sessionId, deliveryId),
-        orm.or(orm.isNull(schema.session_sleeps.last_attempt_at), orm.lte(schema.session_sleeps.last_attempt_at, new Date(time - WAKE_RETRY_MS))),
-      ))
-      .returning({ attempts: schema.session_sleeps.attempts })
-      .catch((cause) => new DbError({ operation: `claim wake of ${sessionId}`, cause }))
+    // session_id, delivery_id and status = 'planned' of this wake.
+    const planned = sleepRow(sessionId, deliveryId)
+    const claimed = await bot.db.unsafe<{ attempts: number }[]>(
+      `UPDATE session_sleeps
+        SET attempts = attempts + 1, last_attempt_at = ?
+        WHERE ${planned.where}
+          AND (last_attempt_at IS NULL OR last_attempt_at <= ?)
+        RETURNING attempts`,
+      [toDbDate(new Date(time)), ...planned.values, toDbDate(new Date(time - WAKE_RETRY_MS))],
+    ).catch((cause) => new DbError({ operation: `claim wake of ${sessionId}`, cause }))
     if (claimed instanceof Error) return claimed
-    const attempt = claimed[0]
+    const attempt = parseFirst<{ attempts: number }>('session_sleeps', claimed)
     if (!attempt) return 'stale' as const
     const settle = async (status: 'consumed' | 'failed') => {
-      const settled = await bot.db.update(schema.session_sleeps).set({ status }).where(sleepRow(sessionId, deliveryId))
+      const settled = await bot.db.unsafe(`UPDATE session_sleeps SET status = ? WHERE ${planned.where}`, [status, ...planned.values])
         .catch((cause) => new DbError({ operation: `settle wake of ${sessionId}`, cause }))
       return settled instanceof Error ? settled : status === 'consumed' ? 'woke' as const : 'failed' as const
     }
@@ -211,18 +216,15 @@ async function wake(bot: Bot, row: SleepRow): Promise<Error | void> {
 // Due wakes, oldest first, one at a time. A failed attempt waits
 // WAKE_RETRY_MS; the claim in wake() checks it again.
 export async function runDueWakes(bot: Bot, { time, limit }: { time: number; limit: number }): Promise<void> {
-  const sleeps = await bot.db.query.session_sleeps
-    .findMany({
-      where: {
-        status: 'planned',
-        wake_at: { lte: new Date(time) },
-        OR: [{ last_attempt_at: { isNull: true } }, { last_attempt_at: { lte: new Date(time - WAKE_RETRY_MS) } }],
-      },
-      orderBy: { wake_at: 'asc' },
-      limit,
-    })
+  const rows = await bot.db<SessionSleepRow[]>`
+    SELECT * FROM session_sleeps
+    WHERE status = ${'planned'} AND wake_at <= ${toDbDate(new Date(time))}
+      AND (last_attempt_at IS NULL OR last_attempt_at <= ${toDbDate(new Date(time - WAKE_RETRY_MS))})
+    ORDER BY wake_at ASC
+    LIMIT ${limit}`
     .catch((cause) => new DbError({ operation: 'read due sleeps', cause }))
-  if (sleeps instanceof Error) return logger.error(sleeps)
+  if (rows instanceof Error) return logger.error(rows)
+  const sleeps = parseRows<SessionSleepRow>('session_sleeps', rows)
   for (const row of sleeps) {
     const woke = await wake(bot, row)
     if (woke instanceof Error) logger.warn(woke)

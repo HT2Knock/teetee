@@ -7,6 +7,7 @@ import { MessageFlags } from 'discord.js'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
+import { parseFirst, parseRows, type ThreadSessionRow } from './rows.ts'
 import { sessionEventsFile } from './session-events.ts'
 import {
   OTHER_USER_ID,
@@ -154,7 +155,7 @@ test('channel message creates a thread with reply and footer, follow-up continue
     ]
   `)
 
-  const rows = await bot.db.query.thread_sessions.findMany()
+  const rows = parseRows<ThreadSessionRow>('thread_sessions', await bot.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions`)
   expect(rows.map((row) => ({ thread: row.thread_id === thread.id, source: row.source }))).toEqual([
     { thread: true, source: 'kimaki' },
   ])
@@ -185,7 +186,7 @@ test('message in a channel without a project creates no thread', async () => {
 
 test('/session-id shows the session, thread and attach command; events are recorded per thread', async () => {
   const { discord } = twin
-  const [binding] = await bot.db.query.thread_sessions.findMany({ where: { thread_id: helloThreadId } })
+  const binding = parseFirst<ThreadSessionRow>('thread_sessions', await bot.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions WHERE thread_id = ${helloThreadId} LIMIT 1`)
   const { id: interactionId } = await discord.thread(helloThreadId).user(TEST_USER_ID).runSlashCommand({ name: 'session-id' })
   await discord.thread(helloThreadId).waitForInteractionAck({ interactionId, timeout: 4_000 })
   const response = await discord.thread(helloThreadId).getInteractionResponse(interactionId)

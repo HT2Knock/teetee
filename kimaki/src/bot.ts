@@ -17,6 +17,7 @@ import { ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableE
 import type { EventLoop } from './event-loop.ts'
 import type { OpenCodeClient, OpencodeConnection } from './opencode-server.ts'
 import type { Route } from './routes.ts'
+import { parseFirst, type ChannelDirectoryRow, type GlobalModelRow } from './rows.ts'
 import type { Clock } from './scheduler.ts'
 import type { PluginWait } from './sessions.ts'
 import type { SleepLock } from './sleeps.ts'
@@ -85,11 +86,10 @@ export async function oc<T>(
 
 // The project row of a channel; null when the channel is not a project here.
 export async function projectOf(bot: Bot, channelId: string) {
-  const row = await bot.db.query.channel_directories
-    .findFirst({ where: { channel_id: channelId } })
+  const rows = await bot.db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories WHERE channel_id = ${channelId} LIMIT 1`
     .catch((cause) => new DbError({ operation: 'read channel_directories', cause }))
-  if (row instanceof Error) return row
-  return row ?? null
+  if (rows instanceof Error) return rows
+  return parseFirst<ChannelDirectoryRow>('channel_directories', rows) ?? null
 }
 
 // Current working directory of a session (session.moved changes it).
@@ -170,10 +170,10 @@ export function cliContext(bot: Bot) {
 
 // Default model of new sessions in channels without their own (/model "All channels").
 export async function globalModel(bot: Bot): Promise<DbError | ModelChoice | null> {
-  const row = await bot.db.query.global_models
-    .findFirst({ where: { app_id: bot.appId } })
+  const rows = await bot.db<GlobalModelRow[]>`SELECT * FROM global_models WHERE app_id = ${bot.appId} LIMIT 1`
     .catch((cause) => new DbError({ operation: 'read global_models', cause }))
-  if (row instanceof Error) return row
+  if (rows instanceof Error) return rows
+  const row = parseFirst<GlobalModelRow>('global_models', rows)
   const model = parseModel(row?.model_id, row?.variant)
   return model ? { ...model, variant: row?.variant ?? null } : null
 }

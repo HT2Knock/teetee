@@ -25,6 +25,7 @@ import { createLogger } from './logger.ts'
 import type { ConnectContext, OpenCodeClient, V2Event } from './opencode-server.ts'
 import type { EventRecorder } from './session-events.ts'
 import { queuedItems } from './queue.ts'
+import { parseFirst, parseRows, type ChannelDirectoryRow, type ChannelVerbosityRow, type ThreadSessionRow } from './rows.ts'
 import type { BotStore } from './store.ts'
 import {
   emptyView,
@@ -186,8 +187,9 @@ export function createEventLoop({
       if (thread instanceof Error) return thread
       const channelId = thread?.isThread() ? thread.parentId : null
       if (!channelId) return null
-      const project = await db.query.channel_directories.findFirst({ where: { channel_id: channelId } }).catch((e) => new DbError({ operation: 'read channel_directories', cause: e }))
-      if (project instanceof Error) return project
+      const projectRows = await db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories WHERE channel_id = ${channelId} LIMIT 1`.catch((e) => new DbError({ operation: 'read channel_directories', cause: e }))
+      if (projectRows instanceof Error) return projectRows
+      const project = parseFirst<ChannelDirectoryRow>('channel_directories', projectRows)
       if (!project) return null
       const client = connection.client
       if (!client) return new OpenCodeError({ operation: 'load session directory while disconnected' })
@@ -351,12 +353,14 @@ export function createEventLoop({
     // Bindings and channel verbosity from SQLite. Several bindings can share a
     // session after V1 /resume; the most recently updated one wins.
     async load(): Promise<DbError | void> {
-      const [rows, verbosity] = await Promise.all([
-        db.query.thread_sessions.findMany({ orderBy: { updated_at: 'asc' } }).catch((e) => new DbError({ operation: 'read thread_sessions', cause: e })),
-        db.query.channel_verbosity.findMany().catch((e) => new DbError({ operation: 'read channel_verbosity', cause: e })),
+      const [sessionRows, verbosityRows] = await Promise.all([
+        db<ThreadSessionRow[]>`SELECT * FROM thread_sessions ORDER BY updated_at ASC`.catch((e) => new DbError({ operation: 'read thread_sessions', cause: e })),
+        db<ChannelVerbosityRow[]>`SELECT * FROM channel_verbosity`.catch((e) => new DbError({ operation: 'read channel_verbosity', cause: e })),
       ])
-      if (rows instanceof Error) return rows
-      if (verbosity instanceof Error) return verbosity
+      if (sessionRows instanceof Error) return sessionRows
+      if (verbosityRows instanceof Error) return verbosityRows
+      const rows = parseRows<ThreadSessionRow>('thread_sessions', sessionRows)
+      const verbosity = parseRows<ChannelVerbosityRow>('channel_verbosity', verbosityRows)
       store.setState({
         roots: Object.fromEntries(rows.map((row) => [row.thread_id, row.session_id])),
         sessionThreads: Object.fromEntries(rows.map((row) => [row.session_id, row.thread_id])),

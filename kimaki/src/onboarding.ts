@@ -28,6 +28,7 @@ import { checkOpencode, findOpencodeBinary, installedOpencodeBinary, OPENCODE_IN
 import type { Bot } from './bot.ts'
 import { startSession } from './sessions.ts'
 import { addProjectChannel, defaultChannelName, defaultProjectDirectory } from './project.ts'
+import { parseRows, type ChannelDirectoryRow } from './rows.ts'
 
 const logger = createLogger('ONBOARD')
 const execFileAsync = promisify(execFile)
@@ -213,10 +214,10 @@ export async function runOnboarding({
 > {
   const { db } = bot
   const directory = defaultProjectDirectory({ dataDir })
-  const projects = await db.query.channel_directories
-    .findMany({ where: { channel_type: 'text' } })
+  const projectRows = await db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories WHERE channel_type = ${'text'}`
     .catch((e) => new DbError({ operation: 'read channel_directories', cause: e }))
-  if (projects instanceof Error) return projects
+  if (projectRows instanceof Error) return projectRows
+  const projects = parseRows<ChannelDirectoryRow>('channel_directories', projectRows)
   const mapped = projects.find((project) => project.directory === directory)
   if (!mapped && projects.length > 0) return null
   // Done once the default channel has a message (the welcome). An empty channel

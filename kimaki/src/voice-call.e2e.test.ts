@@ -12,6 +12,7 @@ import prism from 'prism-media'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
+import { parseFirst, type BotTokenRow } from './rows.ts'
 import { ensureVoiceChannels, saveVoiceCallVoice, voiceCallSettings } from './voice-call.ts'
 import {
   TEST_USER_ID,
@@ -268,7 +269,7 @@ test('finished threads of any project are announced in the call; the model answe
 })
 
 test('a saved voice is used when gpt-live knows it; no ChatGPT sign-in means no call', async () => {
-  const appId = (await bot.db.query.bot_tokens.findFirst({ where: { token: bot.token } }))!.app_id
+  const appId = parseFirst<BotTokenRow>('bot_tokens', await bot.db<BotTokenRow[]>`SELECT * FROM bot_tokens WHERE token = ${bot.token} LIMIT 1`)!.app_id
   const pick = async (voice: string | null) => {
     const saved = await saveVoiceCallVoice({ db: bot.db, appId, voice })
     if (saved instanceof Error) throw saved

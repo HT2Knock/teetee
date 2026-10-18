@@ -40,6 +40,7 @@ import type { SendInput } from './lock-routes.ts'
 import { formatEcho } from './queue.ts'
 import { noAnswerError, parseRemoteResult, remoteEnvelope, promptFilePath, REMOTE_TIMEOUT_MS, type RemoteResult } from './remote-send.ts'
 import { parseTextMessage, type Route } from './routes.ts'
+import { parseFirst, type ChannelDirectoryRow } from './rows.ts'
 import { allMessages } from './session-events.ts'
 import { ensureSessionMarker, forkBtw, startSession, switchAgent, threadProject } from './sessions.ts'
 import { cancelSleep } from './sleeps.ts'
@@ -571,10 +572,11 @@ export async function send(bot: Bot, input: SendInput, { localOnly = false, task
     return result ?? { threadId, sessionId: bot.store.getState().roots[threadId]! }
   }
 
-  const project = await bot.db.query.channel_directories
-    .findFirst({ where: input.channelId ? { channel_id: input.channelId } : { directory: path.resolve(input.project!) } })
-    .catch((cause) => new DbError({ operation: 'resolve send project', cause }))
-  if (project instanceof Error) return project
+  const projectRows = input.channelId
+    ? await bot.db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories WHERE channel_id = ${input.channelId} LIMIT 1`.catch((cause) => new DbError({ operation: 'resolve send project', cause }))
+    : await bot.db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories WHERE directory = ${path.resolve(input.project!)} LIMIT 1`.catch((cause) => new DbError({ operation: 'resolve send project', cause }))
+  if (projectRows instanceof Error) return projectRows
+  const project = parseFirst<ChannelDirectoryRow>('channel_directories', projectRows)
   if (!project) return input.channelId && !localOnly ? remoteSend(bot, input) : new ConfigError({ reason: 'No local project channel for this target' })
 
   if (input.notifyOnly) {

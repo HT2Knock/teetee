@@ -16,6 +16,7 @@ import { callBot, DEFAULT_LOCK_PORT, RESTART_EXIT_CODE, startLockServer } from '
 import { parseDuration } from '../duration.ts'
 import { createLogger, setLogFile } from '../logger.ts'
 import { runtimeExecutable } from '../runtime.ts'
+import { parseFirst, type BotApiKeyRow } from '../rows.ts'
 import { action, DATA_DIR_HELP, dataDirOrDefault, discordApi, fail, openCliDb, printJson } from './shared.ts'
 
 const logger = createLogger('CLI')
@@ -148,7 +149,7 @@ export function registerStartCommand(cli: Goke) {
         const credentials = options.gateway
           ? await gatewayCredentials({ db: opened.db, urls })
           : await readSavedCredentials({ db: opened.db })
-        opened.close()
+        await opened.close()
         if (credentials instanceof Error) fail(credentials)
         if (!credentials) fail(new Error('No bot configured yet. Run kimaki first, or pass --gateway.'))
         process.stdout.write(`${installUrlFor({ credentials, website: urls.website, callbackUrl: options.gatewayCallbackUrl })}\n`)
@@ -178,7 +179,7 @@ export function registerStartCommand(cli: Goke) {
       // Before onboarding: without OpenCode the bot cannot start, so fail (or install it) before the Discord install.
       const opencodeCheck = await ensureOpencode({ serviceFile: process.env['KIMAKI_OPENCODE_SERVICE_FILE'] })
       if (opencodeCheck instanceof Error) {
-        opened.close()
+        await opened.close()
         failStartup(opencodeCheck)
       }
 
@@ -192,7 +193,7 @@ export function registerStartCommand(cli: Goke) {
       })
       // Saved in SQLite, so restarts, crashes and autostart keep it without the flag.
       const savedVoice = resolved instanceof Error || voice === undefined ? undefined : await saveVoiceCallVoice({ db: opened.db, appId: resolved.credentials.appId, voice })
-      opened.close()
+      await opened.close()
       if (resolved instanceof Error) failStartup(resolved)
       if (savedVoice instanceof Error) failStartup(savedVoice)
       if (voice !== undefined) logger.log(`voice calls use ${voice === null ? 'the default voice' : `the voice ${voice}`}`)
@@ -319,8 +320,9 @@ export function registerToolCommands(cli: Goke) {
       const [{ openDb }, { audioKeyCandidates, generateSpeech }] = await Promise.all([import('../db.ts'), import('../voice.ts')])
       // Any stored bot_api_keys row (imported from V1 /transcription-key); a missing database only skips it.
       const opened = await openDb({ dataDir: dataDirOrDefault(options.dataDir), migrate: false })
-      const stored = opened instanceof Error ? null : await opened.db.query.bot_api_keys.findFirst().catch(() => null)
-      if (!(opened instanceof Error)) opened.close()
+      const rows = opened instanceof Error ? null : await opened.db<BotApiKeyRow[]>`SELECT * FROM bot_api_keys LIMIT 1`.catch(() => null)
+      const stored = rows === null ? null : parseFirst<BotApiKeyRow>('bot_api_keys', rows)
+      if (!(opened instanceof Error)) await opened.close()
       const key = audioKeyCandidates(stored).find((candidate) => !options.provider || candidate.provider === options.provider)
       if (!key) fail(new Error('No OpenAI or Gemini key. Set OPENAI_API_KEY or GEMINI_API_KEY'))
       const result = await generateSpeech({ text: input, apiKey: key.apiKey, provider: key.provider, voice: options.voice, instructions: options.instructions, speed })
@@ -416,7 +418,7 @@ export function registerBotCommands(cli: Goke) {
         if (!credentials) return new Error('No saved bot credentials. Start kimaki once to onboard.')
         return saveAudioKeys({ db: opened.db, token: credentials.token, openai: options.openai, gemini: options.gemini })
       })()
-      opened.close()
+      await opened.close()
       if (result instanceof Error) fail(result)
       process.stdout.write(`Saved ${[options.openai && 'OpenAI', options.gemini && 'Gemini'].filter(Boolean).join(' and ')} API key\n`)
     })

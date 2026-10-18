@@ -4,6 +4,7 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 import type { BotHandle } from './main.ts'
+import { parseFirst, type GlobalModelRow } from './rows.ts'
 import { RUNTIME_NAME } from './runtime.ts'
 import { cliCommand, seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitFor, waitForFooter, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
 
@@ -393,7 +394,7 @@ test('CLI registry shares thread actions, preferences, title and archive', async
   await cli(['channel', 'model', 'deterministic-provider/deterministic-v2', '--channel', twin.channelId])
   await cli(['channel', 'verbosity', 'text', '--channel', twin.channelId])
   await cli(['channel', 'model', 'deterministic-provider/deterministic-v2', '--global', '--variant', 'fast'])
-  const global = await bot.db.query.global_models.findFirst()
+  const global = parseFirst<GlobalModelRow>('global_models', await bot.db<GlobalModelRow[]>`SELECT * FROM global_models LIMIT 1`)
   expect({ app: global?.app_id === bot.appId, model: global?.model_id, variant: global?.variant }).toMatchInlineSnapshot(`
     {
       "app": true,
@@ -402,7 +403,7 @@ test('CLI registry shares thread actions, preferences, title and archive', async
     }
   `)
   await cli(['channel', 'model', '--global', '--clear'])
-  expect(await bot.db.query.global_models.findFirst()).toBeUndefined()
+  expect(parseFirst<GlobalModelRow>('global_models', await bot.db<GlobalModelRow[]>`SELECT * FROM global_models LIMIT 1`)).toBeUndefined()
   // --session takes a session ID, a thread ID or a thread URL.
   await cli(['session', 'title', 'CLI renamed', '--session', `https://discord.com/channels/${twin.discord.guildId}/${started.threadId}`])
   await cli(['session', 'queue', 'add', 'Registry queued', '--session', started.threadId])

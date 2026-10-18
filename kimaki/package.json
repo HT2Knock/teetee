@@ -15,8 +15,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "test": "bun scripts/run-tests.ts",
-    "generate": "bun scripts/generate-schema-sql.ts"
+    "test": "bun scripts/run-tests.ts"
   },
   "dependencies": {
     "@clack/prompts": "^1.7.0",
@@ -28,7 +27,6 @@
     "cron-parser": "^5.5.0",
     "discord-api-types": "^0.38.40",
     "discord.js": "^14.26.3",
-    "drizzle-orm": "1.0.0-beta.22",
     "effect": "4.0.1",
     "errore": "workspace:^",
     "eventsource-parser": "^3.0.6",
@@ -53,7 +51,6 @@
     "@types/node": "^24.3.0",
     "@types/ws": "^8.5.0",
     "discord-digital-twin": "workspace:^",
-    "drizzle-kit": "1.0.0-beta.22",
     "opencode-deterministic-provider": "workspace:^",
     "typescript": "^5.9.2",
     "ws": "^8.18.0"

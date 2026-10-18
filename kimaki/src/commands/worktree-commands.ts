@@ -12,8 +12,8 @@ import { ButtonStyle, ComponentType, SlashCommandBuilder, type ButtonInteraction
 import { oc, projectOf, rootSession, sessionDirectory, type Author, type Bot } from '../bot.ts'
 import { ConfigError, DbError } from '../errors.ts'
 import { canonicalPath } from '../file-edit-log.ts'
-import * as schema from '../schema.ts'
 import { authorOf, replyError, resolveTarget, type InteractionRoutes } from '../interaction-context.ts'
+import { parseFirst, toDbDate, type ChannelDirectoryRow } from '../rows.ts'
 import { fork, sessionCwd, startSession } from '../sessions.ts'
 import {
   deleteWorktree,
@@ -63,26 +63,31 @@ export async function newWorktree(
 }
 
 export async function setAutoWorktrees(bot: Bot, { channelId, enabled }: { channelId: string; enabled: boolean }) {
-  const values = { enabled: enabled ? 1 : 0 }
-  const saved = await bot.db
-    .insert(schema.channel_worktrees)
-    .values({ channel_id: channelId, ...values })
-    .onConflictDoUpdate({ target: schema.channel_worktrees.channel_id, set: values })
-    .catch((cause) => new DbError({ operation: 'save channel worktrees', cause }))
+  const value = enabled ? 1 : 0
+  const saved = await bot.db<unknown[]>`
+    INSERT INTO channel_worktrees (channel_id, enabled)
+    VALUES (${channelId}, ${value})
+    ON CONFLICT(channel_id) DO UPDATE SET enabled = ${value}, updated_at = ${toDbDate(new Date())}
+  `.catch((cause) => new DbError({ operation: 'save channel worktrees', cause }))
   if (saved instanceof Error) return saved
   return { enabled }
 }
 
 // Linked worktrees of the channel's project and whether new sessions get one.
 export async function channelWorktrees(bot: Bot, { channelId }: { channelId: string }) {
-  const project = await bot.db.query.channel_directories
-    .findFirst({ where: { channel_id: channelId }, with: { channel_worktree: true } })
-    .catch((cause) => new DbError({ operation: 'find worktree project', cause }))
-  if (project instanceof Error) return project
+  const rows = await bot.db<Array<ChannelDirectoryRow & { enabled: number | null }>>`
+    SELECT d.*, w.enabled
+    FROM channel_directories d
+    LEFT JOIN channel_worktrees w ON w.channel_id = d.channel_id
+    WHERE d.channel_id = ${channelId}
+    LIMIT 1
+  `.catch((cause) => new DbError({ operation: 'find worktree project', cause }))
+  if (rows instanceof Error) return rows
+  const project = parseFirst<ChannelDirectoryRow & { enabled: number | null }>('channel_directories', rows)
   if (!project) return new ConfigError({ reason: 'Choose a project channel.' })
   const entries = await listWorktrees({ projectDirectory: project.directory })
   if (entries instanceof Error) return entries
-  return { entries, enabled: project.channel_worktree ? project.channel_worktree.enabled === 1 : bot.autoWorktrees }
+  return { entries, enabled: project.enabled !== null ? project.enabled === 1 : bot.autoWorktrees }
 }
 
 // Remove a checkout or merge it into a local branch; refused while a session runs there.

@@ -13,6 +13,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
 import { entryArgv } from './runtime.ts'
+import { parseRows, type ChannelDirectoryRow } from './rows.ts'
 import { kimakiShellCommand, runOnboarding } from './onboarding.ts'
 import {
   TEST_USER_ID,
@@ -127,7 +128,7 @@ test('onboarding thread adds a project channel through the kimaki CLI, which ans
     ]
   `)
 
-  const rows = await bot.db.query.channel_directories.findMany({ orderBy: { created_at: 'asc' } })
+  const rows = parseRows<ChannelDirectoryRow>('channel_directories', await bot.db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories ORDER BY created_at ASC`)
   expect(rows.map((row) => path.relative(dataDir, row.directory))).toMatchInlineSnapshot(`
     [
       "projects/kimaki",

@@ -27,6 +27,7 @@ import { oc, type Bot } from '../bot.ts'
 import { ConfigError, DbError } from '../errors.ts'
 import { button, buttonRow, paginate, SELECT_PAGE_SIZE, selectedPage, selectRow } from '../format-parts.ts'
 import { replyError, resolveTarget, type InteractionRoutes } from '../interaction-context.ts'
+import { parseFirst, type ChannelDirectoryRow } from '../rows.ts'
 import { handleTranscriptionKeyModal, TRANSCRIPTION_KEY_MODAL, transcriptionKeyModal } from '../voice.ts'
 
 type LoginWizard = { userId: string; directory: string; provider: IntegrationInfo | null; expires: number; attempt?: string }
@@ -84,10 +85,11 @@ export async function loginCli(
   bot: Bot,
   input: { provider: string; method?: string; attempt?: string; code?: string; key?: string; operation?: string },
 ) {
-  const project = await bot.db.query.channel_directories
-    .findFirst()
-    .catch((cause) => new DbError({ operation: 'find login directory', cause }))
-  if (project instanceof Error) return project
+  const rows = await bot.db<ChannelDirectoryRow[]>`
+    SELECT * FROM channel_directories LIMIT 1
+  `.catch((cause) => new DbError({ operation: 'find login directory', cause }))
+  if (rows instanceof Error) return rows
+  const project = parseFirst<ChannelDirectoryRow>('channel_directories', rows)
   const directory = project?.directory
   if (!directory) return new ConfigError({ reason: 'Pass a login directory or add a project first' })
   const location = { directory }

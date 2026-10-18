@@ -29,7 +29,6 @@ import { disabledAnalytics, type Analytics } from '../analytics.ts'
 import { GATEWAY_APP_ID, saveCredentials, type Credentials } from '../credentials.ts'
 import { openDb, verbosityToV1, type Verbosity } from '../db.ts'
 import type { ToolInput } from '../format-parts.ts'
-import * as schema from '../schema.ts'
 import { startLockServer } from '../lock-server.ts'
 import { startBot, type BotHandle } from '../main.ts'
 import type { LockRouteInput, LockRouteName } from '../lock-routes.ts'
@@ -488,15 +487,11 @@ export async function seedProjectChannel({
 }): Promise<void> {
   const opened = await openDb({ dataDir, migrate: true })
   if (opened instanceof Error) throw opened
-  await opened.db
-    .insert(schema.channel_directories)
-    .values({ channel_id: channelId, directory, channel_type: 'text', guild_id: guildId })
+  await opened.db`INSERT INTO channel_directories (channel_id, directory, channel_type, guild_id) VALUES (${channelId}, ${directory}, ${'text'}, ${guildId})`
   if (verbosity) {
-    await opened.db
-      .insert(schema.channel_verbosity)
-      .values({ channel_id: channelId, verbosity: verbosityToV1(verbosity) })
+    await opened.db`INSERT INTO channel_verbosity (channel_id, verbosity) VALUES (${channelId}, ${verbosityToV1(verbosity)})`
   }
-  opened.close()
+  await opened.close()
 }
 
 export async function startTestBot({
