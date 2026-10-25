@@ -189,7 +189,7 @@ export function createPluginWait(bot: Pick<Bot, 'opencode'>): PluginWait {
   // Directories where the plugin was seen active, per connection: a reconnect
   // may reach a new OpenCode process, so its endpoint starts with no entries.
   const active = new WeakMap<OpencodeEndpoint, Set<string>>()
-  // CRAP here is estimated from export references, without e2e coverage.
+  // CRAP is estimated from exports because fallow cannot see e2e coverage.
   // fallow-ignore-next-line complexity
   return async (directory) => {
     const endpoint = bot.opencode.endpoint

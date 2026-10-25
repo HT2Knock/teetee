@@ -125,7 +125,7 @@ function sessionModel(choice: ModelInput | null | undefined): SessionModel | und
 }
 
 // The agent and model of a new session.
-// CRAP here is estimated from export references, without e2e coverage.
+// CRAP is estimated from exports because fallow cannot see e2e coverage.
 // fallow-ignore-next-line complexity
 async function resolveAgentAndModel(
   bot: Bot,
@@ -187,7 +187,6 @@ async function resolveSetup(
 // A thread that only sets up a worktree says so; every other thread shows the
 // first input when the start message could not carry it.
 async function announceStart(
-  bot: Bot,
   {
     thread,
     run,
@@ -386,7 +385,7 @@ export async function startSession(
   })
   if (createdSession instanceof Error) return createdSession
   const { sessionId } = createdSession
-  const announced = await announceStart(bot, { thread, run, checkout, directory, text, files, author, showInput })
+  const announced = await announceStart({ thread, run, checkout, directory, text, files, author, showInput })
   if (announced instanceof Error) return announced
   if (!run) return { threadId: thread.id, sessionId }
 
@@ -641,7 +640,7 @@ async function sendProject(bot: Bot, input: SendInput) {
 }
 
 // Flags that must not be combined, checked before any work starts.
-// CRAP here is estimated from export references, without e2e coverage.
+// CRAP is estimated from exports because fallow cannot see e2e coverage.
 // fallow-ignore-next-line complexity
 function invalidSend(input: SendInput): ConfigError | null {
   if (input.worktree !== undefined && (input.cwd || input.threadId || input.sessionId || input.notifyOnly)) {
@@ -691,7 +690,7 @@ async function switchSendModel(bot: Bot, sessionId: string, requested: string | 
   return switchModel(bot, { sessionId, model: { ...model, variant: null } })
 }
 
-// CRAP here is estimated from export references, without e2e coverage.
+// CRAP is estimated from exports because fallow cannot see e2e coverage.
 // fallow-ignore-next-line complexity
 async function sendToThread(bot: Bot, input: SendInput, context: SendContext) {
   const threadId = input.threadId ?? threadOfSession(bot, input.sessionId!)
@@ -740,7 +739,7 @@ function worktreeOf(input: SendInput, task: SendContext['task']) {
   return input.worktree
 }
 
-// CRAP here is estimated from export references, without e2e coverage.
+// CRAP is estimated from exports because fallow cannot see e2e coverage.
 // fallow-ignore-next-line complexity
 async function sendNewSession(bot: Bot, project: ChannelDirectoryRow, input: SendInput, context: SendContext) {
   const directory = await resolveWorkingDirectory({ projectDirectory: project.directory, candidate: input.cwd ?? project.directory })

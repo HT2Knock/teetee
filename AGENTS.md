@@ -43,13 +43,15 @@ kimaki/ (bot + CLI, local SQLite) ──REST+WS (clientId:secret)──▶ gatew
 kimaki bot, in order of the data flow:
 
 ```
-Discord message ──▶ ingress.ts ──▶ prompt.ts / sessions.ts ──▶ OpenCode (session.prompt, create, interrupt)
+Discord message ──▶ ingress.ts ──▶ input.ts ──▶ prompt.ts / sessions.ts ──▶ OpenCode (session.prompt, create, interrupt)
 OpenCode events ──▶ opencode-server.ts ──▶ event-loop.ts ──▶ thread-reducer.ts (pure) ──▶ effects.ts ──▶ Discord
 ```
 
 - `main.ts`: wiring. lock port, then SQLite migration, then OpenCode and Discord login in parallel.
 - `bot.ts`: the `Bot` context passed to every module. `store.ts`: the one zustand store.
 - `ingress.ts`: Discord messages, attachments, voice. `slash-commands.ts` + `commands/*`: slash commands and components.
+- `input.ts`: the input layer. `dispatch` routes a Discord message and `send` runs `kimaki send`; `startSession` creates the thread and session. It imports prompt.ts and sessions.ts, never the other way round.
+- `session-context.ts`: project, thread and instruction facts of a session plus the agent/model switches. No input is sent from here, which is what keeps the graph acyclic.
 - `opencode-server.ts`: finds the OpenCode service, owns the event subscription, installs the plugin shim.
 - `event-loop.ts`: routes events to threads, hydrates after a (re)connect. `thread-reducer.ts`: pure fold of events into a thread view plus effects.
 - `effects.ts`: the only Discord writer for session output. `format-parts.ts`, `markdown/`: formatting.
@@ -322,7 +324,7 @@ use this to write tests that find messages matching specific patterns. formattin
 
 our event handling should closely follow what the opencode tui does (source: `opensrc anomalyco/opencode@v2`).
 
-OpenCode events are the single source of truth for everything displayed. do not set display state in Discord handlers: call OpenCode (`prompt.ts`, `sessions.ts`), then react to the native V2 event stream (`session.execution.*`, `session.step.*`, `session.text.*`, `session.tool.*`, `session.inbox.*`, `form.*`, `permission.*`).
+OpenCode events are the single source of truth for everything displayed. do not set display state in Discord handlers: call OpenCode (`input.ts`, `prompt.ts`, `sessions.ts`), then react to the native V2 event stream (`session.execution.*`, `session.step.*`, `session.text.*`, `session.tool.*`, `session.inbox.*`, `form.*`, `permission.*`).
 
 ```
 event ──▶ event-loop.ts (route by sessionID, hold while hydrating)

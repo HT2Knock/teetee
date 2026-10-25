@@ -523,23 +523,13 @@ function chatGPTAccountId(accessToken: string): string | null {
 export async function chatGPTCredential({ dbFile, now = Date.now() }: { dbFile: string; now?: number }): Promise<TranscriptionError | ChatGPTCredential | null> {
   if (!fs.existsSync(dbFile)) return null
   const rows = errore.try(
-    () =>
-      // OpenCode's database is never opened: the read runs on a snapshot copy.
-      withSqliteCopy({
-        file: dbFile,
-        read: (copy) => {
-          const client = new Database(copy)
-          try {
-            return client
-              .query<{ value: unknown }, []>(
-                `SELECT value FROM credential WHERE integration_id = 'openai' ORDER BY active DESC, time_updated DESC`,
-              )
-              .all()
-          } finally {
-            client.close()
-          }
-        },
-      }),
+    () => {
+      // A read-only connection is instant and writes nothing. It needs the -shm
+      // file of a WAL database, so a database whose owner is not running falls
+      // back to a snapshot copy.
+      const direct = errore.try(() => credentialRows(dbFile), () => null)
+      return direct ?? withSqliteCopy({ file: dbFile, read: credentialRows })
+    },
     (cause) => new TranscriptionError({ reason: `reading OpenCode credentials from ${dbFile} failed`, cause }),
   )
   if (rows instanceof Error) return rows
@@ -554,6 +544,18 @@ export async function chatGPTCredential({ dbFile, now = Date.now() }: { dbFile: 
     return { accessToken: value['access'], accountId: chatGPTAccountId(value['access']) }
   }
   return null
+}
+
+// The OpenAI rows of OpenCode's credential table, newest active first.
+function credentialRows(file: string) {
+  const client = new Database(file, { readonly: true })
+  try {
+    return client
+      .query<{ value: unknown }, []>(`SELECT value FROM credential WHERE integration_id = 'openai' ORDER BY active DESC, time_updated DESC`)
+      .all()
+  } finally {
+    client.close()
+  }
 }
 
 async function transcribeViaChatGPT({ credential, baseUrl, audio, mediaType }: {
