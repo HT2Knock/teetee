@@ -251,6 +251,25 @@ function fromToolArguments(raw: string | Record<string, unknown>): Transcription
 
 const GEMINI_BLOCKED = new Set(['SAFETY', 'RECITATION', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII', 'LANGUAGE'])
 
+// A blocked or early finish reason is an error for the caller, null when the
+// candidate is usable.
+function geminiFinishError(finishReason: string | null): TranscriptionFailure | null {
+  if (finishReason && GEMINI_BLOCKED.has(finishReason)) return new TranscriptionBlockedError({ reason: finishReason })
+  if (finishReason && finishReason !== 'STOP' && finishReason !== 'FINISH_REASON_UNSPECIFIED') {
+    return new TranscriptionError({ reason: `Gemini finished with ${finishReason}` })
+  }
+  return null
+}
+
+// The tool call or plain text of the answer parts.
+function geminiPartsResult(parts: ReadonlyArray<Record<string, unknown>>): TranscriptionFailure | TranscriptionResult | null {
+  const call = parts.map((part) => part['functionCall']).find(isRecord)
+  if (call?.['name'] === TOOL_NAME) return fromToolArguments(isRecord(call['args']) ? call['args'] : {})
+  const text = parts.find((part) => typeof part['text'] === 'string' && part['thought'] !== true)?.['text']
+  if (typeof text === 'string' && text.trim()) return { transcription: text.trim(), route: 'steer', agent: null }
+  return null
+}
+
 // https://ai.google.dev/api/generate-content#v1beta.GenerateContentResponse
 function parseGeminiResponse(body: string): TranscriptionFailure | TranscriptionResult {
   const parsed = parseJsonObject(body)
@@ -263,17 +282,11 @@ function parseGeminiResponse(body: string): TranscriptionFailure | Transcription
     return new TranscriptionError({ reason: `Gemini returned no candidates: ${body.slice(0, 300)}` })
   }
   const finishReason = typeof candidate['finishReason'] === 'string' ? candidate['finishReason'] : null
-  if (finishReason && GEMINI_BLOCKED.has(finishReason)) return new TranscriptionBlockedError({ reason: finishReason })
-  if (finishReason && finishReason !== 'STOP' && finishReason !== 'FINISH_REASON_UNSPECIFIED') {
-    return new TranscriptionError({ reason: `Gemini finished with ${finishReason}` })
-  }
+  const finished = geminiFinishError(finishReason)
+  if (finished) return finished
   const content = isRecord(candidate['content']) ? candidate['content'] : {}
   const parts = (Array.isArray(content['parts']) ? content['parts'] : []).filter(isRecord)
-  const call = parts.map((part) => part['functionCall']).find(isRecord)
-  if (call?.['name'] === TOOL_NAME) return fromToolArguments(isRecord(call['args']) ? call['args'] : {})
-  const text = parts.find((part) => typeof part['text'] === 'string' && part['thought'] !== true)?.['text']
-  if (typeof text === 'string' && text.trim()) return { transcription: text.trim(), route: 'steer', agent: null }
-  return new TranscriptionError({ reason: 'Gemini returned no transcription' })
+  return geminiPartsResult(parts) ?? new TranscriptionError({ reason: 'Gemini returned no transcription' })
 }
 
 // https://developers.openai.com/api/docs/guides/audio-chat-completions

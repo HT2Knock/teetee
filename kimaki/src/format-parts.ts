@@ -241,47 +241,57 @@ export function isToolVisible({ name, input }: ToolCall, verbosity: Verbosity): 
   return true
 }
 
-function toolBody({ name, input }: ToolCall): { glyph: '┣' | '◼︎'; text: string } {
-  if (name === 'shell') {
+type ToolLine = { glyph: '┣' | '◼︎'; text: string }
+
+// One formatter per tool with a dedicated line. Adding a tool means adding one
+// entry, not another branch in a ladder.
+const TOOL_LINES: Record<string, (input: ToolInput) => ToolLine> = {
+  shell: (input) => {
     const detail = stringField(input, 'description') ?? stringField(input, 'command')
     const background = input['background'] === true ? ' (background)' : ''
     return { glyph: '┣', text: `${detail ? `shell _${inline(detail)}_` : 'shell'}${background}` }
-  }
-  if (name === 'edit') {
+  },
+  edit: (input) => {
     const { added, removed } = editStats({
       oldString: stringField(input, 'oldString') ?? '',
       newString: stringField(input, 'newString') ?? '',
     })
     return { glyph: '◼︎', text: `edit *${fileName(stringField(input, 'path') ?? '')}* (+${added}-${removed})` }
-  }
-  if (name === 'write') {
+  },
+  write: (input) => {
     const content = typeof input['content'] === 'string' ? input['content'] : ''
     const lines = content === '' ? 0 : content.split('\n').length
     return { glyph: '◼︎', text: `write *${fileName(stringField(input, 'path') ?? '')}* (${lines} lines)` }
-  }
-  if (name === 'patch') {
+  },
+  patch: (input) => {
     const files = patchStats(stringField(input, 'patchText') ?? '')
     const summary = files.map((file) => `*${fileName(file.file)}* (+${file.added}-${file.removed})`).join(', ')
     return { glyph: '◼︎', text: `patch${summary ? ` ${summary}` : ''}` }
-  }
-  if (name === 'subagent') {
+  },
+  subagent: (input) => {
     const background = input['background'] === true ? ' (background)' : ''
     return {
       glyph: '┣',
       text: `${inline(stringField(input, 'agent') ?? 'subagent')} **${inline(stringField(input, 'description') ?? '')}**${background}`,
     }
-  }
-  if (name === 'skill') {
+  },
+  skill: (input) => {
     const id = stringField(input, 'id')
     return { glyph: '┣', text: id ? `skill _${inline(id)}_` : 'skill' }
-  }
-  if (name === 'execute') {
+  },
+  execute: (input) => {
     const description = stringField(input, 'description')
     return { glyph: '┣', text: description ? `execute _${inline(description)}_` : 'execute' }
-  }
-  const detail = ['path', 'pattern', 'url', 'query', 'command', 'name', 'directory', 'title']
-    .map((key) => stringField(input, key))
-    .find((value) => value !== null)
+  },
+}
+
+// The keys an MCP or plugin tool usually names its subject with.
+const DETAIL_KEYS = ['path', 'pattern', 'url', 'query', 'command', 'name', 'directory', 'title']
+
+function toolBody({ name, input }: ToolCall): ToolLine {
+  const format = TOOL_LINES[name]
+  if (format) return format(input)
+  const detail = DETAIL_KEYS.map((key) => stringField(input, key)).find((value) => value !== null)
   if (detail) return { glyph: '┣', text: `${inline(name)} _${inline(detail)}_` }
   const fields = inputFields(input)
   return { glyph: '┣', text: `${inline(name)}${fields ? ` (${inline(fields, 200)})` : ''}` }
