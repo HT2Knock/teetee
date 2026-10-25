@@ -5,7 +5,8 @@ import { promisify } from 'node:util'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 import type { BotHandle } from './main.ts'
 import { cliCommand, scriptedTurn, seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitForFooter, waitForSelectMenu, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
-import { abort, send } from './prompt.ts'
+import { send } from './input.ts'
+import { abort } from './prompt.ts'
 
 const exec = promisify(execFile)
 const dataDir = tempDataDir()

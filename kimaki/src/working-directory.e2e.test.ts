@@ -10,7 +10,7 @@ import { git } from './worktrees.ts'
 import { cliCommand, TEST_USER_ID, scriptedTurn, seedProjectChannel, slowTextMatcher, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitForBotMessageContaining, waitForFooter, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
 import { manageWorktree, newWorktree, setAutoWorktrees } from './commands/worktree-commands.ts'
 import { runLockRoute } from './lock-routes.ts'
-import { send } from './prompt.ts'
+import { send } from './input.ts'
 import { forkBtw } from './sessions.ts'
 
 let server: OpencodeTestServer

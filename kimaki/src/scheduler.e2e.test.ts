@@ -7,7 +7,7 @@ import { git } from './worktrees.ts'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
-import { send } from './prompt.ts'
+import { send } from './input.ts'
 import {
   manualClock,
   schedulingKit,

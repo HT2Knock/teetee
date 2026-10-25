@@ -30,11 +30,13 @@ import { projectOf, sessionDirectory, type Bot, type PromptFile } from './bot.ts
 import { formatError, NOTIFY_MESSAGE_FLAGS, SILENT_MESSAGE_FLAGS } from './format-parts.ts'
 import { createLogger } from './logger.ts'
 import { parseInput, sendInput } from './lock-routes.ts'
-import { cancelQueuedPrompt, dispatch, requeueEdited, send } from './prompt.ts'
+import { dispatch, send } from './input.ts'
+import { cancelQueuedPrompt, requeueEdited } from './prompt.ts'
 import { REMOTE_PROMPT_FILE, REMOTE_RESULT_PREFIX, REMOTE_SEND_PREFIX } from './remote-send.ts'
 import { formatEcho, queuedItemFor } from './queue.ts'
 import { parseTextMessage, type Route } from './routes.ts'
-import { primaryAgents, startSession } from './sessions.ts'
+import { startSession } from './input.ts'
+import { primaryAgents } from './session-context.ts'
 import { isVoiceAttachment, parseVoiceMessage, transcribe, voiceMediaType, type AttachmentLike } from './voice.ts'
 
 const logger = createLogger('INGRESS')

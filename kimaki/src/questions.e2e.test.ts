@@ -8,7 +8,7 @@ import type { DeterministicMatcher } from 'opencode-deterministic-provider'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
-import { send } from './prompt.ts'
+import { send } from './input.ts'
 import {
   TEST_USER_ID,
   scriptedTurn,

@@ -21,7 +21,7 @@ import { installPluginShim, watchOpencode, type OpencodeEndpoint } from './openc
 import { countUserProjects } from './project.ts'
 import { createScheduler, systemClock, type Clock } from './scheduler.ts'
 import { createEventRecorder, syncSessionTranscript } from './session-events.ts'
-import { createPluginWait, refreshCliContext } from './sessions.ts'
+import { createPluginWait, refreshCliContext } from './session-context.ts'
 import { createInteractionRegistry, registerSlashCommands } from './slash-commands.ts'
 import { createSleepLock } from './sleeps.ts'
 import { createBotStore } from './store.ts'
