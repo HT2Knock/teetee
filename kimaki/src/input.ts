@@ -5,8 +5,8 @@
 
 import crypto from 'node:crypto'
 import path from 'node:path'
-import {setTimeout as sleep} from 'node:timers/promises'
-import {Events, MessageFlags, type Message, type ThreadChannel} from 'discord.js'
+import { setTimeout as sleep } from 'node:timers/promises'
+import { Events, MessageFlags, type Message, type TextChannel, type ThreadChannel } from 'discord.js'
 
 import {cliContext, fetchThread, globalModel, oc, parseModel, projectOf, rootSession, routeText, textChannel, threadOfSession, type Author, type Bot, type ModelChoice, type PromptFile} from './bot.ts'
 import {ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError} from './errors.ts'
@@ -125,6 +125,8 @@ function sessionModel(choice: ModelInput | null | undefined): SessionModel | und
 }
 
 // The agent and model of a new session.
+// CRAP here is estimated from export references, without e2e coverage.
+// fallow-ignore-next-line complexity
 async function resolveAgentAndModel(
   bot: Bot,
   { directory, route, explicitModel, defaults }: {
@@ -223,6 +225,82 @@ async function announceStart(
     .catch((cause) => new DiscordError({ operation: 'send first input', cause }))
 }
 
+// Creates the OpenCode session, writes its instructions entry and binds it to
+// the thread. Every step can fail; a failure leaves the thread in place.
+async function createBoundSession(
+  bot: Bot,
+  {
+    thread,
+    channel,
+    channelId,
+    directory,
+    threadName,
+    author,
+    model,
+    agent,
+    permissions,
+    parentSessionId,
+    task,
+    checkout,
+  }: {
+    thread: ThreadChannel
+    channel: TextChannel
+    channelId: string
+    directory: string
+    threadName: string
+    author: Author
+    model?: SessionModel
+    agent?: string
+    permissions?: PermissionRules
+    parentSessionId?: string
+    task?: ScheduledRun
+    checkout: { branch?: string | null } | null
+  },
+) {
+  const kimaki = {
+    threadId: thread.id,
+    channelId,
+    source: task ? 'task' : 'discord',
+    ...(task && { taskId: task.id, task }),
+    ...cliContext(bot),
+    ...(parentSessionId && { parentSessionId }),
+  }
+  const session = await oc(bot, 'session.create', (client) =>
+    client.session.create({
+      title: threadName,
+      location: { directory },
+      ...(model && { model }),
+      ...(agent && { agent }),
+      permissions: [NO_QUESTION_TOOL, ...disabledSkillRules(bot.disabledSkills), ...(permissions ?? [])],
+      metadata: { kimaki },
+    }),
+  )
+  if (session instanceof Error) return session
+  bot.analytics.track('session_created', { has_worktree: Boolean(checkout), source: 'discord' })
+  const instructions = await putInstructions(bot, {
+    sessionId: session.id,
+    thread,
+    channel,
+    directory,
+    userId: author.id,
+    parentSessionId,
+    scheduledTask: task ?? null,
+  })
+  if (instructions instanceof Error) return instructions
+  const bound = await bindThread(bot, { threadId: thread.id, sessionId: session.id, channelId, directory, isNew: true })
+  if (bound instanceof Error) return bound
+  return { sessionId: session.id }
+}
+
+// A worktree thread is named after its branch, everything else after the text.
+function sessionThreadName(
+  { explicitName, useWorktree, slug, text }: { explicitName?: string; useWorktree: boolean; slug: string; text: string },
+) {
+  if (explicitName) return explicitName
+  if (useWorktree) return `⬦ ${slug}`
+  return text.replace(/\s+/g, ' ').slice(0, 80) || 'Kimaki session'
+}
+
 export async function startSession(
   bot: Bot,
   {
@@ -278,7 +356,7 @@ export async function startSession(
   const useWorktree = typeof worktree === 'string' || (worktree !== false && channelWorktrees)
   const textSlug = text.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40).replace(/^-|-$/g, '') || 'session'
   const slug = typeof worktree === 'string' && worktree ? worktree : `${textSlug}-${crypto.randomBytes(4).toString('hex')}`
-  const threadName = explicitName ?? (useWorktree ? `⬦ ${slug}` : text.replace(/\s+/g, ' ').slice(0, 80) || 'Kimaki session')
+  const threadName = sessionThreadName({ explicitName, useWorktree, slug, text })
 
   // The thread shows in Discord while the checkout, plugin, agent and model are resolved.
   const creating = createSessionThread(bot, { channelId, threadName, startMessageId, author })
@@ -292,47 +370,29 @@ export async function startSession(
   }
   const { checkout, directory, model, agent } = setup
 
-  const kimaki = {
-    threadId: thread.id,
-    channelId,
-    source: task ? 'task' : 'discord',
-    ...(task && { taskId: task.id, task }),
-    ...cliContext(bot),
-    ...(parentSessionId && { parentSessionId }),
-  }
-  const session = await oc(bot, 'session.create', (client) =>
-    client.session.create({
-      title: threadName,
-      location: { directory },
-      ...(model && { model: sessionModel(model) }),
-      ...(agent && { agent }),
-      permissions: [NO_QUESTION_TOOL, ...disabledSkillRules(bot.disabledSkills), ...(permissions ?? [])],
-      metadata: { kimaki },
-    }),
-  )
-  if (session instanceof Error) return session
-  bot.analytics.track('session_created', { has_worktree: Boolean(checkout), source: 'discord' })
-
-  const instructions = await putInstructions(bot, {
-    sessionId: session.id,
+  const createdSession = await createBoundSession(bot, {
     thread,
     channel,
+    channelId,
     directory,
-    userId: author.id,
+    threadName,
+    author,
+    model: sessionModel(model),
+    agent,
+    permissions,
     parentSessionId,
-    scheduledTask: task ?? null,
+    task,
+    checkout,
   })
-  if (instructions instanceof Error) return instructions
-
-  const bound = await bindThread(bot, { threadId: thread.id, sessionId: session.id, channelId, directory, isNew: true })
-  if (bound instanceof Error) return bound
+  if (createdSession instanceof Error) return createdSession
+  const { sessionId } = createdSession
   const announced = await announceStart(bot, { thread, run, checkout, directory, text, files, author, showInput })
   if (announced instanceof Error) return announced
-  if (!run) return { threadId: thread.id, sessionId: session.id }
+  if (!run) return { threadId: thread.id, sessionId }
 
   const first = route.kind === 'steer' ? { kind: 'steer' as const, text: route.text } : route
   const sent = await runInSession(bot, {
-    sessionId: session.id,
+    sessionId,
     threadId: thread.id,
     threadName,
     directory,
@@ -342,7 +402,7 @@ export async function startSession(
     files,
   })
   if (sent instanceof Error) return sent
-  return { threadId: thread.id, sessionId: session.id }
+  return { threadId: thread.id, sessionId }
 }
 
 // `/name args`: an OpenCode command when the project has it, else plain text.
@@ -545,28 +605,44 @@ async function remoteSend(bot: Bot, input: SendInput) {
 export async function send(bot: Bot, input: SendInput, { localOnly = false, task }: { localOnly?: boolean; task?: ScheduledRun } = {}) {
   const invalid = invalidSend(input)
   if (invalid) return invalid
-  const userIds = (input.user ?? []).map((user) => user.replace(/[<@!>]/g, ''))
-  const author = { id: userIds[0] ?? bot.discord.user!.id, username: task ? `routine #${task.id}` : 'CLI' }
-  const route = parseTextMessage({ content: input.prompt })
-  if (!route) return new ConfigError({ reason: 'Prompt is empty' })
-  if (input.agent && (route.kind === 'steer' || route.kind === 'btw')) route.agent = input.agent
-  const context: SendContext = { author, route, messageId: crypto.randomUUID(), userIds, localOnly, ...(task && { task }) }
+  const built = sendContext(bot, input, { localOnly, task })
+  if (built instanceof Error) return built
+  const { context } = built
 
   // An existing session keeps its thread; everything else starts one.
   if (input.sessionId || input.threadId) return sendToThread(bot, input, context)
 
-  const projectRows = input.channelId
-    ? await bot.db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories WHERE channel_id = ${input.channelId} LIMIT 1`.catch((cause) => new DbError({ operation: 'resolve send project', cause }))
-    : await bot.db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories WHERE directory = ${path.resolve(input.project!)} LIMIT 1`.catch((cause) => new DbError({ operation: 'resolve send project', cause }))
-  if (projectRows instanceof Error) return projectRows
-  const project = parseFirst<ChannelDirectoryRow>('channel_directories', projectRows)
+  const project = await sendProject(bot, input)
+  if (project instanceof Error) return project
   if (!project) return input.channelId && !localOnly ? remoteSend(bot, input) : new ConfigError({ reason: 'No local project channel for this target' })
 
   if (input.notifyOnly) return sendNotification(bot, project, input, context)
   return sendNewSession(bot, project, input, context)
 }
 
+// The author, route and message ID every send path shares.
+function sendContext(bot: Bot, input: SendInput, { localOnly, task }: { localOnly: boolean; task?: ScheduledRun }): ConfigError | { context: SendContext } {
+  const userIds = (input.user ?? []).map((user) => user.replace(/[<@!>]/g, ''))
+  const author = { id: userIds[0] ?? bot.discord.user!.id, username: task ? `routine #${task.id}` : 'CLI' }
+  const route = parseTextMessage({ content: input.prompt })
+  if (!route) return new ConfigError({ reason: 'Prompt is empty' })
+  if (input.agent && (route.kind === 'steer' || route.kind === 'btw')) route.agent = input.agent
+  return { context: { author, route, messageId: crypto.randomUUID(), userIds, localOnly, ...(task && { task }) } }
+}
+
+// The channel_directories row of --channel or --project; undefined when this
+// machine has no channel for the target.
+async function sendProject(bot: Bot, input: SendInput) {
+  const rows = input.channelId
+    ? await bot.db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories WHERE channel_id = ${input.channelId} LIMIT 1`.catch((cause) => new DbError({ operation: 'resolve send project', cause }))
+    : await bot.db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories WHERE directory = ${path.resolve(input.project!)} LIMIT 1`.catch((cause) => new DbError({ operation: 'resolve send project', cause }))
+  if (rows instanceof Error) return rows
+  return parseFirst<ChannelDirectoryRow>('channel_directories', rows)
+}
+
 // Flags that must not be combined, checked before any work starts.
+// CRAP here is estimated from export references, without e2e coverage.
+// fallow-ignore-next-line complexity
 function invalidSend(input: SendInput): ConfigError | null {
   if (input.worktree !== undefined && (input.cwd || input.threadId || input.sessionId || input.notifyOnly)) {
     return new ConfigError({ reason: '--worktree requires a new session without --cwd or --notify-only.' })
@@ -615,6 +691,8 @@ async function switchSendModel(bot: Bot, sessionId: string, requested: string | 
   return switchModel(bot, { sessionId, model: { ...model, variant: null } })
 }
 
+// CRAP here is estimated from export references, without e2e coverage.
+// fallow-ignore-next-line complexity
 async function sendToThread(bot: Bot, input: SendInput, context: SendContext) {
   const threadId = input.threadId ?? threadOfSession(bot, input.sessionId!)
   if (!threadId) return new ConfigError({ reason: 'No local thread for this session. Use --thread on its owning machine.' })
@@ -662,6 +740,8 @@ function worktreeOf(input: SendInput, task: SendContext['task']) {
   return input.worktree
 }
 
+// CRAP here is estimated from export references, without e2e coverage.
+// fallow-ignore-next-line complexity
 async function sendNewSession(bot: Bot, project: ChannelDirectoryRow, input: SendInput, context: SendContext) {
   const directory = await resolveWorkingDirectory({ projectDirectory: project.directory, candidate: input.cwd ?? project.directory })
   if (directory instanceof Error) return directory
