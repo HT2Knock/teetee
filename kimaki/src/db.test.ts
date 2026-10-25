@@ -250,15 +250,13 @@ test('first start imports the V1 database once and leaves it unchanged', async (
   `)
   // V1-only tables are not copied.
   expect(await tableNames(opened.db)).not.toContain('part_messages')
+  // The real property is WAL, not the files it leaves: Bun checkpoints and
+  // removes the -wal and -shm files when the last connection closes.
+  const journal = await opened.db<{ journal_mode: string }[]>`PRAGMA journal_mode`
+  expect(journal[0]?.journal_mode).toBe('wal')
   await opened.close()
 
-  expect(fs.readdirSync(dataDir).filter((name) => name.startsWith('kimaki')).sort()).toMatchInlineSnapshot(`
-    [
-      "kimaki.db",
-      "kimaki.db-shm",
-      "kimaki.db-wal",
-    ]
-  `)
+  expect(fs.readdirSync(dataDir).filter((name) => name.startsWith('kimaki')).sort()).toEqual(['kimaki.db'])
 
   // Later starts never import again, even if V1 keeps writing its own file.
   const later = new Database(legacyFile)

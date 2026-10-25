@@ -11,10 +11,10 @@
 //          no  ─▶ empty kimaki.db
 //   then: schema.sql (CREATE ... IF NOT EXISTS) + the marker on kimaki.db
 //
-// The V1 file is opened read-only and never changed or deleted, so V1 keeps
-// working on its own data. There is no downgrade: changes made by kimaki stay in
-// kimaki.db. Future schema changes (ALTER TABLE ... ADD COLUMN) go in
-// migrateSchema() below.
+// The V1 file is never opened: the import reads a snapshot copy, so its -wal is
+// never checkpointed and a failed import cannot change it. There is no
+// downgrade: changes made by kimaki stay in kimaki.db. Future schema changes
+// (ALTER TABLE ... ADD COLUMN) go in migrateSchema() below.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -24,6 +24,7 @@ import * as errore from 'errore'
 import { DbError } from './errors.ts'
 import { createLogger } from './logger.ts'
 import { SCHEMA_SQL } from './schema-sql.ts'
+import { withSqliteCopy } from './sqlite-copy.ts'
 
 const logger = createLogger('DB')
 
@@ -91,8 +92,19 @@ function foreignKeysOf({ client, table }: { client: Database; table: string }) {
 // at deleted channels or threads: a required reference skips the row, an
 // optional one becomes NULL (like ON DELETE SET NULL).
 function copyLegacyRows({ client, legacyFile }: { client: Database; legacyFile: string }): void {
-  // mode=ro: the V1 file is read-only, so its -wal is never checkpointed.
-  client.run('ATTACH DATABASE ? AS legacy', [`file:${legacyFile}?mode=ro`])
+  // The V1 file is never opened: the import reads a copy, so its -wal is never
+  // checkpointed and a failed import cannot change it.
+  withSqliteCopy({
+    file: legacyFile,
+    read: (copy) => {
+      client.run('ATTACH DATABASE ? AS legacy', [copy])
+      importLegacyTables({ client })
+      client.run('DETACH DATABASE legacy')
+    },
+  })
+}
+
+function importLegacyTables({ client }: { client: Database }): void {
   for (const table of IMPORTED_TABLES) {
     const legacyColumns = columnsOf({ client, schema: 'legacy', table }).map((column) => column.name)
     if (legacyColumns.length === 0) {
@@ -119,7 +131,6 @@ function copyLegacyRows({ client, legacyFile }: { client: Database; legacyFile: 
     const skipped = Number(total?.count ?? 0) - inserted.changes
     logger.log(`import ${table}: ${inserted.changes} rows${skipped > 0 ? `, ${skipped} skipped (missing parent row)` : ''}`)
   }
-  client.run('DETACH DATABASE legacy')
 }
 
 function readDbVersion({ file }: { file: string }): DbError | number {

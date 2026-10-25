@@ -35,6 +35,7 @@ import { ConfigError, DbError } from './errors.ts'
 import { createLogger } from './logger.ts'
 import type { Route } from './routes.ts'
 import { parseFirst, upsert, type BotTokenRow } from './rows.ts'
+import { withSqliteCopy } from './sqlite-copy.ts'
 
 const logger = createLogger('VOICE')
 const execFileAsync = promisify(execFile)
@@ -503,20 +504,23 @@ function chatGPTAccountId(accessToken: string): string | null {
 export async function chatGPTCredential({ dbFile, now = Date.now() }: { dbFile: string; now?: number }): Promise<TranscriptionError | ChatGPTCredential | null> {
   if (!fs.existsSync(dbFile)) return null
   const rows = errore.try(
-    () => {
-      const client = new Database(':memory:')
-      try {
-        // mode=ro: OpenCode's own database is read-only here.
-        client.run('ATTACH DATABASE ? AS opencode', [`file:${dbFile}?mode=ro`])
-        return client
-          .query<{ value: unknown }, []>(
-            `SELECT value FROM opencode.credential WHERE integration_id = 'openai' ORDER BY active DESC, time_updated DESC`,
-          )
-          .all()
-      } finally {
-        client.close()
-      }
-    },
+    () =>
+      // OpenCode's database is never opened: the read runs on a snapshot copy.
+      withSqliteCopy({
+        file: dbFile,
+        read: (copy) => {
+          const client = new Database(copy)
+          try {
+            return client
+              .query<{ value: unknown }, []>(
+                `SELECT value FROM credential WHERE integration_id = 'openai' ORDER BY active DESC, time_updated DESC`,
+              )
+              .all()
+          } finally {
+            client.close()
+          }
+        },
+      }),
     (cause) => new TranscriptionError({ reason: `reading OpenCode credentials from ${dbFile} failed`, cause }),
   )
   if (rows instanceof Error) return rows
