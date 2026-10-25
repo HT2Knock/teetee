@@ -1,6 +1,7 @@
 node_modules
 dist
 esm
+.fallow
 .DS_Store
 *.tsbuildinfo
 .ultra.cache.json
