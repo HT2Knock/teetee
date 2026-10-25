@@ -1,0 +1,34 @@
+{
+  // fallow reads these comments; generic JSON tools may not.
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+
+  // Files that are real runtime roots but no package.json or framework plugin
+  // declares them.
+  "entry": [
+    // Starlight resolves docs pages by path under website/src/docs/src/content.
+    "website/src/docs/**/*.mdx",
+    // Hand-run report scripts, named in their own header comment.
+    "kimaki/scripts/*.ts"
+  ],
+
+  // Loaded by a path the static graph cannot see.
+  "dynamicallyLoaded": [
+    // installPluginShim writes a shim that re-exports these directories.
+    "kimaki/src/plugin/**/index.ts",
+    // An OpenCode plugin fixture that a test loads from a fake config dir.
+    "kimaki/src/test/auth-plugin/index.ts",
+    // Spawned as an MCP stdio server by commands.e2e.test.ts.
+    "kimaki/src/test/fake-mcp-server.ts"
+  ],
+
+  // Constant folders that fallow cannot see are generated at runtime.
+  "ignorePatterns": [".fallow/**", "**/generated/**"],
+
+  "duplicates": {
+    // A pair of cloned blocks is worth reporting here: the codebase is small and
+    // the fork audit gate reads every group.
+    "minOccurrences": 2
+  },
+
+  "rules": {}
+}
