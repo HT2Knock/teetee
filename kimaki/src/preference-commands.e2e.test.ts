@@ -424,6 +424,8 @@ test('/<agent>-agent variant: sets the thinking level with the agent, per sessio
   })
   await discord.channel(channelId).waitForInteractionAck({ interactionId: ack.id })
   const fresh = await newThread(channelId, 'Uses the channel variant')
+  // A new thread binds its session a moment later; the model is read from it.
+  await waitFor({ label: 'new session bound', check: async () => bot.store.getState().roots[fresh.id] })
   expect(await sessionModel(fresh.id)).toMatchInlineSnapshot(`
     {
       "agent": "build",
