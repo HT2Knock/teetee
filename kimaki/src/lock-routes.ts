@@ -189,6 +189,16 @@ function localSession(bot: Bot, input: { sessionId?: string; threadId?: string }
   return { threadId, sessionId }
 }
 
+// The local session and its Discord thread, for the routes that read or change
+// the thread itself (cwd, title, archive, fork).
+async function localThread(bot: Bot, input: { sessionId?: string; threadId?: string }) {
+  const target = localSession(bot, input)
+  if (target instanceof Error) return target
+  const thread = await fetchThread(bot, target.threadId)
+  if (thread instanceof Error) return thread
+  return { ...target, thread }
+}
+
 // A session ID as is (it can be a subagent), else the root session of the thread.
 function sessionOf(bot: Bot, input: { sessionId?: string; threadId?: string }) {
   if (input.sessionId) return input.sessionId
@@ -268,6 +278,16 @@ async function snapshotHeap({ dataDir }: { dataDir: string }) {
 }
 
 const loginField = z.string({ error: 'Login fields must be non-empty strings' }).min(1, { error: 'Login fields must be non-empty strings' }).optional()
+
+// `/btw` and `/queue` are `kimaki send` with the suffix that picks the mode.
+const sendMention = (suffix: 'btw' | 'queue') => route({
+  input: sessionText,
+  run: async (bot, input) => {
+    const target = localSession(bot, input)
+    if (target instanceof Error) return target
+    return send(bot, { threadId: target.threadId, prompt: `${input.text}. ${suffix}` })
+  },
+})
 
 const lockRoutes = {
   send: route({
@@ -495,24 +515,20 @@ const lockRoutes = {
   'session.cwd': route({
     input: sessionInput({ directory: text('directory').optional() }),
     run: async (bot, input) => {
-      const target = localSession(bot, input)
+      const target = await localThread(bot, input)
       if (target instanceof Error) return target
-      const thread = await fetchThread(bot, target.threadId)
-      if (thread instanceof Error) return thread
-      return sessionCwd(bot, { thread, directory: input.directory })
+      return sessionCwd(bot, { thread: target.thread, directory: input.directory })
     },
   }),
   'session.title': route({
     input: sessionText,
     run: async (bot, input) => {
-      const target = localSession(bot, input)
+      const target = await localThread(bot, input)
       if (target instanceof Error) return target
       const title = input.text
       const renamed = await oc(bot, 'session.update', (client) => client.session.update({ sessionID: target.sessionId, title }))
       if (renamed instanceof Error) return renamed
-      const thread = await fetchThread(bot, target.threadId)
-      if (thread instanceof Error) return thread
-      const updated = await thread.setName(title.slice(0, 100)).catch((cause) => new DiscordError({ operation: 'rename thread', cause }))
+      const updated = await target.thread.setName(title.slice(0, 100)).catch((cause) => new DiscordError({ operation: 'rename thread', cause }))
       if (updated instanceof Error) return updated
       return { title }
     },
@@ -520,11 +536,9 @@ const lockRoutes = {
   'session.archive': route({
     input: sessionInput({}),
     run: async (bot, input) => {
-      const target = localSession(bot, input)
+      const target = await localThread(bot, input)
       if (target instanceof Error) return target
-      const thread = await fetchThread(bot, target.threadId)
-      if (thread instanceof Error) return thread
-      const archived = await thread.setArchived(true).catch((cause) => new DiscordError({ operation: 'archive thread', cause }))
+      const archived = await target.thread.setArchived(true).catch((cause) => new DiscordError({ operation: 'archive thread', cause }))
       if (archived instanceof Error) return archived
       return { archived: true }
     },
@@ -540,12 +554,10 @@ const lockRoutes = {
   'session.fork': route({
     input: sessionInput({ before: text('before').optional(), name: text('name').optional() }),
     run: async (bot, input) => {
-      const target = localSession(bot, input)
+      const target = await localThread(bot, input)
       if (target instanceof Error) return target
-      const thread = await fetchThread(bot, target.threadId)
-      if (thread instanceof Error) return thread
       // A child session ID forks that child, not the root.
-      return fork(bot, { sourceThread: thread, sessionId: input.sessionId ?? target.sessionId, before: input.before, name: input.name, author: cliAuthor(bot) })
+      return fork(bot, { sourceThread: target.thread, sessionId: input.sessionId ?? target.sessionId, before: input.before, name: input.name, author: cliAuthor(bot) })
     },
   }),
   'session.command': route({
@@ -566,22 +578,8 @@ const lockRoutes = {
       return { started: true }
     },
   }),
-  'session.btw': route({
-    input: sessionText,
-    run: async (bot, input) => {
-      const target = localSession(bot, input)
-      if (target instanceof Error) return target
-      return send(bot, { threadId: target.threadId, prompt: `${input.text}. btw` })
-    },
-  }),
-  'queue.add': route({
-    input: sessionText,
-    run: async (bot, input) => {
-      const target = localSession(bot, input)
-      if (target instanceof Error) return target
-      return send(bot, { threadId: target.threadId, prompt: `${input.text}. queue` })
-    },
-  }),
+  'session.btw': sendMention('btw'),
+  'queue.add': sendMention('queue'),
   'queue.list': route({
     input: sessionInput({}),
     run: async (bot, input) => {

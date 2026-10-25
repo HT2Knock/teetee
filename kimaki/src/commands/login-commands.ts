@@ -20,6 +20,7 @@ import {
   type StringSelectMenuInteraction,
   type ModalSubmitInteraction,
   type ButtonInteraction,
+  type MessageComponentInteraction,
 } from 'discord.js'
 import type { IntegrationInfo } from '@opencode/client'
 
@@ -151,14 +152,22 @@ export function createLoginRoutes(): InteractionRoutes {
     return wizard
   }
 
-  // The wizard of a select, or null after an error reply. A previous/next entry shows that page.
-  async function selected({ interaction, options }: { interaction: StringSelectMenuInteraction; options: (wizard: LoginWizard) => Promise<Error | Array<{ label: string; value: string }>> }) {
+  // The wizard of this interaction, or null after an error reply.
+  async function wizardOf(interaction: MessageComponentInteraction | ModalSubmitInteraction) {
     const id = interaction.customId.split(':')[1] ?? ''
     const wizard = lookup({ id, userId: interaction.user.id })
     if (wizard instanceof Error) {
       await replyError(interaction, wizard)
       return null
     }
+    return { id, wizard }
+  }
+
+  // The wizard of a select, or null after an error reply. A previous/next entry shows that page.
+  async function selected({ interaction, options }: { interaction: StringSelectMenuInteraction; options: (wizard: LoginWizard) => Promise<Error | Array<{ label: string; value: string }>> }) {
+    const found = await wizardOf(interaction)
+    if (!found) return null
+    const { id, wizard } = found
     const value = interaction.values[0] ?? ''
     const page = selectedPage(value)
     if (page === null) return { id, wizard, value }
@@ -252,12 +261,9 @@ export function createLoginRoutes(): InteractionRoutes {
   // The wizard of a modal, or null after an error reply.
   async function modalWizard(interaction: ModalSubmitInteraction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral })
-    const id = interaction.customId.split(':')[1] ?? ''
-    const wizard = lookup({ id, userId: interaction.user.id })
-    if (wizard instanceof Error) {
-      await replyError(interaction, wizard)
-      return null
-    }
+    const found = await wizardOf(interaction)
+    if (!found) return null
+    const { id, wizard } = found
     const provider = wizard.provider
     if (!provider) {
       await replyError(interaction, new ConfigError({ reason: 'Choose a provider with /login first' }))
@@ -293,12 +299,9 @@ export function createLoginRoutes(): InteractionRoutes {
 
   // The OAuth attempt of a button, or null after an error reply.
   async function attemptOf(interaction: ButtonInteraction) {
-    const id = interaction.customId.split(':')[1] ?? ''
-    const wizard = lookup({ id, userId: interaction.user.id })
-    if (wizard instanceof Error) {
-      await replyError(interaction, wizard)
-      return null
-    }
+    const found = await wizardOf(interaction)
+    if (!found) return null
+    const { id, wizard } = found
     const { provider, attempt: attemptID } = wizard
     if (!provider || !attemptID) {
       await replyError(interaction, new ConfigError({ reason: 'No pending login attempt' }))
