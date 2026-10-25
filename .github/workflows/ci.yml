@@ -28,6 +28,10 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # kimaki imports errore's dist/, so the workspace builds first.
+      - name: Build errore
+        run: bun run --filter errore build
+
       - name: Generate Prisma + SQL (discord-digital-twin)
         run: bun run generate
         working-directory: discord-digital-twin
