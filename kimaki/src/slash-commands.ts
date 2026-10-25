@@ -113,7 +113,7 @@ function byPrefix<I>(routes: ReadonlyArray<PrefixRoute<I>>, customId: string): P
   return routes.find((route) => customId.startsWith(route.prefix)) ?? null
 }
 
-export function combineRoutes(features: readonly InteractionRoutes[]): InteractionRegistry {
+function combineRoutes(features: readonly InteractionRoutes[]): InteractionRegistry {
   const commands = new Map<string, SlashCommand & { admin: boolean }>()
   const definitions: RESTPostAPIChatInputApplicationCommandsJSONBody[] = []
   for (const feature of features) {
@@ -231,7 +231,7 @@ function catalogRoutes(): InteractionRoutes {
 }
 
 // Lowercase letters, digits and hyphens; the suffix always survives the 32-char limit.
-export function discordCommandName(name: string, suffix: string): string | null {
+function discordCommandName(name: string, suffix: string): string | null {
   const base = name
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, '-')

@@ -267,7 +267,7 @@ async function snapshotHeap({ dataDir }: { dataDir: string }) {
 
 const loginField = z.string({ error: 'Login fields must be non-empty strings' }).min(1, { error: 'Login fields must be non-empty strings' }).optional()
 
-export const lockRoutes = {
+const lockRoutes = {
   send: route({
     input: sendRoute,
     run: async (bot, { sendAt, preRun, allowConcurrency, ...input }) => {

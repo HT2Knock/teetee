@@ -34,7 +34,7 @@ export const LEGACY_DB_FILE = 'discord-sessions.db'
 // PRAGMA user_version of every kimaki.db written by migrateSchema(). A stray
 // kimaki.db without it (an empty file from another tool, a pre-marker dev
 // build) must not block the V1 import: then the user gets onboarding again.
-export const DB_VERSION = 1
+const DB_VERSION = 1
 
 // Parents first, so imported rows satisfy the foreign keys.
 const IMPORTED_TABLES = [
@@ -59,7 +59,7 @@ const IMPORT_EXPRESSIONS: Partial<Record<(typeof IMPORTED_TABLES)[number], Recor
   bot_tokens: { bot_mode: `CASE WHEN bot_mode = 'gateway' THEN 'gateway' ELSE 'self_hosted' END` },
 }
 
-export function schemaStatements(): string[] {
+function schemaStatements(): string[] {
   return SCHEMA_SQL.split(';')
     .map((statement) => {
       return statement

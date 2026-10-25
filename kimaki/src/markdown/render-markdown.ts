@@ -38,7 +38,7 @@ function closesFence(line: string, open: string): boolean {
 const CALLOUT_OPEN_RE = /^\s*<callout(\s+[^>]*)?>/i
 const CALLOUT_CLOSE_RE = /<\/callout>\s*$/i
 
-export function parseAccent(attributes: string): number | null {
+function parseAccent(attributes: string): number | null {
   const match = attributes.match(/accent\s*=\s*"([^"]*)"|accent\s*=\s*'([^']*)'/i)
   const value = (match?.[1] ?? match?.[2] ?? '').trim()
   if (/^#[0-9a-f]{6}$/i.test(value)) return Number.parseInt(value.slice(1), 16)
@@ -52,7 +52,7 @@ export function parseAccent(attributes: string): number | null {
 
 // Finds <callout accent="..."> ... </callout> blocks outside code fences.
 // Malformed callouts (no closing tag, bad accent) stay plain text.
-export function splitCallouts(text: string): Piece[] {
+function splitCallouts(text: string): Piece[] {
   const lines = text.split('\n')
   const pieces: Piece[] = []
   const pending: string[] = []

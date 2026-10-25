@@ -40,7 +40,7 @@ function shortDate(ms: number): string {
 }
 
 // "a.ts, src/b.ts" -> files inside the project, as prompt attachments.
-export function parseFileList({ value, directory }: { value: string; directory: string }): ConfigError | PromptFile[] {
+function parseFileList({ value, directory }: { value: string; directory: string }): ConfigError | PromptFile[] {
   const names = value
     .split(',')
     .map((name) => name.trim())

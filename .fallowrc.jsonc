@@ -24,6 +24,20 @@
   // Constant folders that fallow cannot see are generated at runtime.
   "ignorePatterns": [".fallow/**", "**/generated/**"],
 
+  // Packages that are used, but not by an import fallow can see.
+  "ignoreDependencies": [
+    // Peer of @prisma/adapter-libsql in discord-digital-twin; the generated
+    // client loads it at run time, so no src file imports it directly.
+    "@libsql/client",
+    // website/src/globals.css imports it; the Cloudflare/holocron build supplies it.
+    "tailwindcss",
+    // gateway-proxy/scripts/test-gateway-client.ts runs inside the submodule,
+    // which installs its own dependencies.
+    "@discordjs/ws",
+    // docs/opencode-v2-events/*.ts are run by hand from the root workspace.
+    "@opencode/client"
+  ],
+
   "duplicates": {
     // A pair of cloned blocks is worth reporting here: the codebase is small and
     // the fork audit gate reads every group.

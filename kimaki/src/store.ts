@@ -8,7 +8,7 @@ import { createStore } from 'zustand/vanilla'
 import type { Verbosity } from './db.ts'
 import type { ThreadView } from './thread-reducer.ts'
 
-export type State = {
+type State = {
   // threadId -> root session, from thread_sessions (SQLite) and new bindings.
   roots: Readonly<Record<string, string>>
   // sessionId (roots and their subagent children) -> threadId, for routing.

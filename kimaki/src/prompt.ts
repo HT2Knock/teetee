@@ -53,7 +53,7 @@ const logger = createLogger('PROMPT')
 
 
 // Prompt IDs map a Discord message to its inbox item without stored state (spec 9.2.2).
-export function promptIdForMessage(messageId: string): string {
+function promptIdForMessage(messageId: string): string {
   return `msg_discord_${messageId}`
 }
 
@@ -130,7 +130,7 @@ async function splitPromptFiles(files: readonly PromptFile[]) {
 }
 
 // Questions and permissions of the thread (root and children) that wait for the user.
-export async function cancelPendingUi(bot: Bot, threadId: string): Promise<OpenCodeUnavailableError | OpenCodeError | void> {
+async function cancelPendingUi(bot: Bot, threadId: string): Promise<OpenCodeUnavailableError | OpenCodeError | void> {
   if (!bot.opencode.endpoint) return new OpenCodeUnavailableError({ reason: 'not connected' })
   const view = bot.store.getState().threads[threadId]
   if (!view) return
@@ -146,13 +146,13 @@ export async function cancelPendingUi(bot: Bot, threadId: string): Promise<OpenC
   }
 }
 
-export async function interrupt(bot: Bot, sessionId: string): Promise<OpenCodeUnavailableError | OpenCodeError | void> {
+async function interrupt(bot: Bot, sessionId: string): Promise<OpenCodeUnavailableError | OpenCodeError | void> {
   const result = await oc(bot, 'session.interrupt', (client) => client.session.interrupt({ sessionID: sessionId, resume: false }))
   if (result instanceof Error) return result
 }
 
 // A plain message: it replaces whatever the session is doing.
-export async function steer(
+async function steer(
   bot: Bot,
   input: {
     sessionId: string

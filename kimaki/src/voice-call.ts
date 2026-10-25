@@ -77,12 +77,12 @@ const SPEECH_END_MS = 400
 // Microphone audio queued per user, in 20 ms frames: a stalled clock must not add delay.
 const MAX_QUEUED_FRAMES = 50
 
-export class VoiceCallError extends errore.createTaggedError({
+class VoiceCallError extends errore.createTaggedError({
   name: 'VoiceCallError',
   message: 'Voice call $operation failed',
 }) {}
 
-export class NoChatGPTError extends errore.createTaggedError({
+class NoChatGPTError extends errore.createTaggedError({
   name: 'NoChatGPTError',
   message: 'Voice calls need a ChatGPT subscription signed in to OpenCode. Run kimaki login openai, then join the voice channel again',
 }) {}
@@ -90,7 +90,7 @@ export class NoChatGPTError extends errore.createTaggedError({
 // Endpoints of the call; tests point them at local fakes.
 export type RealtimeBaseUrls = { calls?: string; sideband?: string; responses?: string }
 
-export class UnknownVoiceError extends errore.createTaggedError({
+class UnknownVoiceError extends errore.createTaggedError({
   name: 'UnknownVoiceError',
   message: 'Unknown voice "$voice". Pass one of: $voices. Use --voice default to reset',
 }) {}

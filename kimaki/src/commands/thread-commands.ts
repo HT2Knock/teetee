@@ -47,7 +47,7 @@ function inThread(run: (bot: Bot, interaction: ChatInputCommandInteraction, targ
   }
 }
 
-export function sessionIdReply({
+function sessionIdReply({
   sessionId,
   threadId,
   directory,
@@ -68,7 +68,7 @@ export function sessionIdReply({
 }
 
 // critique --json prints { url, id } or { error } on one stdout line.
-export function parseCritiqueOutput(output: string): { ok: true; url: string; id: string } | { ok: false; error: string } | null {
+function parseCritiqueOutput(output: string): { ok: true; url: string; id: string } | { ok: false; error: string } | null {
   for (const line of output.trim().split('\n')) {
     if (!line.startsWith('{')) continue
     const parsed = errore.try(

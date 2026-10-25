@@ -182,7 +182,7 @@ function stringField(input: ToolInput, key: string): string | null {
 }
 
 // Lines added/removed after dropping the common leading and trailing lines.
-export function editStats({ oldString, newString }: { oldString: string; newString: string }) {
+function editStats({ oldString, newString }: { oldString: string; newString: string }) {
   const before = oldString.split('\n')
   const after = newString.split('\n')
   let start = 0
@@ -199,7 +199,7 @@ export function editStats({ oldString, newString }: { oldString: string; newStri
 }
 
 // apply_patch style text: "*** Add|Update|Delete File: path" headers, +/- lines.
-export function patchStats(patchText: string): Array<{ file: string; added: number; removed: number }> {
+function patchStats(patchText: string): Array<{ file: string; added: number; removed: number }> {
   const files: Array<{ file: string; added: number; removed: number }> = []
   for (const line of patchText.split('\n')) {
     const header = line.match(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/)
@@ -227,7 +227,7 @@ export type ToolInput = { readonly [key: string]: JsonValue }
 export type ToolCall = { name: string; input: ToolInput }
 
 // Tools with dedicated UI or no user value never get a line.
-export function hasNoLine(name: string): boolean {
+function hasNoLine(name: string): boolean {
   return name === 'question' || name.startsWith('kimaki_')
 }
 

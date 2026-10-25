@@ -22,7 +22,7 @@ const BTW_QUEUE_SUFFIX_RE = /(?:[.!?,;:])\s*btw\s+queue\.?\s*$|\n\s*btw\s+queue\
 const QUEUE_SUFFIX_RE = /(?:[.!?,;:]|^)\s*queue\.?\s*$|\n\s*queue\.?\s*$/i
 const COMMAND_RE = /^\/([\w.:-]+)(?:\s+([\s\S]*))?$/
 
-export function stripQueueSuffix(text: string): { text: string; queue: boolean } {
+function stripQueueSuffix(text: string): { text: string; queue: boolean } {
   if (!QUEUE_SUFFIX_RE.test(text)) return { text, queue: false }
   return { text: text.replace(QUEUE_SUFFIX_RE, '').trimEnd(), queue: true }
 }

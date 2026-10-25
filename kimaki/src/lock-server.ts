@@ -96,7 +96,7 @@ function signal({ pid, name }: { pid: number; name: NodeJS.Signals }): void {
 
 // Stops the kimaki bot on the port, if one answers /health. Its own shutdown
 // has a deadline, so a bot still alive after the grace period is stuck.
-export async function evictRunningBot({ port, graceMs = 20_000 }: { port: number; graceMs?: number }): Promise<void> {
+async function evictRunningBot({ port, graceMs = 20_000 }: { port: number; graceMs?: number }): Promise<void> {
   const health = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1_000) })
     .then((response) => response.json())
     .catch(() => null)

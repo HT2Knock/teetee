@@ -36,7 +36,7 @@ import { entryArgv } from '../runtime.ts'
 import { listTasks, type Clock } from '../scheduler.ts'
 import type { RealtimeBaseUrls } from '../voice-call.ts'
 
-export const TEST_MODEL = 'deterministic-v2'
+const TEST_MODEL = 'deterministic-v2'
 
 export function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -68,7 +68,7 @@ export function cliCommand(args: readonly string[]): [string, string[]] {
 }
 
 // The same command as the shell string the bot hands to agents.
-export function cliShellCommand(args: readonly string[] = []): string {
+function cliShellCommand(args: readonly string[] = []): string {
   const argv = entryArgv(path.resolve('src/cli.ts'), args)
   return argv.map((part) => `'${part.replaceAll("'", "'\\''")}'`).join(' ')
 }
@@ -636,6 +636,26 @@ export function voiceUrl(result: FakeTranscription): string {
   return `data:audio/ogg;base64,${Buffer.from(JSON.stringify(result)).toString('base64')}`
 }
 
+// The scaffolding every fake HTTP provider below shares: read the body, listen
+// on a free loopback port, and stop on request. `onBody` writes the reply.
+async function startFakeServer({
+  onBody,
+}: {
+  onBody: (body: Buffer, request: http.IncomingMessage, response: http.ServerResponse) => void | Promise<void>
+}): Promise<{ baseUrl: string; stop: () => Promise<void> }> {
+  const server = http.createServer((request, response) => {
+    const chunks: Buffer[] = []
+    request.on('data', (chunk: Buffer) => chunks.push(chunk))
+    request.on('end', () => void onBody(Buffer.concat(chunks), request, response))
+  })
+  const port = await freePort()
+  await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve))
+  return {
+    baseUrl: `http://127.0.0.1:${port}`,
+    stop: () => new Promise((resolve) => server.close(() => resolve())),
+  }
+}
+
 export type FakeGemini = {
   baseUrl: string
   // Route enum offered by each transcription request (tool schema), and the audio media type.
@@ -648,11 +668,9 @@ export type FakeGemini = {
 // request, schema and response parsing of voice.ts.
 export async function startFakeGemini(): Promise<FakeGemini> {
   const requests: FakeGemini['requests'] = []
-  const server = http.createServer((request, response) => {
-    const chunks: Buffer[] = []
-    request.on('data', (chunk: Buffer) => chunks.push(chunk))
-    request.on('end', () => {
-      const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
+  const server = await startFakeServer({
+    onBody: (raw, _request, response) => {
+      const body = JSON.parse(raw.toString('utf8')) as {
         contents: Array<{ parts: Array<{ inlineData?: { data: string; mimeType: string } }> }>
         tools: Array<{ functionDeclarations: Array<{ name: string; parameters: { properties: { route?: { enum?: unknown } } } }> }>
       }
@@ -666,15 +684,9 @@ export async function startFakeGemini(): Promise<FakeGemini> {
           candidates: [{ finishReason: 'STOP', content: { parts: [{ functionCall: { name: declaration.name, args } }] } }],
         }),
       )
-    })
+    },
   })
-  const port = await freePort()
-  await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve))
-  return {
-    baseUrl: `http://127.0.0.1:${port}`,
-    requests,
-    stop: () => new Promise((resolve) => server.close(() => resolve())),
-  }
+  return { ...server, requests }
 }
 
 export type FakeOpenAI = {
@@ -691,11 +703,9 @@ export type FakeOpenAI = {
 // conversion first, so the audio cannot carry the answer like voiceUrl().
 export async function startFakeOpenAI({ result }: { result: FakeTranscription }): Promise<FakeOpenAI> {
   const fake: Omit<FakeOpenAI, 'baseUrl' | 'stop'> = { requests: [], status: 200 }
-  const server = http.createServer((request, response) => {
-    const chunks: Buffer[] = []
-    request.on('data', (chunk: Buffer) => chunks.push(chunk))
-    request.on('end', () => {
-      const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
+  const server = await startFakeServer({
+    onBody: (raw, _request, response) => {
+      const body = JSON.parse(raw.toString('utf8')) as {
         model: string
         tools: Array<{ function: { name: string; parameters: { properties: { route?: { enum?: unknown } } } } }>
         messages: Array<{ content: Array<{ type: string; input_audio?: { data: string; format: string } }> }>
@@ -724,14 +734,9 @@ export async function startFakeOpenAI({ result }: { result: FakeTranscription })
           ],
         }),
       )
-    })
+    },
   })
-  const port = await freePort()
-  await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve))
-  return Object.assign(fake, {
-    baseUrl: `http://127.0.0.1:${port}`,
-    stop: () => new Promise<void>((resolve) => server.close(() => resolve())),
-  })
+  return Object.assign(fake, server)
 }
 
 export type FakeChatGPT = {
@@ -746,12 +751,10 @@ export type FakeChatGPT = {
 // chatgpt.com/backend-api/transcribe: multipart `file` in, `{ text }` out.
 export async function startFakeChatGPT({ text }: { text: string }): Promise<FakeChatGPT> {
   const fake: Omit<FakeChatGPT, 'baseUrl' | 'stop'> = { requests: [], status: 200 }
-  const server = http.createServer((request, response) => {
-    const chunks: Buffer[] = []
-    request.on('data', (chunk: Buffer) => chunks.push(chunk))
-    request.on('end', async () => {
+  const server = await startFakeServer({
+    onBody: async (raw, request, response) => {
       const headers = new Headers(Object.entries(request.headers).flatMap(([key, value]) => (typeof value === 'string' ? [[key, value]] : [])))
-      const form = await new Request('http://fake/transcribe', { method: 'POST', headers, body: Buffer.concat(chunks) }).formData()
+      const form = await new Request('http://fake/transcribe', { method: 'POST', headers, body: raw }).formData()
       const file = form.get('file')
       if (!(file instanceof File)) throw new Error('fake ChatGPT: no file field')
       fake.requests.push({
@@ -764,14 +767,9 @@ export async function startFakeChatGPT({ text }: { text: string }): Promise<Fake
       response.statusCode = fake.status
       response.setHeader('content-type', 'application/json')
       response.end(JSON.stringify(fake.status === 200 ? { text } : { detail: 'unauthorized' }))
-    })
+    },
   })
-  const port = await freePort()
-  await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve))
-  return Object.assign(fake, {
-    baseUrl: `http://127.0.0.1:${port}`,
-    stop: () => new Promise<void>((resolve) => server.close(() => resolve())),
-  })
+  return Object.assign(fake, server)
 }
 
 // An OpenCode database with only the credential table and one ChatGPT OAuth row.
@@ -809,7 +807,7 @@ export async function waitFor<T>({
   throw new Error(`Timed out waiting for ${label}`)
 }
 
-export function isFooter(message: APIMessage): boolean {
+function isFooter(message: APIMessage): boolean {
   const content = message.content
   return content.startsWith('-# *') && content.includes('⋅') && !content.startsWith('-# *using ')
 }
