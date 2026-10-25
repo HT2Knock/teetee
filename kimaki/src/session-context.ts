@@ -38,6 +38,8 @@ export function channelDefaults(row: ChannelDefaultsRow | undefined) {
   }
 }
 
+export type ChannelDefaults = ReturnType<typeof channelDefaults>
+
 // Kimaki sessions ask with `kimaki buttons`. A wildcard deny removes the tool
 // from the model's tool list; forks and subagents inherit it, and later rules
 // (`--permission question:allow`) still win.
