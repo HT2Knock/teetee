@@ -97,6 +97,9 @@ test('a skill change adds its command; catalog events with the same catalog writ
   await waitForCommand()
   expect(await registeredNames()).toContain('demo-skill')
 
+  // Let the pass of the first write finish before measuring: a late bulk write
+  // from it would look like a write caused by the second event.
+  await new Promise((resolve) => setTimeout(resolve, 1_000))
   // Same file content again: OpenCode rescans and publishes skill.updated, the commands stay the same.
   const bulkWrites: string[] = []
   const commandsRoute = Routes.applicationGuildCommands(bot.discord.user!.id, twin.discord.guildId)
