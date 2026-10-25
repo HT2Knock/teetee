@@ -9,7 +9,7 @@ import path from 'node:path'
 
 import { FilesystemError } from './errors.ts'
 
-export const FILE_EDIT_EVENTS_FILENAME = 'file-edit-events.jsonl'
+const FILE_EDIT_EVENTS_FILENAME = 'file-edit-events.jsonl'
 const DEFAULT_MAX_EVENTS = 10_000
 const DEFAULT_COMPACT_AFTER_BYTES = 5 * 1024 * 1024
 

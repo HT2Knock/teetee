@@ -13,7 +13,7 @@ import { createLogger } from './logger.ts'
 const logger = createLogger('WORKTREE')
 const execAsync = promisify(execFile)
 
-export class GitError extends errore.createTaggedError({ name: 'GitError', message: 'Git $operation failed: $detail' }) {}
+class GitError extends errore.createTaggedError({ name: 'GitError', message: 'Git $operation failed: $detail' }) {}
 
 export async function git({ directory, args, timeout = 10_000 }: { directory: string; args: string[]; timeout?: number }) {
   const result = await execAsync('git', ['-C', directory, ...args], { timeout, maxBuffer: 4 * 1024 * 1024 })
@@ -36,7 +36,7 @@ async function commonDirectory(directory: string) {
 export type GitWorktree = { directory: string; head: string; branch: string | null; locked: boolean; prunable: boolean }
 
 // -z avoids Git's quoted-path format and supports spaces/newlines in checkout paths.
-export function parseWorktrees(output: string): GitWorktree[] {
+function parseWorktrees(output: string): GitWorktree[] {
   return output.split('\0\0').filter(Boolean).map((block) => {
     const fields = block.split('\0')
     return {

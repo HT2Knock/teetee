@@ -22,7 +22,7 @@ export function createApi({ token, restUrl }: { token: string; restUrl?: string 
 }
 
 // Discord channel names: lowercase, [a-z0-9-], max 100 chars.
-export function channelNameFor(name: string): string {
+function channelNameFor(name: string): string {
   const sanitized = name
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, '-')

@@ -77,8 +77,9 @@ export type Child = {
 export type AgentButton = { label: string; color: 'white' | 'blue' | 'green' | 'red' }
 export type AgentPrompt = { id: string; sessionId: string; buttons?: AgentButton[]; prompt?: string; maxFiles?: number }
 
-// A tool call between session.tool.input.started and its success or failure.
-export type ToolCall = {
+// A call between session.tool.input.started and its success or failure. Named
+// differently from format-parts' ToolCall (a finished call's name and input).
+export type RunningToolCall = {
   // session.tool.called has no name: it comes from input.started.
   name: string
   // 'called' after session.tool.called, when its tool line was posted.
@@ -102,7 +103,7 @@ export type ThreadView = {
   // Root execution in progress.
   turn: Turn | null
   // Running tool calls of root and children by "assistantMessageID:toolID".
-  tools: Readonly<Record<string, ToolCall>>
+  tools: Readonly<Record<string, RunningToolCall>>
   agentUi: readonly AgentPrompt[]
   children: Readonly<Record<string, Child>>
   // Background shells started by tool calls: shell ID -> label, until their job ends.
@@ -485,7 +486,7 @@ function applyTool(context: Context & { event: V2Event; label: string | undefine
       const name = draft.tools[key]?.name ?? 'tool'
       const input = event.data.input
       const backgroundShell = name === 'shell' && input['background'] === true ? stringInput(input, 'description') || stringInput(input, 'command') : null
-      const tool: ToolCall = { name, phase: 'called', subagent: null, innerCalls: 0, backgroundShell }
+      const tool: RunningToolCall = { name, phase: 'called', subagent: null, innerCalls: 0, backgroundShell }
       if (name === 'subagent') {
         const reused = typeof input['sessionID'] === 'string' ? draft.children[input['sessionID']] : undefined
         const call = { agent: stringInput(input, 'agent'), description: stringInput(input, 'description'), background: input['background'] === true }
@@ -540,7 +541,7 @@ function showInnerCalls({
   label,
   render,
   ...context
-}: Context & { tool: Draft<ToolCall>; metadata: Readonly<Record<string, unknown>> | undefined; label: string | undefined; render: boolean }) {
+}: Context & { tool: Draft<RunningToolCall>; metadata: Readonly<Record<string, unknown>> | undefined; label: string | undefined; render: boolean }) {
   const calls = executeCalls(metadata).slice(tool.innerCalls)
   tool.innerCalls += calls.length
   if (!render) return
@@ -632,7 +633,7 @@ function applyKimaki({ draft, event, prefs, emit }: Context & { event: KimakiEve
 
 // The last text and tool blocks of the assistant messages, like live output
 // (V1 /resume and /fork showed the last 30 parts). User messages are skipped.
-export function replayEffects({
+function replayEffects({
   messages,
   prefs,
   note,

@@ -66,7 +66,7 @@ function channelDefaults(row: ChannelDefaultsRow | undefined) {
 // (`--permission question:allow`) still win.
 const NO_QUESTION_TOOL = { action: 'question', resource: '*', effect: 'deny' } as const
 
-export function btwPrompt({
+function btwPrompt({
   text,
   parentSessionId,
   sourceThreadId,

@@ -67,7 +67,7 @@ export function restApiUrl(credentials: Credentials): string | null {
 }
 
 // Bot tokens start with base64(application id).
-export function appIdFromToken(token: string): string | null {
+function appIdFromToken(token: string): string | null {
   const segment = token.split('.')[0] ?? ''
   const decoded = Buffer.from(segment, 'base64').toString('utf8')
   return /^\d{17,20}$/.test(decoded) ? decoded : null
@@ -150,7 +150,7 @@ const BOT_PERMISSIONS = [
   PermissionFlagsBits.AddReactions,
 ]
 
-export function selfHostedInstallUrl({ appId }: { appId: string }): string {
+function selfHostedInstallUrl({ appId }: { appId: string }): string {
   const permissions = BOT_PERMISSIONS.reduce((sum, flag) => sum | flag, 0n)
   const params = new URLSearchParams({
     client_id: appId,
@@ -162,7 +162,7 @@ export function selfHostedInstallUrl({ appId }: { appId: string }): string {
 
 // The website starts the Discord OAuth flow and stores the client in
 // gateway_clients. callbackUrl: the website redirects there with ?guild_id=.
-export function gatewayInstallUrl({
+function gatewayInstallUrl({
   clientId,
   clientSecret,
   website,
@@ -297,7 +297,7 @@ export async function gatewayCredentials({ db, urls }: { db: KimakiDb; urls: Gat
   return credentials
 }
 
-export async function installGateway({
+async function installGateway({
   db,
   urls,
   callbackUrl,

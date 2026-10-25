@@ -35,7 +35,7 @@ const MAX_STRING = 10_000
 // Per thread file. Older lines are dropped by starting a new file.
 const MAX_FILE_BYTES = 20 * 1024 * 1024
 
-export function sessionEventsDir({ dataDir }: { dataDir: string }): string {
+function sessionEventsDir({ dataDir }: { dataDir: string }): string {
   return path.join(dataDir, 'session-events')
 }
 
@@ -165,7 +165,7 @@ export function transcriptsDir({ dataDir }: { dataDir: string }): string {
   return path.join(dataDir, 'transcripts')
 }
 
-export async function writeTranscript({ client, dataDir, session }: { client: OpenCodeClient; dataDir: string; session: Pick<Session, 'id' | 'title' | 'location'> & { time: Pick<Session['time'], 'updated'> } }): Promise<OpenCodeError | ConfigError | void> {
+async function writeTranscript({ client, dataDir, session }: { client: OpenCodeClient; dataDir: string; session: Pick<Session, 'id' | 'title' | 'location'> & { time: Pick<Session['time'], 'updated'> } }): Promise<OpenCodeError | ConfigError | void> {
   const messages = await allMessages({ client, sessionId: session.id })
   if (messages instanceof Error) return messages
   const dir = transcriptsDir({ dataDir })
@@ -235,7 +235,7 @@ export async function syncTranscripts({
 }
 
 // Cursor pagination of message.list / session.list: every page, in order.
-export async function collectPages<T>({
+async function collectPages<T>({
   operation,
   page,
 }: {

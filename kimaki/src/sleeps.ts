@@ -53,7 +53,7 @@ function utcLabel(time: number): string {
 }
 
 // What the agent reads after `kimaki sleep` (the V1 kimaki_sleep tool result).
-export function sleepOutput({ wakeAt, reason }: { wakeAt: number; reason: string | null }): string {
+function sleepOutput({ wakeAt, reason }: { wakeAt: number; reason: string | null }): string {
   return [
     `Sleeping until ${utcLabel(wakeAt)}.${reason ? ` Reason: ${reason}.` : ''}`,
     'This result is not a wake. Do not continue the waited work. Do not run more commands.',

@@ -22,7 +22,7 @@ export type OpenedDb = {
   close: () => Promise<void>
 }
 
-export function dbPath({ dataDir }: { dataDir: string }): string {
+function dbPath({ dataDir }: { dataDir: string }): string {
   return path.join(dataDir, DB_FILE)
 }
 

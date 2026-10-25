@@ -51,7 +51,7 @@ async function waitForGuild({ discord, installUrl, gateway }: { discord: Client;
 }
 
 // Many servers: --guild, else a prompt, else an error listing the choices.
-export async function chooseGuild({
+async function chooseGuild({
   discord,
   guildId,
   installUrl,
@@ -135,7 +135,7 @@ export function shellQuote(arg: string): string {
   return /^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replaceAll("'", `'\\''`)}'`
 }
 
-export function onboardingPrompt({ kimaki }: { kimaki: string }): string {
+function onboardingPrompt({ kimaki }: { kimaki: string }): string {
   return dedent`
     This is the Kimaki onboarding thread. Kimaki maps Discord channels to project folders on this computer:
     a message in a project channel starts a coding session in that folder.

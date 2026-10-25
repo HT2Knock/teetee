@@ -15,7 +15,7 @@ import { EventSourceParserStream } from 'eventsource-parser/stream'
 
 import type { ChatGPTAuth } from './live-call.ts'
 
-export const DEFAULT_RESPONSES_URL = 'https://chatgpt.com/backend-api/codex/responses'
+const DEFAULT_RESPONSES_URL = 'https://chatgpt.com/backend-api/codex/responses'
 const MODEL = 'gpt-6-luna'
 // Stops a model that keeps calling tools without ever answering.
 const MAX_STEPS = 30
@@ -30,12 +30,12 @@ export type AgentTool = {
   execute(args: unknown): unknown
 }
 
-export class VoiceAgentError extends errore.createTaggedError({
+class VoiceAgentError extends errore.createTaggedError({
   name: 'VoiceAgentError',
   message: 'Voice backend $operation failed',
 }) {}
 
-export class VoiceAgentStoppedError extends errore.createTaggedError({
+class VoiceAgentStoppedError extends errore.createTaggedError({
   name: 'VoiceAgentStoppedError',
   message: 'Voice backend stopped: the call ended',
   extends: errore.AbortError,

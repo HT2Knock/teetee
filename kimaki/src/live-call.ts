@@ -51,7 +51,7 @@ export type LiveCall = {
   close(): Promise<void>
 }
 
-export class LiveCallError extends errore.createTaggedError({
+class LiveCallError extends errore.createTaggedError({
   name: 'LiveCallError',
   message: 'GPT-Live $operation failed',
 }) {}
@@ -66,7 +66,7 @@ const APPEND_BYTES = 500
 const START_TIMEOUT_MS = 15_000
 
 // Splits text into chunks of at most `max` UTF-8 bytes, never inside a character.
-export function chunkUtf8(text: string, max = APPEND_BYTES): string[] {
+function chunkUtf8(text: string, max = APPEND_BYTES): string[] {
   const chunks: string[] = []
   const current = { text: '', bytes: 0 }
   for (const char of text) {

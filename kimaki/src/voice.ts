@@ -49,27 +49,27 @@ const TOOL_NAME = 'transcriptionResult'
 const MAX_ATTEMPTS = 3
 const RETRY_DELAY_MS = 500
 
-export class TranscriptionError extends errore.createTaggedError({
+class TranscriptionError extends errore.createTaggedError({
   name: 'TranscriptionError',
   message: 'Transcription failed: $reason',
 }) {}
 
-export class TranscriptionApiError extends errore.createTaggedError({
+class TranscriptionApiError extends errore.createTaggedError({
   name: 'TranscriptionApiError',
   message: 'Transcription API returned $status: $body',
 }) {}
 
-export class TranscriptionBlockedError extends errore.createTaggedError({
+class TranscriptionBlockedError extends errore.createTaggedError({
   name: 'TranscriptionBlockedError',
   message: 'The transcription provider refused the audio ($reason)',
 }) {}
 
-export class EmptyTranscriptionError extends errore.createTaggedError({
+class EmptyTranscriptionError extends errore.createTaggedError({
   name: 'EmptyTranscriptionError',
   message: 'No request was transcribed. Record another voice message with the task to send.',
 }) {}
 
-export class NoTranscriptionKeyError extends errore.createTaggedError({
+class NoTranscriptionKeyError extends errore.createTaggedError({
   name: 'NoTranscriptionKeyError',
   message: 'Voice transcription needs ChatGPT signed in to OpenCode, or an OpenAI or Gemini API key. Run /transcription-key, or kimaki bot keys set --openai <key>',
 }) {}
@@ -155,7 +155,7 @@ export function voiceMediaType(attachment: Pick<AttachmentLike, 'contentType' | 
 
 // --- tool schema and prompt
 
-export function buildTranscriptionTool({ agentNames, inSession }: { agentNames: readonly string[]; inSession: boolean }) {
+function buildTranscriptionTool({ agentNames, inSession }: { agentNames: readonly string[]; inSession: boolean }) {
   // btw and queue need a session to fork from or wait for (V1 "contextual routing").
   const routes: VoiceRoute[] = inSession ? ['steer', 'queue', 'btw', 'new-session'] : ['steer', 'new-session']
   const properties: Record<string, Record<string, unknown>> = {
@@ -231,7 +231,7 @@ function parseJsonObject(body: string): TranscriptionError | Record<string, unkn
 }
 
 // Tool arguments -> result. Unknown or missing route is steer.
-export function toTranscriptionResult(args: Record<string, unknown>): EmptyTranscriptionError | TranscriptionResult {
+function toTranscriptionResult(args: Record<string, unknown>): EmptyTranscriptionError | TranscriptionResult {
   const transcription = typeof args['transcription'] === 'string' ? args['transcription'].trim() : ''
   if (!transcription) return new EmptyTranscriptionError()
   const route = args['route']
@@ -252,7 +252,7 @@ function fromToolArguments(raw: string | Record<string, unknown>): Transcription
 const GEMINI_BLOCKED = new Set(['SAFETY', 'RECITATION', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII', 'LANGUAGE'])
 
 // https://ai.google.dev/api/generate-content#v1beta.GenerateContentResponse
-export function parseGeminiResponse(body: string): TranscriptionFailure | TranscriptionResult {
+function parseGeminiResponse(body: string): TranscriptionFailure | TranscriptionResult {
   const parsed = parseJsonObject(body)
   if (parsed instanceof Error) return parsed
   const candidate = (Array.isArray(parsed['candidates']) ? parsed['candidates'] : []).find(isRecord)
@@ -277,7 +277,7 @@ export function parseGeminiResponse(body: string): TranscriptionFailure | Transc
 }
 
 // https://developers.openai.com/api/docs/guides/audio-chat-completions
-export function parseOpenAIResponse(body: string): TranscriptionFailure | TranscriptionResult {
+function parseOpenAIResponse(body: string): TranscriptionFailure | TranscriptionResult {
   const parsed = parseJsonObject(body)
   if (parsed instanceof Error) return parsed
   const choice = (Array.isArray(parsed['choices']) ? parsed['choices'] : []).find(isRecord)
@@ -683,7 +683,7 @@ export async function transcribe({
 //     (audio/L16, 24 kHz mono), wrapped in a WAV header here.
 //     https://ai.google.dev/gemini-api/docs/speech-generation
 
-export class SpeechError extends errore.createTaggedError({
+class SpeechError extends errore.createTaggedError({
   name: 'SpeechError',
   message: 'Speech generation failed: $reason',
 }) {}

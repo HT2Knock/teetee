@@ -146,4 +146,3 @@ export function createLogger(prefix: string) {
   }
 }
 
-export type Logger = ReturnType<typeof createLogger>
