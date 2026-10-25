@@ -236,7 +236,9 @@ test('finished threads of any project are announced in the call; the model answe
   await twin.discord.channel(twin.channelId).user(TEST_USER_ID).sendMessage({ content: 'other-thread-marker' })
   await waitFor({
     label: 'second finished notice',
-    check: async () => (await twin.discord.channel(voiceChannelId).getMessages()).filter((message) => message.content.includes('thread finished')).length === 2,
+    // Match the new notice by text, not by count: earlier tests leave notices in
+    // this channel, so a count of two can already be true when this test starts.
+    check: async () => (await twin.discord.channel(voiceChannelId).getMessages()).slice(before).some((message) => message.content.includes('thread finished: other-thread-marker')),
   })
   for (let i = 0; i < 10; i++) {
     expect(live.replies.length).toBe(1)
