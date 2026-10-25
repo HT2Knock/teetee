@@ -14,8 +14,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -30,23 +28,9 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # Submodules have dist/ gitignored so they need to be built after checkout.
-      # libsqlproxy is a workspace package that also needs building (exports from dist/).
-      - name: Build workspace packages with dist/ exports
-        run: |
-          bun run --filter errore build
-          bun run --filter traforo build
-          bun run --filter opencode-injection-guard build
-          bun run --filter libsqlproxy build
-          bun run --filter @kimaki/realtime build
-
       - name: Generate Prisma + SQL (discord-digital-twin)
         run: bun run generate
         working-directory: discord-digital-twin
-
-      - name: Generate SQL (kimaki)
-        run: bun run generate
-        working-directory: kimaki
 
       - name: Build discord-digital-twin
         run: bun run build

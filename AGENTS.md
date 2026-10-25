@@ -1,4 +1,6 @@
-the important package in this repo is `kimaki/`: the Kimaki Discord bot and `kimaki` CLI (npm package `kimaki`), built on OpenCode V2. it replaced the V1 `cli/` package; `kimaki/CHANGELOG.md` keeps the V1 release history. this branch supports OpenCode V2 only. the legacy OpenCode V1 compatible codebase lives in the `cli/` folder of the `v1` branch (https://github.com/remorses/kimaki/tree/v1/cli); read it there with `git show v1:cli/<path>`, never re-add V1 support here.
+this repo is the bot workspace: `kimaki/` (the Kimaki Discord bot and `kimaki` CLI, built on OpenCode V2) plus the two packages its tests need, `discord-digital-twin/` (fake Discord) and `opencode-deterministic-provider/` (canned model replies). it was split out of the upstream monorepo, which also held the website, the Slack bridge and the Rust gateway; none of those are here. `kimaki` and `traforo` come from npm now, and `errore` too. this branch supports OpenCode V2 only.
+
+deploy: `git push`, then on the bot host `git pull && bun install && bun run build`, then restart the user service. `bun run build` builds `errore` first (a workspace) and then `kimaki`; the OpenCode plugin autostarts the bot from `kimaki/dist/cli.js`.
 
 after every change and every feature run `bun run build` (tsc) inside `kimaki`. it validates types and keeps `kimaki/dist` up to date: the OpenCode plugin autostarts the bot from `dist/cli.js` (`src/autostart.ts`), so a stale dist starts old code. try to never use `as any`.
 
@@ -23,9 +25,7 @@ read the matching doc **before** starting these tasks. they hold the full proced
 | task                                                                               | read first                                |
 | ---------------------------------------------------------------------------------- | ----------------------------------------- |
 | any larger kimaki feature: why it works the way it does, what was dropped from V1     | `docs/kimaki-v2-rebuild-spec.md`          |
-| gateway-proxy, website onboarding, `gateway_clients`, `--gateway`, bot credentials  | `docs/gateway-architecture.md`            |
-| publish, release notes, #changelog post, website deploy, kimaki-demo deploy         | `docs/release-process.md`                 |
-| editing `discord-slack-bridge/` (Slack API links, ID encoding, KV auth cache)       | `discord-slack-bridge/AGENTS.md`          |
+| hosted gateway, `gateway_clients`, `--gateway`, bot credentials                     | `docs/gateway-architecture.md`            |
 | Strada events, DAU/WAU/MAU, funnels, retention SQL                                  | `docs/strada-product-analytics.md`        |
 | event sourcing patterns and examples                                                | `docs/event-sourcing-for-application-state.md` |
 | reducer fixtures (recorded OpenCode V2 event streams)                               | `docs/opencode-v2-events/`                |
@@ -33,9 +33,7 @@ read the matching doc **before** starting these tasks. they hold the full proced
 # repo architecture
 
 ```
-kimaki/ (bot + CLI, local SQLite) ──REST+WS (clientId:secret)──▶ gateway-proxy/ (Rust, fly.io) ──▶ Discord
-   │    │                                                             ▲ polls every 1s
-   │    └─ polls /api/onboarding/status ──▶ website/ (CF Worker) ──▶ shared Postgres (db/)
+kimaki/ (bot + CLI, local SQLite) ──REST+WS (clientId:secret)──▶ hosted gateway (kimaki.dev) ──▶ Discord
    │
    └── one /api/event stream + HTTP client ──▶ user's shared OpenCode V2 service (not a bot-owned server)
 ```
@@ -59,16 +57,14 @@ OpenCode events ──▶ opencode-server.ts ──▶ event-loop.ts ──▶ t
 - `cli.ts`, `cli/*.ts`: goke CLI. `plugin/`: code that runs inside the OpenCode process.
 - `system-prompt.ts` holds the session instruction entry (the whole agent-facing CLI reference). Only two parts are opt-out skills: `kimaki-debug` and `kimaki-tunnel` (`skills/<id>/SKILL.md`, `builtin-skills.ts`), registered by the `kimaki` plugin through `ctx.skill.transform` and hidden from Discord slash commands. `kimaki --disable-skills all|id,id` denies them per session with `skill:<id>` permission rules (`disabledSkillRules`).
 - `autostart.ts`: the bot writes `<dataDir>/autostart.command`; the plugin opens it in the default terminal when OpenCode starts and no bot answers on the lock port.
-- `gateway-proxy/`: multi-tenant Discord Gateway + REST proxy. one shared bot for all users.
-- `website/`: https://kimaki.dev, OAuth callback and onboarding status routes.
-- `db/`: shared Postgres schema (`db/schema.prisma`) for website and gateway. kimaki does not use it.
+- the gateway itself (multi-tenant Discord Gateway + REST proxy) is hosted, not in this repo. `--gateway` points the bot at it; onboarding and `gateway_clients` live there.
 
 full gateway diagram, auth flow and onboarding flow: `docs/gateway-architecture.md`.
 
 ## gateway REST safety
 
 gateway REST rule for kimaki code: when running with `client_id:secret`
-through gateway-proxy, Discord REST calls must be guild-scoped or explicitly
+through the hosted gateway, Discord REST calls must be guild-scoped or explicitly
 allowlisted by the proxy (`/gateway/bot`, `/users/@me`, etc). avoid global
 application routes like `/applications/{app_id}/commands`; use
 `/applications/{app_id}/guilds/{guild_id}/commands` instead so auth can resolve
@@ -144,33 +140,17 @@ inline straightforward Drizzle queries (`db.query.*.findFirst`, `db.insert`, `db
 
 ## publishing
 
-before any publish, read `docs/release-process.md`. it covers the #changelog notification via sigillo with the demo bot token, the website production deploy, and kimaki-demo deploys.
+this workspace does not publish packages. `kimaki` on npm is upstream's; a local change ships by deploying the bot host (see the top of this file).
 
 ## github issues
 
 never suggest installing kimaki from git (e.g. `npm i -g remorses/kimaki#main`). it does not work because the package needs a build step. always point users to the next npm release instead.
 
-the user-facing bug report workflow (export events, share evidence in a gist, issue vs PR) lives in `website/src/docs/docs/guides/report-bugs.mdx` and at https://kimaki.dev/docs/guides/report-bugs. keep that page in sync when the debug commands change.
-
-## git submodules
-
-submodules: `errore`, `gateway-proxy`, `traforo`, `opencode-injection-guard`. their configured branches are in `.gitmodules`.
-
-**never rewrite or force-push a submodule branch in a way that drops commits kimaki still points at.** if the superproject gitlink references a SHA the remote no longer advertises, fresh clones and CI fail with `not our ref` / `did not contain <sha>` before any tests run.
-
-workflow when changing a submodule:
-
-1. commit and **push** the submodule branch first so GitHub has the objects
-2. only then bump the gitlink in kimaki (`git add gateway-proxy` etc.) and commit that pointer update
-3. before changing a gitlink, prove the remote has the target SHA, e.g. `gh api repos/remorses/gateway-proxy/commits/<sha> --jq .sha` (must not 422)
-
-when pulling submodules and they jump to a new commit, commit that pointer update right away before other work. otherwise critique diffs later include the noisy submodule jump along with the real changes.
-
-if a submodule tip was lost on the remote but still exists in a local checkout, restore it by fast-forwarding (or cherry-picking) the branch back onto the missing tip and pushing. do not "fix" kimaki by pointing at an older reachable commit unless those tip commits are intentionally abandoned.
+the user-facing bug report workflow (export events, share evidence in a gist, issue vs PR) lives at https://kimaki.dev/docs/guides/report-bugs, in the upstream repo. file Kimaki bugs on remorses/kimaki; this fork is for the local bot.
 
 ## errore
 
-errore is a submodule for using errors as values in ts. it should always be on main, never in detached state. this whole codebase uses errore.org conventions. ALWAYS read the errore skill before editing any code. shared tagged errors live in `kimaki/src/errors.ts`.
+errore (`errore@^0.14.1` from npm) is for using errors as values in ts. this whole codebase uses errore.org conventions. shared tagged errors live in `kimaki/src/errors.ts`.
 
 ## goke cli
 

@@ -17,16 +17,9 @@ tmp
 # opensrc - source code for packages
 /opensrc
 __snapshots__
-traforo/dist/
-skills/jitter/dist/
-/cli/skills
-/subrouter-opencode-v2-plugin/
 bin-local.sh
 kimaki.log
 app.log
 generated
 .zig-cache
 zig-out
-website/.wrangler/
-.wrangler
-betterstack
