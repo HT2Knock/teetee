@@ -458,6 +458,16 @@ async function withRetries(attempt: () => Promise<TranscriptionFailure | Transcr
   }
 }
 
+// The tail every transcription HTTP call shares: read the body, report a
+// non-2xx status, parse the JSON, and take its `text`.
+async function transcriptionFromResponse(response: Response): Promise<TranscriptionFailure | TranscriptionResult> {
+  const body = await response.text().catch(() => '')
+  if (!response.ok) return new TranscriptionApiError({ status: String(response.status), body: body.slice(0, 300) })
+  const parsed = parseJsonObject(body)
+  if (parsed instanceof Error) return parsed
+  return toTranscriptionResult({ transcription: parsed['text'] })
+}
+
 // Free Whisper through kimaki.dev, authenticated with the gateway client
 // credentials (website POST /api/transcribe). No routing: always steer.
 async function transcribeViaGateway({ audio, mediaType, clientId, clientSecret }: {
@@ -472,11 +482,7 @@ async function transcribeViaGateway({ audio, mediaType, clientId, clientSecret }
     body: new Uint8Array(audio),
   }).catch((cause) => new TranscriptionError({ reason: 'kimaki.dev transcription not reachable', cause }))
   if (response instanceof Error) return response
-  const body = await response.text().catch(() => '')
-  if (!response.ok) return new TranscriptionApiError({ status: String(response.status), body: body.slice(0, 300) })
-  const parsed = parseJsonObject(body)
-  if (parsed instanceof Error) return parsed
-  return toTranscriptionResult({ transcription: parsed['text'] })
+  return transcriptionFromResponse(response)
 }
 
 // --- ChatGPT subscription
@@ -554,11 +560,7 @@ async function transcribeViaChatGPT({ credential, baseUrl, audio, mediaType }: {
     body: form,
   }).catch((cause) => new TranscriptionError({ reason: 'ChatGPT transcription not reachable', cause }))
   if (response instanceof Error) return response
-  const body = await response.text().catch(() => '')
-  if (!response.ok) return new TranscriptionApiError({ status: String(response.status), body: body.slice(0, 300) })
-  const parsed = parseJsonObject(body)
-  if (parsed instanceof Error) return parsed
-  return toTranscriptionResult({ transcription: parsed['text'] })
+  return transcriptionFromResponse(response)
 }
 
 // --- routing
