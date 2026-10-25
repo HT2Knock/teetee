@@ -1,0 +1,57 @@
+{
+  "name": "errore",
+  "version": "0.14.1",
+  "type": "module",
+  "description": "Type-safe errors as values for TypeScript. Like Go, but with full type inference.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/remorses/errore.git"
+  },
+  "homepage": "https://github.com/remorses/errore#readme",
+  "bugs": {
+    "url": "https://github.com/remorses/errore/issues"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "errore": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "skills"
+  ],
+  "scripts": {
+    "build": "tsc && chmod +x dist/cli.js",
+    "test": "vitest",
+    "bench": "bun run benchmarks/effect-vs-errore.ts",
+    "bench:create-tagged-error": "bun run benchmarks/create-tagged-error.ts",
+    "worker:dev": "wrangler dev",
+    "worker:deploy": "wrangler deploy"
+  },
+  "keywords": [
+    "error",
+    "result",
+    "typescript",
+    "type-safe",
+    "go",
+    "errors-as-values"
+  ],
+  "author": "remorses",
+  "license": "MIT",
+  "devDependencies": {
+    "@code-hike/lighter": "^1.0.3",
+    "effect": "^3.19.18",
+    "hono": "^4.11.5",
+    "marked": "^17.0.5",
+    "mitata": "^1.0.34",
+    "typescript": "^5.0.0",
+    "vitest": "^3.2.4"
+  }
+}
