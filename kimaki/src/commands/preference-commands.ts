@@ -30,7 +30,7 @@ import { ConfigError, DbError } from '../errors.ts'
 import { button, buttonRow, paginate, selectedPage, selectRow, type UiMessage } from '../format-parts.ts'
 import { replyError, resolveTarget, type InteractionRoutes, type InteractionTarget } from '../interaction-context.ts'
 import { parseFirst, toDbDate, type ChannelModelRow } from '../rows.ts'
-import { agentSelection, primaryAgents, switchAgent } from '../sessions.ts'
+import { agentSelection, primaryAgents, switchAgent, switchModel } from '../session-context.ts'
 
 const AGENT_PREFIX = 'agent:'
 const MODEL_PREFIX = 'model:'
@@ -81,12 +81,6 @@ function modelLabel(model: { providerID: string; id: string; variant?: string | 
 // --- Writes, shared with `kimaki channel` (lock-routes.ts) and `kimaki send --model`.
 
 // From the next step of the session.
-export async function switchModel(bot: Bot, { sessionId, model }: { sessionId: string; model: ModelChoice }) {
-  const choice = { providerID: model.providerID, id: model.id, ...(model.variant && { variant: model.variant }) }
-  const result = await oc(bot, 'session.switchModel', (client) => client.session.switchModel({ sessionID: sessionId, model: choice }))
-  if (result instanceof Error) return result
-}
-
 // Default model of new sessions in the channel.
 export async function setChannelModel(bot: Bot, { channelId, model }: { channelId: string; model: ModelChoice }): Promise<DbError | void> {
   const modelId = `${model.providerID}/${model.id}`

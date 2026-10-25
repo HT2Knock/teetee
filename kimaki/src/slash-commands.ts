@@ -51,7 +51,8 @@ import {
 import { agentUiRoutes } from './agent-ui.ts'
 import { oc, projectOf, type Bot, type ModelChoice } from './bot.ts'
 import { createLoginRoutes } from './commands/login-commands.ts'
-import { applyAgent, createPreferenceRoutes, switchModel, variantChoices, variantModel } from './commands/preference-commands.ts'
+import { applyAgent, createPreferenceRoutes, variantChoices, variantModel } from './commands/preference-commands.ts'
+import { switchModel } from './session-context.ts'
 import { sessionRoutes } from './commands/session-commands.ts'
 import { SKIPPED_COMMANDS, threadRoutes } from './commands/thread-commands.ts'
 import { worktreeRoutes } from './commands/worktree-commands.ts'
@@ -70,11 +71,11 @@ import {
 } from './interaction-context.ts'
 import { createLogger } from './logger.ts'
 import { permissionRoutes } from './permissions.ts'
-import { dispatch } from './prompt.ts'
+import { dispatch, startSession } from './input.ts'
 import { createQuestionHandlers } from './questions.ts'
 import type { Route } from './routes.ts'
 import { taskRoutes } from './scheduler.ts'
-import { catalogReady, startSession } from './sessions.ts'
+import { catalogReady } from './session-context.ts'
 
 const logger = createLogger('COMMANDS')
 

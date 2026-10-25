@@ -33,7 +33,7 @@ import { ConfigError, DbError, DiscordError } from './errors.ts'
 import type { InteractionRoutes } from './interaction-context.ts'
 import { createLogger } from './logger.ts'
 import type { SendInput } from './lock-routes.ts'
-import { send } from './prompt.ts'
+import { send } from './input.ts'
 import { parseFirst, parseRows, toDbDate, type ChannelDirectoryRow, type ScheduledTaskRow } from './rows.ts'
 import { parseFutureUtc, runDueWakes } from './sleeps.ts'
 

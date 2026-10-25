@@ -29,7 +29,8 @@ import {
   type SessionTarget,
 } from '../interaction-context.ts'
 import { shellQuote } from '../onboarding.ts'
-import { abort, clearQueue, dispatch, redo, undo } from '../prompt.ts'
+import { dispatch } from '../input.ts'
+import { abort, clearQueue, redo, undo } from '../prompt.ts'
 import type { Route } from '../routes.ts'
 import { forkBtw } from '../sessions.ts'
 

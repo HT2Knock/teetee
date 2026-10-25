@@ -8,7 +8,7 @@ import { FileUploadBuilder, LabelBuilder, ModalBuilder, MessageFlags, type Butto
 import { sessionDirectory, type Bot } from './bot.ts'
 import { ConfigError, DiscordError } from './errors.ts'
 import type { InteractionRoutes } from './interaction-context.ts'
-import { send } from './prompt.ts'
+import { send } from './input.ts'
 import type { AgentButton, AgentPrompt, ThreadView } from './thread-reducer.ts'
 
 export function parseButton(value: string): ConfigError | AgentButton {

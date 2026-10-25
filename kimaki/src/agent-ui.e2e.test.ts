@@ -3,7 +3,8 @@ import { ComponentType } from 'discord.js'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 import type { BotHandle } from './main.ts'
 import { TEST_USER_ID, seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitFor, waitForFooter, warmUp, toolParts, textParts, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
-import { send, shell } from './prompt.ts'
+import { send } from './input.ts'
+import { shell } from './prompt.ts'
 
 const dataDir = tempDataDir()
 let server: OpencodeTestServer

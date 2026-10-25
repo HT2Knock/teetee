@@ -26,7 +26,7 @@ import { NOTIFY_MESSAGE_FLAGS } from './format-parts.ts'
 import { createLogger } from './logger.ts'
 import { checkOpencode, findOpencodeBinary, installedOpencodeBinary, OPENCODE_INSTALL_COMMAND } from './opencode-server.ts'
 import type { Bot } from './bot.ts'
-import { startSession } from './sessions.ts'
+import { startSession } from './input.ts'
 import { addProjectChannel, defaultChannelName, defaultProjectDirectory } from './project.ts'
 import { parseRows, type ChannelDirectoryRow } from './rows.ts'
 

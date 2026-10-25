@@ -10,7 +10,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test'
 import { openDb } from './db.ts'
 import type { BotHandle } from './main.ts'
 import { cliCommand, scriptedTurn, seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, textParts, waitForFooter, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
-import { send } from './prompt.ts'
+import { send } from './input.ts'
 
 const exec = promisify(execFile)
 const dataDir = tempDataDir()

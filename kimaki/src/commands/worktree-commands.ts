@@ -14,7 +14,9 @@ import { ConfigError, DbError } from '../errors.ts'
 import { canonicalPath } from '../file-edit-log.ts'
 import { authorOf, replyError, resolveTarget, type InteractionRoutes } from '../interaction-context.ts'
 import { parseFirst, toDbDate, type ChannelDirectoryRow, type ChannelWorktreeRow } from '../rows.ts'
-import { fork, sessionCwd, startSession } from '../sessions.ts'
+import { startSession } from '../input.ts'
+import { fork } from '../sessions.ts'
+import { sessionCwd } from '../session-context.ts'
 import {
   deleteWorktree,
   git,
