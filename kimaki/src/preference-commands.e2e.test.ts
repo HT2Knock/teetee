@@ -422,7 +422,13 @@ test('/<agent>-agent variant: sets the thinking level with the agent, per sessio
     name: 'build-agent',
     options: [{ name: 'variant', type: 3, value: 'fast' }],
   })
+  // The ack is the deferred reply; the channel default lands with the edit that
+  // follows it, so wait for that text before starting a thread.
   await discord.channel(channelId).waitForInteractionAck({ interactionId: ack.id })
+  await waitFor({
+    label: 'channel agent saved',
+    check: async () => (await discord.channel(channelId).text()).includes('Switched to **build** agent for this channel'),
+  })
   const fresh = await newThread(channelId, 'Uses the channel variant')
   // A new thread binds its session a moment later; the model is read from it.
   await waitFor({ label: 'new session bound', check: async () => bot.store.getState().roots[fresh.id] })

@@ -245,7 +245,7 @@ type ToolLine = { glyph: '┣' | '◼︎'; text: string }
 
 // One formatter per tool with a dedicated line. Adding a tool means adding one
 // entry, not another branch in a ladder.
-const TOOL_LINES: Record<string, (input: ToolInput) => ToolLine> = {
+const TOOL_LINES = new Map<string, (input: ToolInput) => ToolLine>(Object.entries({
   shell: (input) => {
     const detail = stringField(input, 'description') ?? stringField(input, 'command')
     const background = input['background'] === true ? ' (background)' : ''
@@ -283,13 +283,13 @@ const TOOL_LINES: Record<string, (input: ToolInput) => ToolLine> = {
     const description = stringField(input, 'description')
     return { glyph: '┣', text: description ? `execute _${inline(description)}_` : 'execute' }
   },
-}
+}))
 
 // The keys an MCP or plugin tool usually names its subject with.
 const DETAIL_KEYS = ['path', 'pattern', 'url', 'query', 'command', 'name', 'directory', 'title']
 
 function toolBody({ name, input }: ToolCall): ToolLine {
-  const format = TOOL_LINES[name]
+  const format = TOOL_LINES.get(name)
   if (format) return format(input)
   const detail = DETAIL_KEYS.map((key) => stringField(input, key)).find((value) => value !== null)
   if (detail) return { glyph: '┣', text: `${inline(name)} _${inline(detail)}_` }

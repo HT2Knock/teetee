@@ -109,7 +109,8 @@ test('a skill change adds its command; catalog events with the same catalog writ
   const event = nextCatalogEvent()
   fs.writeFileSync(skillFile, skillText)
   await event
-  // Let the pass that the event started finish.
-  await new Promise((resolve) => setTimeout(resolve, 300))
+  // Let the pass that the event started finish. It is asynchronous and slower
+  // than the test on a loaded machine, so the window is generous.
+  await new Promise((resolve) => setTimeout(resolve, 1_500))
   expect(bulkWrites).toEqual([])
 })
