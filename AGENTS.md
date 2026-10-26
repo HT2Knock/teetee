@@ -1,8 +1,10 @@
-this repo is the bot workspace: `kimaki/` (the Kimaki Discord bot and `kimaki` CLI, built on OpenCode V2) plus the two packages its tests need, `discord-digital-twin/` (fake Discord) and `opencode-deterministic-provider/` (canned model replies). it was split out of the upstream monorepo, which also held the website, the Slack bridge and the Rust gateway; none of those are here. `kimaki` and `traforo` come from npm now, and `errore` too. this branch supports OpenCode V2 only.
+this repo is the bot workspace: `kimaki/` (the Kimaki Discord bot and `kimaki` CLI, built on OpenCode V2) plus the two packages its tests need, `discord-digital-twin/` (fake Discord) and `opencode-deterministic-provider/` (canned model replies). it was split out of the upstream monorepo, which also held the website, the Slack bridge and the Rust gateway; none of those are here. this branch supports OpenCode V2 only.
 
-deploy: `git push`, then on the bot host `git pull && bun install && bun run build`, then restart the user service. `bun run build` builds `errore` first (a workspace) and then `kimaki`; the OpenCode plugin autostarts the bot from `kimaki/dist/cli.js`.
+deploy: `git push`, then on the bot host `git pull && bun install && bun run build`, then restart the user service. `bun run build` builds `kimaki`; the OpenCode plugin autostarts the bot from `kimaki/dist/cli.js`.
 
-after every change and every feature run `bun run build` (tsc) inside `kimaki`. it validates types and keeps `kimaki/dist` up to date: the OpenCode plugin autostarts the bot from `dist/cli.js` (`src/autostart.ts`), so a stale dist starts old code. try to never use `as any`.
+after every change and every feature run `bun run build` inside `kimaki`. it runs `tsc` and then `scripts/bundle.ts`: the OpenCode plugin autostarts the bot from `dist/cli.js` (`src/autostart.ts`), so a stale dist starts old code. try to never use `as any`.
+
+`scripts/bundle.ts` overwrites `dist/cli.js` with a `Bun.build` bundle of `src/cli.ts` and writes content-hashed chunks next to it, keeping `tsc` output because the plugin shim loads `<package>/dist/plugin/<dir>/index.js` as plain ESM. splitting is required: without it the lazy `await import()` stacks are inlined into the entry and evaluated on every run (200 ms vs 76 ms for `kimaki --help`). packages whose module code breaks when bundled are `external` in that script (`@discordjs/voice` assigns to `require`, `werift`/`opusscript` load wasm and `.node` assets, `prism-media` requires the absent `ffmpeg-static`). a stale chunk list is removed through `dist/.bundle-files.json`.
 
 always load the `changesets` skill before fixing bugs or adding features. User-facing fixes and features usually need a `.changeset/*.md` entry, and the skill explains package selection, issue references, descriptive filenames, and `.changeset/readme.md` expectations.
 
@@ -55,7 +57,7 @@ OpenCode events ──▶ opencode-server.ts ──▶ event-loop.ts ──▶ t
 - `effects.ts`: the only Discord writer for session output. `format-parts.ts`, `markdown/`: formatting.
 - `lock-server.ts`, `lock-routes.ts`: single-instance lock and the local HTTP API used by CLI subcommands.
 - `cli.ts`, `cli/*.ts`: goke CLI. `plugin/`: code that runs inside the OpenCode process.
-- `system-prompt.ts` holds the session instruction entry (the whole agent-facing CLI reference). Only two parts are opt-out skills: `kimaki-debug` and `kimaki-tunnel` (`skills/<id>/SKILL.md`, `builtin-skills.ts`), registered by the `kimaki` plugin through `ctx.skill.transform` and hidden from Discord slash commands. `kimaki --disable-skills all|id,id` denies them per session with `skill:<id>` permission rules (`disabledSkillRules`).
+- `system-prompt.ts` holds the session instruction entry (the whole agent-facing CLI reference). Only two parts are opt-out skills: `kimaki-debug` and `kimaki-thread-ops` (`skills/<id>/SKILL.md`, `builtin-skills.ts`), registered by the `kimaki` plugin through `ctx.skill.transform` and hidden from Discord slash commands. `kimaki --disable-skills all|id,id` denies them per session with `skill:<id>` permission rules (`disabledSkillRules`).
 - `autostart.ts`: the bot writes `<dataDir>/autostart.command`; the plugin opens it in the default terminal when OpenCode starts and no bot answers on the lock port.
 - the gateway itself (multi-tenant Discord Gateway + REST proxy) is hosted, not in this repo. `--gateway` points the bot at it; onboarding and `gateway_clients` live there.
 
@@ -148,9 +150,11 @@ never suggest installing kimaki from git (e.g. `npm i -g remorses/kimaki#main`).
 
 the user-facing bug report workflow (export events, share evidence in a gist, issue vs PR) lives at https://kimaki.dev/docs/guides/report-bugs, in the upstream repo. file Kimaki bugs on remorses/kimaki; this fork is for the local bot.
 
-## errore
+## errors as values
 
-errore (`errore@^0.14.1` from npm) is for using errors as values in ts. this whole codebase uses errore.org conventions. shared tagged errors live in `kimaki/src/errors.ts`.
+functions return errors instead of throwing. every error class is an Effect `Data.TaggedError` (`kimaki/src/errors.ts` holds the shared ones), so `_tag` discriminates the union and Effect can recover with `Effect.catchTag`. messages are built in each constructor, and `attempt(run, handle)` turns a thrown error into a tagged one; a thrown non-Error is rethrown.
+
+`tsc` runs with `declaration: false`, because effect's instance types carry symbols that cannot be named in a `.d.ts` (`error TS4058: name 'NodeInspectSymbol' ... cannot be named`). kimaki is an application and nothing consumes its declarations.
 
 ## goke cli
 

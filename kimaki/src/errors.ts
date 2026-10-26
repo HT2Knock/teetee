@@ -1,65 +1,164 @@
-// Tagged errors shared across kimaki modules (errore convention: return, don't throw).
+// Tagged errors shared across kimaki modules (errors as values: return, don't throw).
+//
+// Every class is an Effect `Data.TaggedError`, so `_tag` discriminates the union
+// and an Effect program can recover with `Effect.catchTag` or yield the value
+// inside `Effect.gen`. Messages are built in the constructor, which keeps the
+// call sites the same as before (`new DbError({ operation, cause })`).
 
-import * as errore from 'errore'
+import { Data } from 'effect'
 
-export class OpenCodeError extends errore.createTaggedError({
-  name: 'OpenCodeError',
-  message: 'OpenCode $operation failed',
-}) {}
+// Runs `run` and turns a thrown error into `handle(cause)`; a thrown value that
+// is not an Error is rethrown, because it is a bug, not a failure to report.
+export function attempt<T>(run: () => T): T | Error
+export function attempt<T, E>(run: () => T, handle: (cause: Error) => E): T | E
+export function attempt<T, E>(run: () => T, handle?: (cause: Error) => E): T | E | Error {
+  try {
+    return run()
+  } catch (cause) {
+    if (!(cause instanceof Error)) throw cause
+    return handle ? handle(cause) : cause
+  }
+}
 
-export class OpenCodeUnavailableError extends errore.createTaggedError({
-  name: 'OpenCodeUnavailableError',
-  message: 'OpenCode service not reachable ($reason)',
-}) {}
+export class OpenCodeError extends Data.TaggedError('OpenCodeError')<{
+  operation: string
+  message: string
+  cause?: unknown
+}> {
+  constructor({ operation, cause }: { operation: string; cause?: unknown }) {
+    super({ operation, cause, message: `OpenCode ${operation} failed` })
+  }
+}
 
-export class OpenCodeMissingError extends errore.createTaggedError({
-  name: 'OpenCodeMissingError',
-  message: 'Kimaki requires OpenCode 2, which is not installed. Install it with: $install (or: npm i -g @opencode/cli). Then run kimaki again',
-}) {}
+export class OpenCodeUnavailableError extends Data.TaggedError('OpenCodeUnavailableError')<{
+  reason: string
+  message: string
+  cause?: unknown
+}> {
+  constructor({ reason, cause }: { reason: string; cause?: unknown }) {
+    super({ reason, cause, message: `OpenCode service not reachable (${reason})` })
+  }
+}
 
-// Both install commands put OpenCode 2 at `opencode`.
-export class OpenCodeV1Error extends errore.createTaggedError({
-  name: 'OpenCodeV1Error',
-  message: 'Kimaki now requires OpenCode 2, but $binary is OpenCode $version. Install OpenCode 2 with: $install (or: npm i -g @opencode/cli). Then run kimaki again. To keep using OpenCode 1, run the older Kimaki instead: npx kimaki@0',
-}) {}
+export class OpenCodeMissingError extends Data.TaggedError('OpenCodeMissingError')<{
+  install: string
+  message: string
+  cause?: unknown
+}> {
+  constructor({ install, cause }: { install: string; cause?: unknown }) {
+    super({
+      install,
+      cause,
+      message: `Kimaki requires OpenCode 2, which is not installed. Install it with: ${install} (or: bun add -g @opencode/cli). Then run kimaki again`,
+    })
+  }
+}
 
-export class OpenCodeVersionError extends errore.createTaggedError({
-  name: 'OpenCodeVersionError',
-  message: 'OpenCode $version is older than the minimum $minimum. Run: opencode upgrade',
-}) {}
+export class OpenCodeV1Error extends Data.TaggedError('OpenCodeV1Error')<{
+  binary: string
+  version: string
+  install: string
+  message: string
+  cause?: unknown
+}> {
+  constructor({ binary, version, install, cause }: { binary: string; version: string; install: string; cause?: unknown }) {
+    super({
+      binary,
+      version,
+      install,
+      cause,
+      message: `Kimaki now requires OpenCode 2, but ${binary} is OpenCode ${version}. Install OpenCode 2 with: ${install} (or: bun add -g @opencode/cli). Then run kimaki again. To keep using OpenCode 1, run the older Kimaki instead: bunx kimaki@0`,
+    })
+  }
+}
+
+export class OpenCodeVersionError extends Data.TaggedError('OpenCodeVersionError')<{
+  version: string
+  minimum: string
+  message: string
+  cause?: unknown
+}> {
+  constructor({ version, minimum, cause }: { version: string; minimum: string; cause?: unknown }) {
+    super({
+      version,
+      minimum,
+      cause,
+      message: `OpenCode ${version} is older than the minimum ${minimum}. Run: opencode upgrade`,
+    })
+  }
+}
 
 // The CLI found no running bot (no lock token, or nothing answers on the lock port).
-export class BotNotRunningError extends errore.createTaggedError({
-  name: 'BotNotRunningError',
-  message: 'Kimaki bot is not running. Start kimaki first.',
-}) {}
+export class BotNotRunningError extends Data.TaggedError('BotNotRunningError')<{
+  message: string
+  cause?: unknown
+}> {
+  constructor({ cause }: { cause?: unknown } = {}) {
+    super({ cause, message: 'Kimaki bot is not running. Start kimaki first.' })
+  }
+}
 
-export class DiscordError extends errore.createTaggedError({
-  name: 'DiscordError',
-  message: 'Discord $operation failed',
-}) {}
+export class DiscordError extends Data.TaggedError('DiscordError')<{
+  operation: string
+  message: string
+  cause?: unknown
+}> {
+  constructor({ operation, cause }: { operation: string; cause?: unknown }) {
+    super({ operation, cause, message: `Discord ${operation} failed` })
+  }
+}
 
-export class DbError extends errore.createTaggedError({
-  name: 'DbError',
-  message: 'Database $operation failed',
-}) {}
+export class DbError extends Data.TaggedError('DbError')<{
+  operation: string
+  message: string
+  cause?: unknown
+}> {
+  constructor({ operation, cause }: { operation: string; cause?: unknown }) {
+    super({ operation, cause, message: `Database ${operation} failed` })
+  }
+}
 
-export class DbNotMigratedError extends errore.createTaggedError({
-  name: 'DbNotMigratedError',
-  message: 'Kimaki database is not set up ($missing is missing). Run kimaki once to set up the database',
-}) {}
+export class DbNotMigratedError extends Data.TaggedError('DbNotMigratedError')<{
+  missing: string
+  message: string
+  cause?: unknown
+}> {
+  constructor({ missing, cause }: { missing: string; cause?: unknown }) {
+    super({
+      missing,
+      cause,
+      message: `Kimaki database is not set up (${missing} is missing). Run kimaki once to set up the database`,
+    })
+  }
+}
 
-export class ConfigError extends errore.createTaggedError({
-  name: 'ConfigError',
-  message: '$reason',
-}) {}
+export class ConfigError extends Data.TaggedError('ConfigError')<{
+  reason: string
+  message: string
+  cause?: unknown
+}> {
+  constructor({ reason, cause }: { reason: string; cause?: unknown }) {
+    super({ reason, cause, message: reason })
+  }
+}
 
-export class LockPortError extends errore.createTaggedError({
-  name: 'LockPortError',
-  message: 'Could not take lock port $port: $reason',
-}) {}
+export class LockPortError extends Data.TaggedError('LockPortError')<{
+  port: number
+  reason: string
+  message: string
+  cause?: unknown
+}> {
+  constructor({ port, reason, cause }: { port: number; reason: string; cause?: unknown }) {
+    super({ port, reason, cause, message: `Could not take lock port ${port}: ${reason}` })
+  }
+}
 
-export class FilesystemError extends errore.createTaggedError({
-  name: 'FilesystemError',
-  message: 'Filesystem $operation failed',
-}) {}
+export class FilesystemError extends Data.TaggedError('FilesystemError')<{
+  operation: string
+  message: string
+  cause?: unknown
+}> {
+  constructor({ operation, cause }: { operation: string; cause?: unknown }) {
+    super({ operation, cause, message: `Filesystem ${operation} failed` })
+  }
+}

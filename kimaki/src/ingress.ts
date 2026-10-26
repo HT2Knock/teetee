@@ -12,6 +12,7 @@
 // Attachments become prompt files; voice messages are transcribed into the
 // same Route as text. Edits and deletes of queued messages update the queue.
 
+import { Data } from 'effect'
 import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -24,7 +25,7 @@ import {
   type Guild,
   type Message,
 } from 'discord.js'
-import * as errore from 'errore'
+import { attempt } from './errors.ts'
 
 import { projectOf, sessionDirectory, type Bot, type PromptFile } from './bot.ts'
 import { formatError, NOTIFY_MESSAGE_FLAGS, SILENT_MESSAGE_FLAGS } from './format-parts.ts'
@@ -107,10 +108,11 @@ async function saveAttachments({
   return saved
 }
 
-class AttachmentError extends errore.createTaggedError({
-  name: 'AttachmentError',
-  message: 'Could not download attachment $file',
-}) {}
+class AttachmentError extends Data.TaggedError('AttachmentError')<{ file: string; message: string; cause?: unknown }> {
+  constructor({ file, cause }: { file: string; cause?: unknown }) {
+    super({ file, cause, message: `Could not download attachment ${file}` })
+  }
+}
 
 async function remotePromptText(url: string) {
   const response = await fetch(url).catch((cause) => new AttachmentError({ file: REMOTE_PROMPT_FILE, cause }))
@@ -169,7 +171,7 @@ async function voiceRoute(
 async function handleRemoteEnvelope(bot: Bot, { message, channelId, threadId }: { message: Message; channelId: string; threadId: string | null }) {
   const footer = message.embeds[0]?.footer?.text
   if (!footer?.startsWith(REMOTE_SEND_PREFIX)) return
-  const decoded = errore.try(
+  const decoded = attempt(
     () => ({ value: JSON.parse(footer.slice(REMOTE_SEND_PREFIX.length)) as unknown }),
     (cause) => new AttachmentError({ file: 'remote envelope', cause }),
   )

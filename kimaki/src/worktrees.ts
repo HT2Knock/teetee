@@ -1,10 +1,10 @@
 // Custom Git checkouts. OpenCode owns session cwd, not checkout creation.
+import { Data } from 'effect'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import * as errore from 'errore'
 
 import { ConfigError } from './errors.ts'
 import { canonicalPath } from './file-edit-log.ts'
@@ -13,7 +13,11 @@ import { createLogger } from './logger.ts'
 const logger = createLogger('WORKTREE')
 const execAsync = promisify(execFile)
 
-class GitError extends errore.createTaggedError({ name: 'GitError', message: 'Git $operation failed: $detail' }) {}
+class GitError extends Data.TaggedError('GitError')<{ operation: string; detail: string; message: string; cause?: unknown }> {
+  constructor({ operation, detail, cause }: { operation: string; detail: string; cause?: unknown }) {
+    super({ operation, detail, cause, message: `Git ${operation} failed: ${detail}` })
+  }
+}
 
 export async function git({ directory, args, timeout = 10_000 }: { directory: string; args: string[]; timeout?: number }) {
   const result = await execAsync('git', ['-C', directory, ...args], { timeout, maxBuffer: 4 * 1024 * 1024 })

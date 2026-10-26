@@ -14,6 +14,7 @@
 // KIMAKI_CHANNEL_ID in the call shell). Text typed there goes to the backend.
 // V1 reference: `git show v1:cli/src/voice-handler.ts`.
 
+import { Data } from 'effect'
 import { spawn, type ChildProcess } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
@@ -34,12 +35,11 @@ import {
 } from '@discordjs/voice'
 import { API } from '@discordjs/core/http-only'
 import { Events, type Guild, type VoiceState } from 'discord.js'
-import * as errore from 'errore'
 import prism from 'prism-media'
 import { z } from 'zod'
 
 import { oc, type Author, type Bot } from './bot.ts'
-import { DbError } from './errors.ts'
+import { DbError, attempt } from './errors.ts'
 import type { RunEnded } from './event-loop.ts'
 import { asSubtext, formatError, formatShellFinished, formatToolFailed, formatToolLine } from './format-parts.ts'
 import { canUseKimaki } from './ingress.ts'
@@ -77,23 +77,34 @@ const SPEECH_END_MS = 400
 // Microphone audio queued per user, in 20 ms frames: a stalled clock must not add delay.
 const MAX_QUEUED_FRAMES = 50
 
-class VoiceCallError extends errore.createTaggedError({
-  name: 'VoiceCallError',
-  message: 'Voice call $operation failed',
-}) {}
+class VoiceCallError extends Data.TaggedError('VoiceCallError')<{ operation: string; message: string; cause?: unknown }> {
+  constructor({ operation, cause }: { operation: string; cause?: unknown }) {
+    super({ operation, cause, message: `Voice call ${operation} failed` })
+  }
+}
 
-class NoChatGPTError extends errore.createTaggedError({
-  name: 'NoChatGPTError',
-  message: 'Voice calls need a ChatGPT subscription signed in to OpenCode. Run kimaki login openai, then join the voice channel again',
-}) {}
+class NoChatGPTError extends Data.TaggedError('NoChatGPTError')<{ message: string; cause?: unknown }> {
+  constructor({ cause }: { cause?: unknown } = {}) {
+    super({
+      cause,
+      message: 'Voice calls need a ChatGPT subscription signed in to OpenCode. Run kimaki login openai, then join the voice channel again',
+    })
+  }
+}
 
 // Endpoints of the call; tests point them at local fakes.
 export type RealtimeBaseUrls = { calls?: string; sideband?: string; responses?: string }
 
-class UnknownVoiceError extends errore.createTaggedError({
-  name: 'UnknownVoiceError',
-  message: 'Unknown voice "$voice". Pass one of: $voices. Use --voice default to reset',
-}) {}
+class UnknownVoiceError extends Data.TaggedError('UnknownVoiceError')<{
+  voice: string
+  voices: string
+  message: string
+  cause?: unknown
+}> {
+  constructor({ voice, voices, cause }: { voice: string; voices: string; cause?: unknown }) {
+    super({ voice, voices, cause, message: `Unknown voice "${voice}". Pass one of: ${voices}. Use --voice default to reset` })
+  }
+}
 
 // Case-insensitive; returns the canonical name of the voice.
 export function parseRealtimeVoice(name: string): UnknownVoiceError | { voice: string } {
@@ -143,7 +154,7 @@ export async function voiceCallSettings(bot: Pick<Bot, 'db' | 'token' | 'opencod
 }
 
 function parseJsonAs<T extends z.ZodType>(schema: T, text: string): z.output<T> | null {
-  const parsed = errore.try(() => schema.safeParse(JSON.parse(text)))
+  const parsed = attempt(() => schema.safeParse(JSON.parse(text)))
   if (parsed instanceof Error || !parsed.success) return null
   return parsed.data
 }
@@ -294,7 +305,7 @@ function createSpeaker(connection: VoiceConnection, { onError }: { onError: (err
 function killGroup(child: ChildProcess) {
   // Not exitCode: /bin/sh can exit while a background child of its group still runs.
   if (child.pid === undefined) return
-  const killed = errore.try(() => process.kill(-child.pid!, 'SIGTERM'))
+  const killed = attempt(() => process.kill(-child.pid!, 'SIGTERM'))
   if (killed instanceof Error) child.kill('SIGTERM')
 }
 

@@ -14,7 +14,7 @@
     "incremental": true,
     "tsBuildInfoFile": "dist/.tsbuildinfo",
     "rootDir": "src",
-    "declaration": true,
+    "declaration": false,
     "sourceMap": true,
     "strict": true,
     "skipLibCheck": true,
