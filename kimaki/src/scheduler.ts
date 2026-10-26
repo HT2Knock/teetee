@@ -25,11 +25,10 @@ import {
   type ButtonInteraction,
   type ChatInputCommandInteraction,
 } from 'discord.js'
-import * as errore from 'errore'
 
 import { oc, projectOf, threadOfSession, type Bot } from './bot.ts'
 import type { KimakiDb } from './db.ts'
-import { ConfigError, DbError, DiscordError } from './errors.ts'
+import { ConfigError, DbError, DiscordError, attempt } from './errors.ts'
 import type { InteractionRoutes } from './interaction-context.ts'
 import { createLogger } from './logger.ts'
 import type { SendInput } from './lock-routes.ts'
@@ -58,7 +57,7 @@ type TaskRow = ScheduledTaskRow
 // --- Pure time logic.
 
 export function nextCronRun({ cronExpr, timezone, from }: { cronExpr: string; timezone: string; from: number }): ConfigError | number {
-  return errore.try(
+  return attempt(
     () => CronExpressionParser.parse(cronExpr, { currentDate: new Date(from), tz: timezone }).next().getTime(),
     (cause) => new ConfigError({ reason: `Invalid cron expression: ${cronExpr}`, cause }),
   )
@@ -105,7 +104,7 @@ export type TaskJob = {
 }
 
 export function decodeTaskPayload(json: string): ConfigError | TaskJob {
-  const parsed = errore.try(() => ({ value: JSON.parse(json) as unknown }), (cause) => new ConfigError({ reason: 'Routine payload is not valid JSON', cause }))
+  const parsed = attempt(() => ({ value: JSON.parse(json) as unknown }), (cause) => new ConfigError({ reason: 'Routine payload is not valid JSON', cause }))
   if (parsed instanceof Error) return parsed
   const value = parsed.value
   if (!value || typeof value !== 'object' || Array.isArray(value)) return new ConfigError({ reason: 'Routine payload must be an object' })

@@ -19,9 +19,9 @@
 // then skips its shim, see installPluginShim in opencode-server.ts.
 // It imports nothing from Kimaki outside this folder except npm packages.
 
-import * as errore from 'errore'
+import { attempt } from './attempt.ts'
 import http from 'node:http'
-import { Effect } from 'effect'
+import { Data, Effect } from 'effect'
 import { Credential, Integration } from '@opencode/plugin'
 import { Plugin } from '@opencode/plugin/effect'
 
@@ -38,10 +38,15 @@ const METHOD_ID = Integration.MethodID.make('claude-pro-max')
 const HEADLESS_METHOD_ID = Integration.MethodID.make('claude-pro-max-headless')
 export const CLAUDE_CODE_IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude."
 
-export class AnthropicOAuthError extends errore.createTaggedError({
-  name: 'AnthropicOAuthError',
-  message: 'Claude Pro/Max login failed: $reason',
-}) {}
+export class AnthropicOAuthError extends Data.TaggedError('AnthropicOAuthError')<{
+  reason: string
+  message: string
+  cause?: unknown
+}> {
+  constructor({ reason, cause }: { reason: string; cause?: unknown }) {
+    super({ reason, cause, message: `Claude Pro/Max login failed: ${reason}` })
+  }
+}
 
 async function requestToken({ body, methodID }: { body: Record<string, string>; methodID: Integration.MethodID }) {
   const response = await fetch(TOKEN_URL, {
@@ -53,7 +58,7 @@ async function requestToken({ body, methodID }: { body: Record<string, string>; 
   if (response instanceof Error) return response
   const text = await response.text().catch(() => '')
   if (!response.ok) return new AnthropicOAuthError({ reason: `token endpoint returned ${response.status}: ${text}` })
-  const json = errore.try(() => JSON.parse(text) as { access_token?: string; refresh_token?: string; expires_in?: number })
+  const json = attempt(() => JSON.parse(text) as { access_token?: string; refresh_token?: string; expires_in?: number })
   if (json instanceof Error) return new AnthropicOAuthError({ reason: 'token response is not JSON', cause: json })
   if (!json.access_token || !json.refresh_token || !json.expires_in) return new AnthropicOAuthError({ reason: 'token response has no tokens' })
   return Credential.OAuth.make({
@@ -72,7 +77,7 @@ const tokenEffect = (input: { body: Record<string, string>; methodID: Integratio
 // The user pastes the final redirect URL, `code#state`, or the bare code.
 export function parseAuthorizationInput(input: string) {
   const trimmed = input.trim()
-  const url = errore.try(() => new URL(trimmed))
+  const url = attempt(() => new URL(trimmed))
   if (!(url instanceof Error) && url.searchParams.get('code')) return { code: url.searchParams.get('code') ?? '', state: url.searchParams.get('state') ?? undefined }
   const [code = '', state] = trimmed.split('#', 2)
   return { code, state }
@@ -167,7 +172,7 @@ type MessagesBody = { system?: string | Array<{ type: string; text?: string }> }
 // Rewrites an Anthropic Messages body for a subscription token: the Claude Code
 // identity first, OpenCode's environment block re-wrapped. Null when nothing changes.
 export function rewriteSubscriptionRequest(body: string): string | null {
-  const payload = errore.try(() => JSON.parse(body) as MessagesBody)
+  const payload = attempt(() => JSON.parse(body) as MessagesBody)
   if (payload instanceof Error) return null
   const blocks = typeof payload.system === 'string' ? [{ type: 'text', text: payload.system }] : (payload.system ?? [])
   const rewrapped = blocks.map((block) => (block.text === undefined ? block : { ...block, text: block.text.replace(OPENCODE_ENV_BLOCK, '<environment>\n$1</environment>') }))

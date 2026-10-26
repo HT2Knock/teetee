@@ -11,8 +11,9 @@
 // The subscription token gets "Voice session access denied" on the WebSocket-only
 // /v1/live route, so WebRTC is required.
 
+import { Data } from 'effect'
 import crypto from 'node:crypto'
-import * as errore from 'errore'
+import { attempt } from './errors.ts'
 import OpusScript from 'opusscript'
 import { RTCPeerConnection, RtpHeader, RtpPacket, useOPUS } from 'werift'
 
@@ -51,10 +52,11 @@ export type LiveCall = {
   close(): Promise<void>
 }
 
-class LiveCallError extends errore.createTaggedError({
-  name: 'LiveCallError',
-  message: 'GPT-Live $operation failed',
-}) {}
+class LiveCallError extends Data.TaggedError('LiveCallError')<{ operation: string; message: string; cause?: unknown }> {
+  constructor({ operation, cause }: { operation: string; cause?: unknown }) {
+    super({ operation, cause, message: `GPT-Live ${operation} failed` })
+  }
+}
 
 const PAYLOAD_TYPE = 111
 const FRAME_SAMPLES = 960
@@ -196,7 +198,7 @@ export async function startLiveCall({
   state.clock = setInterval(() => {
     const frame = readFrame() ?? SILENT_FRAME
     if (peer.connectionState !== 'connected') return
-    const opus = errore.try(() => encoder.encode(frame, FRAME_SAMPLES), (cause) => new LiveCallError({ operation: 'encode audio', cause }))
+    const opus = attempt(() => encoder.encode(frame, FRAME_SAMPLES), (cause) => new LiveCallError({ operation: 'encode audio', cause }))
     if (opus instanceof Error) return logger.warn(opus)
     const header = new RtpHeader({ payloadType: PAYLOAD_TYPE, sequenceNumber: outbound.sequence, timestamp: outbound.timestamp, marker: false })
     outbound.sequence = (outbound.sequence + 1) & 0xffff
@@ -210,7 +212,7 @@ export async function startLiveCall({
   const started = await new Promise<LiveCallError | void>((resolve) => {
     const timer = setTimeout(() => resolve(new LiveCallError({ operation: 'session start (timed out)' })), START_TIMEOUT_MS)
     socket.addEventListener('message', (message: MessageEvent) => {
-      const event = errore.try(() => JSON.parse(String(message.data)) as WireEvent)
+      const event = attempt(() => JSON.parse(String(message.data)) as WireEvent)
       if (event instanceof Error) return logger.warn('invalid sideband message', event)
       if (event.type === 'session.started') {
         state.started = true

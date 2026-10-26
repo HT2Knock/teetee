@@ -134,6 +134,6 @@ npx cpupro tmp/cpu-profiles/CPU.*.cpuprofile
 
 `ensureKimakiCommandShim()` in `cli/src/opencode-command.ts` generates a shell script at `~/.kimaki/bin/kimaki` (or `kimaki.cmd` on Windows) every time the bot starts. It captures `process.execPath`, `process.execArgv`, and `process.argv[1]` into an `exec` one-liner, so the shim always mirrors the current process.
 
-The shim directory is prepended to `PATH` in the env passed to the OpenCode server process (`cli/src/opencode.ts`). This lets agent sessions run `kimaki send`, `kimaki upload-to-discord`, `kimaki tunnel`, etc. as regular shell commands via the bash tool, however kimaki was installed (npx, global install, local dev).
+The shim directory is prepended to `PATH` in the env passed to the OpenCode server process (`cli/src/opencode.ts`). This lets agent sessions run `kimaki send`, `kimaki upload-to-discord`, etc. as regular shell commands via the bash tool, however kimaki was installed (npx, global install, local dev).
 
 In local dev the shim contains tsx loader flags (`--require` / `--import`) because the bot was launched with tsx against the raw `.ts` entry point. In production (npm package) there are no tsx flags and the entry script is the compiled `bin.js`. The shim reflects how the current process was started; there is no special-casing.

@@ -323,12 +323,6 @@ test('CLI help documents the supported P7 commands', async () => {
         -c, --channel <id>              Kimaki voice channel to post in (default in voice calls: KIMAKI_CHANNEL_ID)
 
       Tools:
-      tunnel                            Run a command and expose its local port with a public URL. The child gets TRAFORO_URL
-        -p, --port <port>               Local port (default: read from the command output)
-        -t, --tunnel-id <id>            Fixed tunnel ID (default: random). Only for public-safe services
-        --host <host>                   Local host (default: localhost)
-        -k, --kill                      Kill the process on --port first
-
       tts [text]                        Text to speech with OpenAI or Gemini. Reads stdin if no text is given
         --data-dir <path>               Data directory (default: ~/.kimaki)
         -o, --output <path>             Output file (default: speech.mp3 or speech.wav)
@@ -379,7 +373,7 @@ test('CLI help documents the supported P7 commands', async () => {
       --worktrees                   Use a fresh Git worktree for new sessions unless the channel overrides it
       --allow-all-users             Every server member can use the bot (role "no-kimaki" still denies; provider login stays admin-only)
       --voice <name>                Voice of voice calls, saved for later starts (e.g. cove, juniper, sol). "default" resets it
-      --disable-skills <list>       Built-in Kimaki skills to turn off: "all" or a comma separated list (kimaki-debug,kimaki-tunnel)
+      --disable-skills <list>       Built-in Kimaki skills to turn off: "all" or a comma separated list (kimaki-debug,kimaki-thread-ops)
       --no-analytics                Disable anonymous usage analytics (same as KIMAKI_STRADA_ENABLED=0)
       --if-not-running              Start only if no bot runs; never stop the running one (used by autostart)
       -h, --help                    Display this message

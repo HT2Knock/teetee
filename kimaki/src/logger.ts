@@ -14,9 +14,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import util from 'node:util'
 import { log as clackLog, S_BAR, S_ERROR, S_INFO, S_WARN } from '@clack/prompts'
-import * as errore from 'errore'
 
-import { ConfigError } from './errors.ts'
+import { ConfigError, attempt } from './errors.ts'
 
 type LogArg = string | number | Error
 type Level = 'log' | 'info' | 'warn' | 'error'
@@ -30,7 +29,7 @@ const logTarget: { fd: number | null } = { fd: null }
 // kimaki.previous.log, so the reason of a crash survives the restart.
 export function setLogFile({ dataDir }: { dataDir: string }): ConfigError | void {
   const file = path.join(dataDir, 'kimaki.log')
-  const opened = errore.try(
+  const opened = attempt(
     () => {
       fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 })
       fs.chmodSync(dataDir, 0o700)
@@ -116,7 +115,7 @@ function write({ level, prefix, args }: { level: Level; prefix: string; args: Lo
     const body = stack ? `${text}\n${stack}` : text
     const line = `${new Date().toISOString()} ${level.toUpperCase().padEnd(5)} [${prefix}] ${body}\n`
     // A full disk must not crash the bot: stop file logging, stderr still gets the lines.
-    const written = errore.try(() => fs.writeSync(fd, line))
+    const written = attempt(() => fs.writeSync(fd, line))
     if (written instanceof Error) {
       logTarget.fd = null
       process.stderr.write(`Cannot write kimaki.log, file logging stopped: ${errorChain(written)}\n`)

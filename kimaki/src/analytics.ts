@@ -22,9 +22,8 @@ import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { flush, initStrada, track } from '@strada.sh/sdk'
-import * as errore from 'errore'
 
-import { ConfigError } from './errors.ts'
+import { ConfigError, attempt } from './errors.ts'
 import { createLogger } from './logger.ts'
 import type { V2Event } from './opencode-server.ts'
 
@@ -166,14 +165,14 @@ export const disabledAnalytics: Analytics = {
 
 function readInstallId(dataDir: string): ConfigError | string {
   const file = path.join(dataDir, 'install-id')
-  const existing = errore.try(
+  const existing = attempt(
     () => (fs.existsSync(file) ? fs.readFileSync(file, 'utf8').trim() : ''),
     (e) => new ConfigError({ reason: `Cannot read ${file}`, cause: e }),
   )
   if (existing instanceof Error) return existing
   if (UUID.test(existing)) return existing
   const id = crypto.randomUUID()
-  const written = errore.try(
+  const written = attempt(
     () => fs.writeFileSync(file, `${id}\n`),
     (e) => new ConfigError({ reason: `Cannot write ${file}`, cause: e }),
   )

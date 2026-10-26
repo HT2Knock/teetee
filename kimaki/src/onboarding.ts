@@ -10,18 +10,18 @@
 //
 // Existing project mappings also mark an upgraded install as already configured.
 
+import { Data } from 'effect'
 import { execFile, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import * as clack from '@clack/prompts'
 import { ChannelType, Events, type Client, type Guild } from 'discord.js'
-import * as errore from 'errore'
 import dedent from 'string-dedent'
 
 import { API } from '@discordjs/core/http-only'
 
-import { ConfigError, DbError, DiscordError, OpenCodeMissingError, type OpenCodeV1Error, type OpenCodeVersionError } from './errors.ts'
+import { ConfigError, DbError, DiscordError, OpenCodeMissingError, type OpenCodeV1Error, type OpenCodeVersionError, attempt } from './errors.ts'
 import { NOTIFY_MESSAGE_FLAGS } from './format-parts.ts'
 import { createLogger } from './logger.ts'
 import { checkOpencode, findOpencodeBinary, installedOpencodeBinary, OPENCODE_INSTALL_COMMAND } from './opencode-server.ts'
@@ -119,7 +119,7 @@ export async function ensureOpencode({
 // AC power). -w exits caffeinate with this process, whatever ends it.
 export function startCaffeinate(): void {
   if (process.platform !== 'darwin') return
-  const child = errore.try(
+  const child = attempt(
     () => spawn('caffeinate', ['-s', '-w', String(process.pid)], { stdio: 'ignore' }),
     (e) => new ConfigError({ reason: 'caffeinate failed to start', cause: e }),
   )
@@ -161,13 +161,14 @@ export function kimakiShellCommand({ command }: { command: readonly string[] }):
   return command.map(shellQuote).join(' ')
 }
 
-class GitInitError extends errore.createTaggedError({
-  name: 'GitInitError',
-  message: 'Could not create $directory',
-}) {}
+class GitInitError extends Data.TaggedError('GitInitError')<{ directory: string; message: string; cause?: unknown }> {
+  constructor({ directory, cause }: { directory: string; cause?: unknown }) {
+    super({ directory, cause, message: `Could not create ${directory}` })
+  }
+}
 
 async function createDefaultDirectory(directory: string): Promise<GitInitError | void> {
-  const created = errore.try(
+  const created = attempt(
     () => {
       fs.mkdirSync(directory, { recursive: true })
       const gitignore = path.join(directory, '.gitignore')

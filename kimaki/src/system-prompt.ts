@@ -434,10 +434,6 @@ export function baseInstructions({
 
       critique is open source (MIT, https://github.com/remorses/critique). Diff URLs are unique, unguessable, not indexed, and ephemeral. If the user is worried about uploading code, tell them this.
 
-      ## running dev servers with tunnel access
-
-      Localhost URLs are useless from Discord. When the user should open a local dev server in a browser, load the \`kimaki-tunnel\` skill: it wraps the server in \`kimaki tunnel\` to get a public URL.
-
       ## markdown formatting
 
       Format responses in **Claude-style markdown** - structured, scannable, never walls of text. Use:
