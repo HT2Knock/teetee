@@ -9,8 +9,9 @@
 // The endpoint only takes store: false, so every request sends the whole history; the fixed
 // prompt_cache_key and stable instructions and tools keep that prefix cached.
 
+import { Data } from 'effect'
 import crypto from 'node:crypto'
-import * as errore from 'errore'
+import { attempt } from './errors.ts'
 import { EventSourceParserStream } from 'eventsource-parser/stream'
 
 import type { ChatGPTAuth } from './live-call.ts'
@@ -30,16 +31,17 @@ export type AgentTool = {
   execute(args: unknown): unknown
 }
 
-class VoiceAgentError extends errore.createTaggedError({
-  name: 'VoiceAgentError',
-  message: 'Voice backend $operation failed',
-}) {}
+class VoiceAgentError extends Data.TaggedError('VoiceAgentError')<{ operation: string; message: string; cause?: unknown }> {
+  constructor({ operation, cause }: { operation: string; cause?: unknown }) {
+    super({ operation, cause, message: `Voice backend ${operation} failed` })
+  }
+}
 
-class VoiceAgentStoppedError extends errore.createTaggedError({
-  name: 'VoiceAgentStoppedError',
-  message: 'Voice backend stopped: the call ended',
-  extends: errore.AbortError,
-}) {}
+class VoiceAgentStoppedError extends Data.TaggedError('VoiceAgentStoppedError')<{ message: string; cause?: unknown }> {
+  constructor({ cause }: { cause?: unknown } = {}) {
+    super({ cause, message: 'Voice backend stopped: the call ended' })
+  }
+}
 
 type InputItem =
   | { type: 'message'; role: 'user'; content: Array<{ type: 'input_text'; text: string }> }
@@ -119,7 +121,7 @@ export function createVoiceAgent({
     const events = response.body.pipeThrough(new TextDecoderStream()).pipeThrough(new EventSourceParserStream())
     const read = await (async () => {
       for await (const message of events) {
-        const event = errore.try(() => JSON.parse(message.data) as StreamEvent)
+        const event = attempt(() => JSON.parse(message.data) as StreamEvent)
         if (event instanceof Error) continue
         if (event.type === 'response.output_item.done' && event.item) items.push(event.item)
         if (event.type === 'response.completed') return
@@ -149,7 +151,7 @@ export function createVoiceAgent({
   async function execute(call: { call_id: string; name: string; arguments: string }) {
     onToolCall({ name: call.name, args: call.arguments })
     const tool = tools[call.name]
-    const args = errore.try(() => JSON.parse(call.arguments) as unknown)
+    const args = attempt(() => JSON.parse(call.arguments) as unknown)
     const result = await (async () => {
       if (!tool) return { error: `Unknown tool ${call.name}` }
       if (args instanceof Error) return { error: `Invalid JSON arguments: ${call.arguments}` }

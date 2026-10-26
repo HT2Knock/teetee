@@ -4,11 +4,10 @@
   "workspaces": [
     "./kimaki",
     "./discord-digital-twin",
-    "./opencode-deterministic-provider",
-    "./errore"
+    "./opencode-deterministic-provider"
   ],
   "scripts": {
-    "build": "bun run --filter errore build && bun run --filter kimaki build",
+    "build": "bun run --filter kimaki build",
     "test": "bun run --filter kimaki test"
   },
   "devDependencies": {

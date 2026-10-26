@@ -13,11 +13,10 @@ import {
   type AutocompleteInteraction,
   type ChatInputCommandInteraction,
 } from 'discord.js'
-import * as errore from 'errore'
 import dedent from 'string-dedent'
 
 import { oc, type Bot } from '../bot.ts'
-import { ConfigError, DiscordError } from '../errors.ts'
+import { ConfigError, DiscordError, attempt } from '../errors.ts'
 import {
   authorOf,
   replyError,
@@ -72,7 +71,7 @@ function sessionIdReply({
 function parseCritiqueOutput(output: string): { ok: true; url: string; id: string } | { ok: false; error: string } | null {
   for (const line of output.trim().split('\n')) {
     if (!line.startsWith('{')) continue
-    const parsed = errore.try(
+    const parsed = attempt(
       () => {
         const value: unknown = JSON.parse(line)
         return { value }
@@ -245,7 +244,7 @@ async function diffCommand(bot: Bot, interaction: ChatInputCommandInteraction) {
     (e: NodeJS.ErrnoException & { stdout?: string }) => e,
   )
   if (upload instanceof Error && upload.code === 'ENOENT') {
-    return replyError(interaction, new ConfigError({ reason: 'critique is not installed. Install it with: npm i -g critique' }))
+    return replyError(interaction, new ConfigError({ reason: 'critique is not installed. Install it with: bun add -g critique' }))
   }
   const output = upload instanceof Error ? (upload.stdout ?? '') : upload.stdout
   const result = parseCritiqueOutput(output)

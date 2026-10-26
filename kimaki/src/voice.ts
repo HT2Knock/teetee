@@ -11,13 +11,13 @@
 // Plain fetch, no AI SDK: we parse provider bodies ourselves so transient
 // bad responses keep their details and can be retried.
 
+import { Data } from 'effect'
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import { promisify } from 'node:util'
 import { Database } from 'bun:sqlite'
-import * as errore from 'errore'
 import prism from 'prism-media'
 import dedent from 'string-dedent'
 import {
@@ -31,7 +31,7 @@ import {
 
 import { credentialsFromRow, gatewayUrlsFromEnv } from './credentials.ts'
 import type { KimakiDb } from './db.ts'
-import { ConfigError, DbError } from './errors.ts'
+import { ConfigError, DbError, attempt } from './errors.ts'
 import { createLogger } from './logger.ts'
 import type { Route } from './routes.ts'
 import { parseFirst, upsert, type BotTokenRow } from './rows.ts'
@@ -49,30 +49,48 @@ const TOOL_NAME = 'transcriptionResult'
 const MAX_ATTEMPTS = 3
 const RETRY_DELAY_MS = 500
 
-class TranscriptionError extends errore.createTaggedError({
-  name: 'TranscriptionError',
-  message: 'Transcription failed: $reason',
-}) {}
+class TranscriptionError extends Data.TaggedError('TranscriptionError')<{ reason: string; message: string; cause?: unknown }> {
+  constructor({ reason, cause }: { reason: string; cause?: unknown }) {
+    super({ reason, cause, message: `Transcription failed: ${reason}` })
+  }
+}
 
-class TranscriptionApiError extends errore.createTaggedError({
-  name: 'TranscriptionApiError',
-  message: 'Transcription API returned $status: $body',
-}) {}
+class TranscriptionApiError extends Data.TaggedError('TranscriptionApiError')<{
+  status: string | number
+  body: string
+  message: string
+  cause?: unknown
+}> {
+  constructor({ status, body, cause }: { status: string | number; body: string; cause?: unknown }) {
+    super({ status, body, cause, message: `Transcription API returned ${status}: ${body}` })
+  }
+}
 
-class TranscriptionBlockedError extends errore.createTaggedError({
-  name: 'TranscriptionBlockedError',
-  message: 'The transcription provider refused the audio ($reason)',
-}) {}
+class TranscriptionBlockedError extends Data.TaggedError('TranscriptionBlockedError')<{
+  reason: string
+  message: string
+  cause?: unknown
+}> {
+  constructor({ reason, cause }: { reason: string; cause?: unknown }) {
+    super({ reason, cause, message: `The transcription provider refused the audio (${reason})` })
+  }
+}
 
-class EmptyTranscriptionError extends errore.createTaggedError({
-  name: 'EmptyTranscriptionError',
-  message: 'No request was transcribed. Record another voice message with the task to send.',
-}) {}
+class EmptyTranscriptionError extends Data.TaggedError('EmptyTranscriptionError')<{ message: string; cause?: unknown }> {
+  constructor({ cause }: { cause?: unknown } = {}) {
+    super({ cause, message: 'No request was transcribed. Record another voice message with the task to send.' })
+  }
+}
 
-class NoTranscriptionKeyError extends errore.createTaggedError({
-  name: 'NoTranscriptionKeyError',
-  message: 'Voice transcription needs ChatGPT signed in to OpenCode, or an OpenAI or Gemini API key. Run /transcription-key, or kimaki bot keys set --openai <key>',
-}) {}
+class NoTranscriptionKeyError extends Data.TaggedError('NoTranscriptionKeyError')<{ message: string; cause?: unknown }> {
+  constructor({ cause }: { cause?: unknown } = {}) {
+    super({
+      cause,
+      message:
+        'Voice transcription needs ChatGPT signed in to OpenCode, or an OpenAI or Gemini API key. Run /transcription-key, or kimaki bot keys set --openai <key>',
+    })
+  }
+}
 
 type TranscriptionFailure = TranscriptionError | TranscriptionApiError | TranscriptionBlockedError | EmptyTranscriptionError
 
@@ -221,7 +239,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function parseJsonObject(body: string): TranscriptionError | Record<string, unknown> {
-  const parsed = errore.try(
+  const parsed = attempt(
     () => ({ value: JSON.parse(body) as unknown }),
     (cause) => new TranscriptionError({ reason: `invalid JSON: ${body.slice(0, 300)}`, cause }),
   )
@@ -347,7 +365,7 @@ function pcmToWav({ stream, label }: { stream: NodeJS.ReadableStream; label: str
 // prism constructors throw synchronously when the opus library or the
 // ffmpeg binary is missing.
 async function oggToWav(input: Buffer): Promise<TranscriptionError | Buffer> {
-  const pipeline = errore.try(
+  const pipeline = attempt(
     () => {
       const demuxer = new prism.opus.OggDemuxer()
       const decoder = new prism.opus.Decoder({ rate: 48_000, channels: 1, frameSize: 960 })
@@ -363,7 +381,7 @@ async function oggToWav(input: Buffer): Promise<TranscriptionError | Buffer> {
 
 async function m4aToWav(input: Buffer): Promise<TranscriptionError | Buffer> {
   const args = ['-analyzeduration', '0', '-loglevel', '0', '-f', 'mp4', '-i', 'pipe:0']
-  const transcoder = errore.try(
+  const transcoder = attempt(
     () => new prism.FFmpeg({ args: [...args, '-f', 's16le', '-acodec', 'pcm_s16le', '-ac', '1', '-ar', '48000', 'pipe:1'] }),
     (cause) =>
       new TranscriptionError({
@@ -514,7 +532,7 @@ const CHATGPT_EXTENSIONS: Record<string, string> = { 'audio/ogg': 'ogg', 'audio/
 // Same claim the Codex CLI sends as chatgpt-account-id.
 function chatGPTAccountId(accessToken: string): string | null {
   const payload = accessToken.split('.')[1] ?? ''
-  const claims = errore.try(() => JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as unknown, () => null)
+  const claims = attempt(() => JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as unknown, () => null)
   const auth = isRecord(claims) ? claims['https://api.openai.com/auth'] : null
   return isRecord(auth) && typeof auth['chatgpt_account_id'] === 'string' ? auth['chatgpt_account_id'] : null
 }
@@ -522,12 +540,12 @@ function chatGPTAccountId(accessToken: string): string | null {
 // The active (else newest) OpenAI OAuth credential, if not expired. null when OpenCode has none.
 export async function chatGPTCredential({ dbFile, now = Date.now() }: { dbFile: string; now?: number }): Promise<TranscriptionError | ChatGPTCredential | null> {
   if (!fs.existsSync(dbFile)) return null
-  const rows = errore.try(
+  const rows = attempt(
     () => {
       // A read-only connection is instant and writes nothing. It needs the -shm
       // file of a WAL database, so a database whose owner is not running falls
       // back to a snapshot copy.
-      const direct = errore.try(() => credentialRows(dbFile), () => null)
+      const direct = attempt(() => credentialRows(dbFile), () => null)
       return direct ?? withSqliteCopy({ file: dbFile, read: credentialRows })
     },
     (cause) => new TranscriptionError({ reason: `reading OpenCode credentials from ${dbFile} failed`, cause }),
@@ -535,7 +553,7 @@ export async function chatGPTCredential({ dbFile, now = Date.now() }: { dbFile: 
   if (rows instanceof Error) return rows
   for (const row of rows) {
     const raw = row.value
-    const value = typeof raw === 'string' ? errore.try(() => JSON.parse(raw) as unknown, () => null) : null
+    const value = typeof raw === 'string' ? attempt(() => JSON.parse(raw) as unknown, () => null) : null
     if (!isRecord(value) || value['type'] !== 'oauth' || typeof value['access'] !== 'string') continue
     if (typeof value['expires'] === 'number' && value['expires'] <= now + 60_000) {
       logger.log('OpenCode ChatGPT token expired, skipping it until OpenCode refreshes it')
@@ -700,10 +718,11 @@ export async function transcribe({
 //     (audio/L16, 24 kHz mono), wrapped in a WAV header here.
 //     https://ai.google.dev/gemini-api/docs/speech-generation
 
-class SpeechError extends errore.createTaggedError({
-  name: 'SpeechError',
-  message: 'Speech generation failed: $reason',
-}) {}
+class SpeechError extends Data.TaggedError('SpeechError')<{ reason: string; message: string; cause?: unknown }> {
+  constructor({ reason, cause }: { reason: string; cause?: unknown }) {
+    super({ reason, cause, message: `Speech generation failed: ${reason}` })
+  }
+}
 
 export type SpeechProvider = 'openai' | 'gemini'
 

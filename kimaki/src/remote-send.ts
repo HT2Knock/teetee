@@ -15,9 +15,8 @@ import { fileURLToPath } from 'node:url'
 import { setTimeout as sleep } from 'node:timers/promises'
 import type { API } from '@discordjs/core/http-only'
 import { MessageFlags } from 'discord-api-types/v10'
-import * as errore from 'errore'
 
-import { ConfigError, DiscordError } from './errors.ts'
+import { ConfigError, DiscordError, attempt } from './errors.ts'
 import type { SendInput } from './lock-routes.ts'
 
 export const REMOTE_SEND_PREFIX = 'kimaki-send-v2:'
@@ -52,7 +51,7 @@ export function remoteEnvelope(input: SendInput) {
 export function parseRemoteResult({ footer, requestId }: { footer: string | undefined; requestId: string }): ConfigError | RemoteResult | null {
   const prefix = `${REMOTE_RESULT_PREFIX}${requestId}:`
   if (!footer?.startsWith(prefix)) return null
-  const parsed = errore.try(
+  const parsed = attempt(
     () => ({ value: JSON.parse(footer.slice(prefix.length)) as unknown }),
     (cause) => new ConfigError({ reason: 'Invalid remote response', cause }),
   )

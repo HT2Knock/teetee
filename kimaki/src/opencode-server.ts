@@ -17,6 +17,7 @@
 //     deliver held events, then go live
 //   on error: backoff 0.5s -> 30s, retry
 
+import { Data } from 'effect'
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -26,10 +27,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 import { OpenCode, type OpenCodeClient, type V2Event } from '@opencode/client'
 import { Service } from '@opencode/client/service'
-import * as errore from 'errore'
 import { parse as parseJsonc } from 'jsonc-parser'
 
-import { ConfigError, OpenCodeError, OpenCodeMissingError, OpenCodeUnavailableError, OpenCodeV1Error, OpenCodeVersionError } from './errors.ts'
+import { ConfigError, OpenCodeError, OpenCodeMissingError, OpenCodeUnavailableError, OpenCodeV1Error, OpenCodeVersionError, attempt } from './errors.ts'
 import { createLogger } from './logger.ts'
 
 export type { OpenCodeClient, V2Event }
@@ -79,6 +79,12 @@ export function installedOpencodeBinary(): string {
   return path.join(os.homedir(), '.opencode', 'bin', process.platform === 'win32' ? 'opencode.exe' : 'opencode')
 }
 
+// `bun add -g @opencode/cli` puts the binary here. A service or an agent shell
+// does not always inherit ~/.bun/bin on PATH, so look there too.
+export function bunInstalledOpencodeBinary(): string {
+  return path.join(os.homedir(), '.bun', 'bin', process.platform === 'win32' ? 'opencode.exe' : 'opencode')
+}
+
 async function opencodeVersion(binary: string): Promise<string | null> {
   const result = await execFileAsync(binary, ['--version'], { timeout: 10_000 }).catch(() => null)
   return result ? parseVersionOutput(result.stdout) : null
@@ -89,7 +95,7 @@ async function opencodeVersion(binary: string): Promise<string | null> {
 // binary wins. If none is supported, the first OpenCode 1 or old V2 found is an
 // error, never a reason to install over it. null: no OpenCode at all.
 export async function findOpencodeBinary({
-  candidates = process.env['OPENCODE_PATH'] ? [process.env['OPENCODE_PATH']] : ['opencode', installedOpencodeBinary(), 'opencode2'],
+  candidates = process.env['OPENCODE_PATH'] ? [process.env['OPENCODE_PATH']] : ['opencode', installedOpencodeBinary(), bunInstalledOpencodeBinary(), 'opencode2'],
 }: { candidates?: readonly string[] } = {}): Promise<OpenCodeV1Error | OpenCodeVersionError | string | null> {
   let unsupported: OpenCodeV1Error | OpenCodeVersionError | null = null
   for (const binary of candidates) {
@@ -184,7 +190,7 @@ async function configuredPluginTargets({ configDir }: { configDir: string }): Pr
         const target: unknown = Array.isArray(entry) ? entry[0] : entry && typeof entry === 'object' ? Reflect.get(entry, 'package') : entry
         if (typeof target !== 'string' || target.startsWith('-')) return []
         if (target.startsWith('file://')) {
-          const file = errore.try(() => fileURLToPath(target))
+          const file = attempt(() => fileURLToPath(target))
           return file instanceof Error ? [] : [file]
         }
         if (target.startsWith('./') || target.startsWith('../')) return [path.resolve(configDir, target)]
@@ -206,7 +212,7 @@ async function isKimakiPluginDirectory({ target, directory }: { target: string; 
     .map((suffix) => real.slice(0, -(suffix.length + 1)))
   for (const root of roots) {
     const manifest = await fs.promises.readFile(path.join(root, 'package.json'), 'utf8').catch(() => null)
-    const parsed: unknown = manifest === null ? null : errore.try(() => JSON.parse(manifest))
+    const parsed: unknown = manifest === null ? null : attempt(() => JSON.parse(manifest))
     if (parsed && typeof parsed === 'object' && !(parsed instanceof Error) && Reflect.get(parsed, 'name') === 'kimaki') return true
   }
   return false
@@ -318,10 +324,11 @@ export type OpencodeConnection = {
   stop: () => void
 }
 
-class StreamClosedError extends errore.createTaggedError({
-  name: 'StreamClosedError',
-  message: 'OpenCode event stream closed: $reason',
-}) {}
+class StreamClosedError extends Data.TaggedError('StreamClosedError')<{ reason: string; message: string; cause?: unknown }> {
+  constructor({ reason, cause }: { reason: string; cause?: unknown }) {
+    super({ reason, cause, message: `OpenCode event stream closed: ${reason}` })
+  }
+}
 
 // Same as the OpenCode web client (3 missed keepalives).
 const STREAM_IDLE_TIMEOUT_MS = 45_000

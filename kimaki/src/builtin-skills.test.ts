@@ -14,15 +14,15 @@ test('every built-in skill file parses', async () => {
 
 test('--disable-skills accepts all, a list, and rejects unknown ids', () => {
   expect(parseDisabledSkills(undefined)).toEqual([])
-  expect(parseDisabledSkills('kimaki-tunnel, kimaki-debug')).toEqual(['kimaki-tunnel', 'kimaki-debug'])
+  expect(parseDisabledSkills('kimaki-thread-ops, kimaki-debug')).toEqual(['kimaki-thread-ops', 'kimaki-debug'])
   expect(parseDisabledSkills('all')).toEqual([...BUILTIN_SKILL_IDS])
-  expect(parseDisabledSkills('tunnel')).toBeInstanceOf(Error)
-  expect(disabledSkillRules(['kimaki-tunnel'])).toMatchInlineSnapshot(`
+  expect(parseDisabledSkills('thread-ops')).toBeInstanceOf(Error)
+  expect(disabledSkillRules(['kimaki-thread-ops'])).toMatchInlineSnapshot(`
     [
       {
         "action": "skill",
         "effect": "deny",
-        "resource": "kimaki-tunnel",
+        "resource": "kimaki-thread-ops",
       },
     ]
   `)
