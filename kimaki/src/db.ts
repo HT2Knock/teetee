@@ -7,9 +7,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { SQL } from 'bun'
-import * as errore from 'errore'
 
-import { DbError, DbNotMigratedError } from './errors.ts'
+import { DbError, DbNotMigratedError, attempt } from './errors.ts'
 import { DB_FILE, migrateDb } from './migrations.ts'
 import { REQUIRED_TABLES, type V1Verbosity } from './rows.ts'
 
@@ -33,7 +32,7 @@ export async function openDb({
   dataDir: string
   migrate: boolean
 }): Promise<DbError | DbNotMigratedError | OpenedDb> {
-  const created = errore.try(
+  const created = attempt(
     () => {
       fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 })
       fs.chmodSync(dataDir, 0o700)

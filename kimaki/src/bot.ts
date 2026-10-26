@@ -3,8 +3,9 @@
 // state never lives in module globals. State owned by one feature stays in
 // that feature's closure; Bot only exposes its operations (`features`).
 //
-// Also the small helpers most writers share: OpenCode calls with errore
-// wrapping, project and thread lookups, the session marker.
+// Also the small helpers most writers share: OpenCode calls that return a
+// tagged error instead of rejecting, project and thread lookups, the session
+// marker.
 
 import type { JsonValue, SessionMetadata } from '@opencode/client'
 import { ChannelType, type Client, type TextChannel, type ThreadChannel } from 'discord.js'

@@ -8,7 +8,6 @@ import inspector from 'node:inspector/promises'
 import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import v8 from 'node:v8'
-import * as errore from 'errore'
 import { z } from 'zod'
 
 import { parseButton } from './agent-ui.ts'
@@ -16,7 +15,7 @@ import { fetchThread, oc, parseModel, projectOf, type Bot } from './bot.ts'
 import { credential, loginCli } from './commands/login-commands.ts'
 import { setChannelAgent, setChannelModel, setGlobalModel, setVerbosity } from './commands/preference-commands.ts'
 import { channelWorktrees, manageWorktree, newWorktree, setAutoWorktrees } from './commands/worktree-commands.ts'
-import { ConfigError, DbError, DiscordError, FilesystemError, OpenCodeUnavailableError } from './errors.ts'
+import { ConfigError, DbError, DiscordError, FilesystemError, OpenCodeUnavailableError, attempt } from './errors.ts'
 import { RESTART_EXIT_CODE } from './lock-server.ts'
 import { send } from './input.ts'
 import { abort, cancelQueuedPrompt, clearQueue, shell, upload } from './prompt.ts'
@@ -270,7 +269,7 @@ async function snapshotHeap({ dataDir }: { dataDir: string }) {
   const file = await profileFile({ dataDir, name: 'heap' })
   if (file instanceof Error) return file
   // Blocks the event loop for seconds on a large heap; that is the cost of a snapshot.
-  const written = errore.try(() => v8.writeHeapSnapshot(`${file}.heapsnapshot`), (cause) => new FilesystemError({ operation: 'write heap snapshot', cause }))
+  const written = attempt(() => v8.writeHeapSnapshot(`${file}.heapsnapshot`), (cause) => new FilesystemError({ operation: 'write heap snapshot', cause }))
   if (written instanceof Error) return written
   const chmod = await fs.promises.chmod(written, 0o600).catch((cause) => new FilesystemError({ operation: `chmod ${written}`, cause }))
   if (chmod instanceof Error) return chmod

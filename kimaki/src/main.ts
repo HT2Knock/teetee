@@ -4,7 +4,6 @@
 
 import { setTimeout as sleep } from 'node:timers/promises'
 import { Client, Events, GatewayIntentBits, Partials } from 'discord.js'
-import * as errore from 'errore'
 
 import { createAgentUi } from './agent-ui.ts'
 import type { Analytics } from './analytics.ts'
@@ -88,7 +87,7 @@ export async function startBot(options: StartBotOptions): Promise<Error | BotHan
   // Each resource registers its cleanup when acquired; disposal runs in reverse
   // (commands and scheduler first, the db and the lock port last). A startup
   // failure disposes it on return; a started bot moves it into stop().
-  await using cleanup = new errore.AsyncDisposableStack()
+  await using cleanup = new AsyncDisposableStack()
   const lock = options.lock
   cleanup.defer(() => lock.close())
 

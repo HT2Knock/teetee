@@ -19,9 +19,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { Database } from 'bun:sqlite'
-import * as errore from 'errore'
 
-import { DbError } from './errors.ts'
+import { DbError, attempt } from './errors.ts'
 import { createLogger } from './logger.ts'
 import { SCHEMA_SQL } from './schema-sql.ts'
 import { withSqliteCopy } from './sqlite-copy.ts'
@@ -134,7 +133,7 @@ function importLegacyTables({ client }: { client: Database }): void {
 }
 
 function readDbVersion({ file }: { file: string }): DbError | number {
-  return errore.try(
+  return attempt(
     () => {
       const client = new Database(file)
       const row = client.query<{ user_version: number }, []>('PRAGMA user_version').get()
@@ -150,7 +149,7 @@ function readDbVersion({ file }: { file: string }): DbError | number {
 // suffix, so a crash never leaves a foreign -wal next to a new kimaki.db.
 function setAside({ file }: { file: string }): DbError | string {
   const target = `${file}.unknown-${new Date().toISOString().replace(/[:.]/g, '-')}`
-  return errore.try(
+  return attempt(
     () => {
       for (const suffix of ['-wal', '-shm', '']) {
         if (fs.existsSync(`${file}${suffix}`)) fs.renameSync(`${file}${suffix}`, `${target}${suffix}`)
@@ -181,7 +180,7 @@ function prepareDbFile({ dataDir }: { dataDir: string }): DbError | string {
   const target = `${file}.import`
   fs.rmSync(target, { force: true })
   const client = new Database(target)
-  const imported = errore.try(
+  const imported = attempt(
     () => {
       migrateSchema({ client })
       copyLegacyRows({ client, legacyFile })
@@ -193,7 +192,7 @@ function prepareDbFile({ dataDir }: { dataDir: string }): DbError | string {
     fs.rmSync(target, { force: true })
     return imported
   }
-  const renamed = errore.try(
+  const renamed = attempt(
     () => fs.renameSync(target, file),
     (e) => new DbError({ operation: `rename ${target}`, cause: e }),
   )
@@ -213,7 +212,7 @@ export async function migrateDb({ dataDir }: { dataDir: string }): Promise<DbErr
   const file = prepareDbFile({ dataDir })
   if (file instanceof Error) return file
   const client = new Database(file)
-  const migrated = errore.try(() => migrateSchema({ client }), (e) => new DbError({ operation: 'migrate schema', cause: e }))
+  const migrated = attempt(() => migrateSchema({ client }), (e) => new DbError({ operation: 'migrate schema', cause: e }))
   client.close()
   if (migrated instanceof Error) return migrated
   return file

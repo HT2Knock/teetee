@@ -16,7 +16,6 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import {type Message} from 'discord.js'
-import * as errore from 'errore'
 
 import {oc, projectOf, rootSession, type Author, type Bot, type PromptFile} from './bot.ts'
 import {ConfigError, OpenCodeError, OpenCodeUnavailableError} from './errors.ts'

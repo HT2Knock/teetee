@@ -76,7 +76,7 @@ client types as the contract, not the docs (docs have stale signatures).
 
 ### The core loop
 
-1. User runs `npx kimaki` once. Onboarding connects a Discord server and picks projects.
+1. User runs `bunx kimaki` once. Onboarding connects a Discord server and picks projects.
 2. Each project gets a text channel in a `Kimaki` category.
 3. User writes a message in a project channel. Kimaki creates a **thread**, starts an
    OpenCode session in that folder, and replies inside the thread.
@@ -488,7 +488,7 @@ so prompt cache stays warm. Forks copy it byte for byte.
 | cross-project | `kimaki project list/add/create`, "plan first" |
 | waiting | `--wait`, `session wait`, 20+ min bash timeout, active-session loop |
 | critique | (if enabled) run critique after edits, include URL |
-| tunnels | `kimaki tunnel` + tuistory for dev servers |
+| tunnels | removed: `kimaki tunnel` needed the traforo npm package and a hosted relay |
 | markdown | headings, lists, no URLs in code, `<callout>` usage and colors, diagrams |
 | endings | question / action buttons / upload / sleep must be called **last**, after text |
 | channel topic | optional `<channel-topic>` |
@@ -1161,8 +1161,7 @@ Consequences:
 - `/run-shell-command` is removed: `!cmd` covers it
 
 Open: `session.shell` has no `delivery` and no `timeout` parameter. Long-running
-commands (dev servers) block until exit; tell users to use `kimaki tunnel` / tuistory
-for those. Check how `/abort` interacts: `session.interrupt` may not kill a user shell;
+commands (dev servers) block until exit; tell users to run them in tuistory for those. Check how `/abort` interacts: `session.interrupt` may not kill a user shell;
 if not, kill it with `client.shell.remove({ id })`.
 
 ### 9.3 btw
@@ -1643,8 +1642,7 @@ removed). `--mention-mode` becomes the `channels.mention_only` default.
 | `user list --guild --query` | mention IDs |
 | `upload-to-discord --session files…` | attach files to the thread |
 | `tts text -o file` | speech via OpenAI / Gemini |
-| `tunnel [-t id] -- cmd` | traforo public URL, `TRAFORO_URL` env |
-| `screenshare` | noVNC over tunnel |
+| `screenshare` | noVNC over a tunnel |
 | `merge-worktree` | CLI version of `/merge-worktree` |
 | `bot install-url / token / status set / status clear`, `discord-install-url` | bot admin |
 | `upgrade [--skip-restart]`, `sqlitedb` | maintenance |
@@ -2278,14 +2276,14 @@ It swapped the SDK under the old architecture instead of removing the old archit
 Test for each feature: **does it add a branch to ingress, the event loop, the renderer,
 or session lifecycle?** If yes, it multiplies core states and can break the core. If it
 only calls the OpenCode client or Discord from its own command handler (like `/vscode`,
-`/screenshare`, `/diff`, `kimaki tunnel`, `kimaki tts`), it is independent and stays.
+`/screenshare`, `/diff`, `kimaki tts`), it is independent and stays.
 
 ```
 independent (keep freely)          coupled (each one adds branches to the core)
 ───────────────────────────        ─────────────────────────────────────────────────────
 /vscode /screenshare /diff         ingress ──▶ admission ──▶ event loop ──▶ renderer
 /tasks list, /worktrees list          ▲            ▲             ▲              ▲
-kimaki tunnel, tts, user list      voice routing  queued !cmd   external sync   unquote
+tts, user list                     voice routing  queued !cmd   external sync   unquote
 /login /mcp /verbosity UI          context-only   btw queue     sleep cancel    cache notice
                                    ...            ...           ...             ...
 ```
@@ -2341,7 +2339,7 @@ kimaki tunnel, tts, user list      voice routing  queued !cmd   external sync   
 
 `/vscode`, `/screenshare`, `/diff`, `/tasks`, `/worktrees` list and delete,
 `/merge-worktree`, `/login`, `/mcp`, `/transcription-key`, `!cmd`
-(immediate, not queued), `kimaki tunnel`, `tts`, `upload-to-discord`, `user list`,
+(immediate, not queued), `tts`, `upload-to-discord`, `user list`,
 `thread list`, `project *`, `session read/search/list/archive`, onboarding, heap/cpu
 profiling, live voice channels (talks to OpenCode through its own tools).
 
@@ -3065,7 +3063,8 @@ local queue, event buffer, busy flags, sent part IDs, message maps, typing timer
 dispatch guards. After sections 9, 18, 22 and 26 most of that is gone or derived. What is
 left per thread is small **data**, plus two **resources** (a typing timer and a serial
 Discord queue). Data goes in one store, resources in one executor. No classes, except
-errore tagged errors.
+the tagged errors (Effect `Data.TaggedError`; this spec was written when they came from
+errore, which the fork dropped).
 
 ### 27.2 The moving parts
 
@@ -3694,7 +3693,7 @@ service, and reconnects when either restarts. No message handling yet.
 | `kimaki/package.json` | deps: `@opencode/client`, `@opencode/plugin`, `discord.js`, `drizzle-orm`, `@libsql/client`, `zustand`, `errore`, `goke`, `string-dedent`, mdast libs (used in P2). devDeps: `@opencode/cli` (test server binary), `vitest`, `discord-digital-twin` (`workspace:^`), `opencode-deterministic-provider` (`workspace:^`) |
 | `kimaki/tsconfig.json`, `vitest.config.ts` | ESM, strict, `.ts` imports; vitest `KIMAKI_VITEST=1`, logs off unless `KIMAKI_TEST_LOGS=1` |
 | `src/logger.ts` | prefixed logger to `<dataDir>/kimaki.log` + stderr |
-| `src/errors.ts` | errore tagged errors used across modules (`OpenCodeError`, `DiscordError`, `DbError`, `ConfigError`) |
+| `src/errors.ts` | Effect `Data.TaggedError` classes used across modules (`OpenCodeError`, `DiscordError`, `DbError`, `ConfigError`) and `attempt`, which turns a thrown error into one |
 | `src/db.ts`, `src/schema.ts` | the V1 table subset (17), same file and DDL, `openDb({ migrate: boolean })`. Only `main.ts` passes `migrate: true` |
 | `src/opencode-server.ts` | `connectOpencode({ serviceFile? })`: `Service.discover`, else `ensure()` without version; min-version check; Basic auth client; `watchConnection()` that re-discovers after the stream ends (new port/password) with backoff 0.5s → 30s |
 | `src/lock-server.ts` | `/health` only (rest in P7); takeover of an older instance |

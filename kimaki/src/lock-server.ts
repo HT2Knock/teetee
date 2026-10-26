@@ -14,10 +14,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
-import * as errore from 'errore'
 
 import { DEFAULT_LOCK_PORT } from './autostart.ts'
-import { BotNotRunningError, ConfigError, LockPortError } from './errors.ts'
+import { BotNotRunningError, ConfigError, LockPortError, attempt } from './errors.ts'
 import type { LockRouteInput, LockRouteName, LockRouteOutput } from './lock-routes.ts'
 import { createLogger } from './logger.ts'
 
@@ -74,7 +73,7 @@ function wrapperPid(supervised: boolean): number | null {
 }
 
 function isAlive(pid: number): boolean {
-  const probed = errore.try(() => process.kill(pid, 0), (cause) => new ConfigError({ reason: `probe PID ${pid}`, cause }))
+  const probed = attempt(() => process.kill(pid, 0), (cause) => new ConfigError({ reason: `probe PID ${pid}`, cause }))
   if (!(probed instanceof Error)) return true
   // EPERM: the PID exists but belongs to another user.
   return probed.cause instanceof Error && Reflect.get(probed.cause, 'code') === 'EPERM'
@@ -90,7 +89,7 @@ async function waitForExit({ pid, timeoutMs }: { pid: number; timeoutMs: number 
 }
 
 function signal({ pid, name }: { pid: number; name: NodeJS.Signals }): void {
-  const sent = errore.try(() => process.kill(pid, name), (cause) => new ConfigError({ reason: `${name} to PID ${pid}`, cause }))
+  const sent = attempt(() => process.kill(pid, name), (cause) => new ConfigError({ reason: `${name} to PID ${pid}`, cause }))
   if (sent instanceof Error) logger.warn('cannot send', sent)
 }
 
@@ -138,7 +137,7 @@ export async function startLockServer({ port, dataDir, supervised = false, evict
       if (size > 1_048_576) return json(413, { error: 'Request is larger than 1 MiB' })
       chunks.push(Buffer.from(chunk))
     }
-    const parsed = errore.try(() => ({ input: JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown }),
+    const parsed = attempt(() => ({ input: JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown }),
       (cause) => new ConfigError({ reason: 'Invalid JSON request', cause }))
     if (parsed instanceof Error) return json(400, { error: parsed.message })
     const controller = new AbortController()

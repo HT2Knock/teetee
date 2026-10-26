@@ -1,4 +1,4 @@
-// Opt-out skills Kimaki ships in skills/<id>/SKILL.md (debug, tunnel). They are
+// Opt-out skills Kimaki ships in skills/<id>/SKILL.md (debug, thread ops). They are
 // not in the system prompt, which keeps the rest of the CLI reference.
 //
 //   plugin (OpenCode process) ──▶ readBuiltinSkills ──▶ ctx.skill.transform(add)
@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 
 import { ConfigError, FilesystemError } from './errors.ts'
 
-export const BUILTIN_SKILL_IDS = ['kimaki-debug', 'kimaki-thread-ops', 'kimaki-tunnel'] as const
+export const BUILTIN_SKILL_IDS = ['kimaki-debug', 'kimaki-thread-ops'] as const
 
 export type BuiltinSkillId = (typeof BUILTIN_SKILL_IDS)[number]
 
