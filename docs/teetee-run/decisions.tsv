@@ -9,3 +9,10 @@ time	phase	decision	reason	evidence	result
 2026-11-01T15:25	1	close Phase 1	finish condition script passes and the full suite is green	160 tests, 42 files	done
 2026-11-01T15:40	2	zustand out first	the store is the one module with no async edges, so it is the safest first Effect seam	58 unit tests, CI green	landed
 2026-11-01T15:45	2	override effect to 4.1.1	@opencode/plugin pins 4.0.1, which creates two SchemaAST types in one program	type check green, plugin e2e green	landed
+2026-11-01T16:00	2	ThreadRegistry over a Ref	the 40 call sites read state synchronously; `Ref.makeUnsafe`/`getUnsafe` plus a direct `.ref.current` write keep the old shape while the value lives in an Effect Ref	services.test.ts, full suite green	landed
+2026-11-01T16:02	2	Settings and Clock tags	main.ts composes them as Layers, so tests replace the clock with `Layer.succeed(Clock, manualClock(t))` and the config with `Layer.succeed(Settings, ...)`	services.test.ts green	landed
+2026-11-01T16:10	2	adopt @effect/sql-sqlite-bun 4.1.1	its peer range is effect ^4.1.1 and the root override makes every package resolve 4.1.1, so one effect instance and no schema split	`bun check`, db tests, e2e green	landed
+2026-11-01T16:12	2	keep bun:sqlite for migrations only	the V1 import uses ATTACH DATABASE read-only plus DDL; the query path has no reason to keep bun SQL	db.test.ts green	landed
+2026-11-01T16:14	2	keep the promise-shaped db handle	converting 55 call sites to `yield* sql` is Phase 4 control flow; every query already runs through the Effect client, one cast in db-client.ts	44 queries, full suite green	landed
+2026-11-01T16:16	2	name the ambient types in tsconfig	bun check stopped resolving `bun:*` once the @effect/sql types joined the program; tsc was already clean	`bun check` green on 135 files	landed
+2026-11-01T16:18	2	main.ts is one Effect.gen program	the app Layer holds settings, clock and registry; the database layer is provided per start because the bot owns the connection until stop()	163 tests, 43 files green	done
