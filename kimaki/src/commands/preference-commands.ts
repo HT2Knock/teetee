@@ -26,6 +26,7 @@ import {
 
 import { globalModel, oc, parseModel, type Bot, type ModelChoice } from '../bot.ts'
 import { verbosityFromV1, verbosityToV1, type Verbosity } from '../db.ts'
+import { runResult } from '../effect-bridge.ts'
 import { ConfigError, DbError } from '../errors.ts'
 import { button, buttonRow, paginate, selectedPage, selectRow, type UiMessage } from '../format-parts.ts'
 import { replyError, resolveTarget, type InteractionRoutes, type InteractionTarget } from '../interaction-context.ts'
@@ -169,7 +170,7 @@ async function current(bot: Bot, target: InteractionTarget) {
   const agent = row?.agent_name ?? null
   const model = parseModel(row?.model_id, row?.variant)
   if (model) return { scope: 'channel' as const, modelScope: 'channel' as const, agent, model }
-  const global = await globalModel(bot)
+  const global = await runResult(globalModel(bot))
   if (global instanceof Error) return global
   if (global) return { scope: 'channel' as const, modelScope: 'global' as const, agent, model: global }
   const fallback = await oc(bot, 'model.default', (client) =>
@@ -194,7 +195,7 @@ async function channelDefaultModel(bot: Bot, target: InteractionTarget): Promise
   const selected = agent ? await agentSelection(bot, { directory: target.directory, agent }) : null
   if (selected instanceof Error) return selected
   if (selected?.model) return selected.model
-  const global = await globalModel(bot)
+  const global = await runResult(globalModel(bot))
   if (global instanceof Error || global) return global
   const fallback = await oc(bot, 'model.default', (client) =>
     client.model.default({ location: { directory: target.directory } }),

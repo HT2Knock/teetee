@@ -56,6 +56,7 @@ import { switchModel, catalogReady } from './session-context.ts'
 import { sessionRoutes } from './commands/session-commands.ts'
 import { SKIPPED_COMMANDS, threadRoutes } from './commands/thread-commands.ts'
 import { worktreeRoutes } from './commands/worktree-commands.ts'
+import { runResult } from './effect-bridge.ts'
 import { ConfigError, DiscordError } from './errors.ts'
 import { canUseKimaki } from './ingress.ts'
 import {
@@ -511,7 +512,7 @@ export function registerSlashCommands(
       interaction.channel ??
       (interaction.channelId ? await discord.channels.fetch(interaction.channelId).catch(() => null) : null)
     const projectId = channel?.isThread() ? channel.parentId : channel?.id
-    const project = projectId ? await projectOf(bot, projectId) : null
+    const project = projectId ? await runResult(projectOf(bot, projectId)) : null
     if (project instanceof Error) return logger.warn(project)
     if (!project) return
     const guild = interaction.guild ?? (await discord.guilds.fetch(interaction.guildId).catch(() => null))

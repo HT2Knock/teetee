@@ -93,21 +93,23 @@ export function ocEffect<A>(
 }
 
 // The project row of a channel; null when the channel is not a project here.
-export async function projectOf(bot: Bot, channelId: string) {
-  const rows = await bot.db<
-    ChannelDirectoryRow[]
-  >`SELECT * FROM channel_directories WHERE channel_id = ${channelId} LIMIT 1`.catch(
-    (cause) => new DbError({ operation: 'read channel_directories', cause }),
-  )
-  if (rows instanceof Error) return rows
-  return parseFirst<ChannelDirectoryRow>('channel_directories', rows) ?? null
+export function projectOf(bot: Bot, channelId: string): Effect.Effect<ChannelDirectoryRow | null, DbError> {
+  return bot
+    .query(
+      'read channel_directories',
+      (sql) => sql<ChannelDirectoryRow>`SELECT * FROM channel_directories WHERE channel_id = ${channelId} LIMIT 1`,
+    )
+    .pipe(Effect.map((rows) => parseFirst<ChannelDirectoryRow>('channel_directories', rows) ?? null))
 }
 
 // Current working directory of a session (session.moved changes it).
-export async function sessionDirectory(bot: Pick<Bot, 'opencode'>, sessionId: string) {
-  const info = await oc(bot, 'read session directory', (client) => client.session.get({ sessionID: sessionId }))
-  if (info instanceof Error) return info
-  return info.location.directory
+export function sessionDirectory(
+  bot: Pick<Bot, 'opencode'>,
+  sessionId: string,
+): Effect.Effect<string, OpenCodeUnavailableError | OpenCodeError> {
+  return ocEffect(bot, 'read session directory', (client) => client.session.get({ sessionID: sessionId })).pipe(
+    Effect.map((info) => info.location.directory),
+  )
 }
 
 export function rootSession(bot: Bot, threadId: string): OpenCodeError | string {
@@ -136,14 +138,17 @@ export function fetchThread(bot: Bot, threadId: string): Effect.Effect<ThreadCha
   })
 }
 
-export async function textChannel(bot: Bot, channelId: string): Promise<DiscordError | TextChannel> {
-  const channel = await bot.discord.channels
-    .fetch(channelId)
-    .catch((cause) => new DiscordError({ operation: `fetch channel ${channelId}`, cause }))
-  if (channel instanceof Error) return channel
-  if (channel?.type !== ChannelType.GuildText)
-    return new DiscordError({ operation: `use non-text channel ${channelId}` })
-  return channel
+export function textChannel(bot: Bot, channelId: string): Effect.Effect<TextChannel, DiscordError> {
+  return Effect.gen(function* () {
+    const channel = yield* Effect.tryPromise({
+      try: () => bot.discord.channels.fetch(channelId),
+      catch: (cause) => new DiscordError({ operation: `fetch channel ${channelId}`, cause }),
+    })
+    if (channel?.type !== ChannelType.GuildText) {
+      return yield* Effect.fail(new DiscordError({ operation: `use non-text channel ${channelId}` }))
+    }
+    return channel
+  })
 }
 
 // metadata.kimaki of a session: what the plugin and the agent's `kimaki` calls read.
@@ -192,14 +197,19 @@ export function cliContext(bot: Bot) {
 }
 
 // Default model of new sessions in channels without their own (/model "All channels").
-export async function globalModel(bot: Bot): Promise<DbError | ModelChoice | null> {
-  const rows = await bot.db<GlobalModelRow[]>`SELECT * FROM global_models WHERE app_id = ${bot.appId} LIMIT 1`.catch(
-    (cause) => new DbError({ operation: 'read global_models', cause }),
-  )
-  if (rows instanceof Error) return rows
-  const row = parseFirst<GlobalModelRow>('global_models', rows)
-  const model = parseModel(row?.model_id, row?.variant)
-  return model ? { ...model, variant: row?.variant ?? null } : null
+export function globalModel(bot: Bot): Effect.Effect<ModelChoice | null, DbError> {
+  return bot
+    .query(
+      'read global_models',
+      (sql) => sql<GlobalModelRow>`SELECT * FROM global_models WHERE app_id = ${bot.appId} LIMIT 1`,
+    )
+    .pipe(
+      Effect.map((rows) => {
+        const row = parseFirst<GlobalModelRow>('global_models', rows)
+        const model = parseModel(row?.model_id, row?.variant)
+        return model ? { ...model, variant: row?.variant ?? null } : null
+      }),
+    )
 }
 
 export function parseModel(value: string | null | undefined, variant: string | null | undefined) {

@@ -18,6 +18,7 @@ import {
   type Bot,
   type ModelChoice,
 } from './bot.ts'
+import { runResult } from './effect-bridge.ts'
 import { ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
 import { createLogger } from './logger.ts'
 import type { OpencodeEndpoint } from './adapters/opencode/index.ts'
@@ -60,12 +61,12 @@ export const NO_QUESTION_TOOL = { action: 'question', resource: '*', effect: 'de
 export async function threadProject(bot: Bot, thread: ThreadChannel) {
   const channelId = thread.parentId
   if (!channelId) return new DiscordError({ operation: `find the channel of thread ${thread.id}` })
-  const row = await projectOf(bot, channelId)
+  const row = await runResult(projectOf(bot, channelId))
   if (row instanceof Error) return row
   if (!row) return new DiscordError({ operation: `find the project of channel ${channelId}` })
   const sessionId = rootSession(bot, thread.id)
   if (sessionId instanceof Error) return sessionId
-  const directory = await sessionDirectory(bot, sessionId)
+  const directory = await runResult(sessionDirectory(bot, sessionId))
   if (directory instanceof Error) return directory
   return { channelId, projectDirectory: row.directory, directory }
 }
@@ -297,7 +298,7 @@ export async function ensureSessionMarker(
   // Instructions first: the marker means "set up", so a failure here is retried on the next input.
   if (!marker) {
     logger.log(`adopting legacy session ${sessionId} of thread ${thread.id}`)
-    const channel = await textChannel(bot, channelId)
+    const channel = await runResult(textChannel(bot, channelId))
     if (channel instanceof Error) return channel
     const instructions = await putInstructions(bot, { sessionId, thread, channel, directory, userId })
     if (instructions instanceof Error) return instructions

@@ -18,6 +18,7 @@ import {
 
 import { oc, projectOf, rootSession, sessionDirectory, type Author, type Bot } from '../bot.ts'
 import { ConfigError, DbError } from '../errors.ts'
+import { runResult } from '../effect-bridge.ts'
 import { canonicalPath } from '../file-edit-log.ts'
 import { authorOf, replyError, resolveTarget, type InteractionRoutes } from '../interaction-context.ts'
 import { parseFirst, toDbDate, type ChannelDirectoryRow, type ChannelWorktreeRow } from '../rows.ts'
@@ -61,7 +62,7 @@ export async function newWorktree(
     if (sessionId instanceof Error) return sessionId
     return fork(bot, { sourceThread, sessionId, author, name: `⬦ ${slug}`, worktree: { name: slug, baseBranch } })
   }
-  const project = await projectOf(bot, channelId)
+  const project = await runResult(projectOf(bot, channelId))
   if (project instanceof Error) return project
   if (!project) return new ConfigError({ reason: 'Use /new-worktree in a project channel.' })
   return startSession(bot, {
@@ -123,7 +124,7 @@ export async function manageWorktree(
     targetBranch?: string
   },
 ) {
-  const project = await projectOf(bot, channelId)
+  const project = await runResult(projectOf(bot, channelId))
   if (project instanceof Error) return project
   if (!project) return new ConfigError({ reason: 'Choose a project channel.' })
   const active = await oc(bot, 'check active worktree sessions', (client) => client.session.active())
@@ -132,7 +133,7 @@ export async function manageWorktree(
   if (root instanceof Error) return root
   const candidate = await canonicalPath(root)
   for (const sessionId of Object.keys(active)) {
-    const cwd = await sessionDirectory(bot, sessionId)
+    const cwd = await runResult(sessionDirectory(bot, sessionId))
     if (cwd instanceof Error) return cwd
     const insideCheckout = inside({ parent: candidate, candidate: await canonicalPath(cwd) })
     const inMergeTarget =
