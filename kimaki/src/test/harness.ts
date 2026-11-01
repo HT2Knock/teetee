@@ -15,7 +15,7 @@ import { createRequire } from 'node:module'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { OpenCode, type OpenCodeClient } from '@opencode/client'
 import { Service } from '@opencode/client/service'
-import { ChannelType, ComponentType, type APIMessage } from 'discord.js'
+import { ChannelType, ComponentType, type APIMessage } from '../adapters/discord/index.ts'
 import { DigitalDiscord } from 'discord-digital-twin/src'
 import { buildDeterministicOpencode2Config, type DeterministicMatcher } from 'opencode-deterministic-provider'
 

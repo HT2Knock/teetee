@@ -11,7 +11,7 @@ import {
   MessageFlags,
   type ButtonInteraction,
   type ModalSubmitInteraction,
-} from 'discord.js'
+} from './adapters/discord/index.ts'
 import { sessionDirectory, type Bot } from './bot.ts'
 import { ConfigError, DiscordError } from './errors.ts'
 import type { InteractionRoutes } from './interaction-context.ts'

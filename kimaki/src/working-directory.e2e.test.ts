@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { ComponentType } from 'discord.js'
+import { ComponentType } from './adapters/discord/index.ts'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'

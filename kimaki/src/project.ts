@@ -10,7 +10,7 @@
 import os from 'node:os'
 import path from 'node:path'
 import { API } from '@discordjs/core/http-only'
-import { ChannelType, REST, type RESTPostAPIGuildChannelJSONBody } from 'discord.js'
+import { ChannelType, REST, type RESTPostAPIGuildChannelJSONBody } from './adapters/discord/index.ts'
 
 import type { KimakiDb } from './db.ts'
 import { ConfigError, DbError, DiscordError } from './errors.ts'

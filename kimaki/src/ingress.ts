@@ -21,7 +21,7 @@ import {
   type Attachment,
   type Guild,
   type Message,
-} from 'discord.js'
+} from './adapters/discord/index.ts'
 import { attempt } from './errors.ts'
 
 import { projectOf, type Bot, type PromptFile } from './bot.ts'

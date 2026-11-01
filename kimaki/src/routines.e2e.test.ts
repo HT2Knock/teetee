@@ -5,7 +5,7 @@
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import { promisify } from 'node:util'
-import { ComponentType, type APIMessage } from 'discord.js'
+import { ComponentType, type APIMessage } from './adapters/discord/index.ts'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'

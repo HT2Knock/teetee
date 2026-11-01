@@ -3,7 +3,7 @@
 // cancels a pending question, and a restarted bot shows it again.
 
 import fs from 'node:fs'
-import { ComponentType, type APIMessage } from 'discord.js'
+import { ComponentType, type APIMessage } from './adapters/discord/index.ts'
 import type { DeterministicMatcher } from 'opencode-deterministic-provider'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 

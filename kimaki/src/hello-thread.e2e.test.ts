@@ -3,7 +3,7 @@
 
 import fs from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { MessageFlags } from 'discord.js'
+import { MessageFlags } from './adapters/discord/index.ts'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'

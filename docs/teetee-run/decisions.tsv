@@ -16,3 +16,4 @@ time	phase	decision	reason	evidence	result
 2026-11-01T16:14	2	keep the promise-shaped db handle	converting 55 call sites to `yield* sql` is Phase 4 control flow; every query already runs through the Effect client, one cast in db-client.ts	44 queries, full suite green	landed
 2026-11-01T16:16	2	name the ambient types in tsconfig	bun check stopped resolving `bun:*` once the @effect/sql types joined the program; tsc was already clean	`bun check` green on 135 files	landed
 2026-11-01T16:18	2	main.ts is one Effect.gen program	the app Layer holds settings, clock and registry; the database layer is provided per start because the bot owns the connection until stop()	163 tests, 43 files green	done
+2026-11-01T17:05	3	discord.js behind src/adapters/discord	one import site keeps the library replaceable; a lint rule and a boundary test stop core modules from importing it	verify green, 164 tests green	landed

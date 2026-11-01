@@ -11,7 +11,7 @@ import {
   type APIContainerComponent,
   type APISeparatorComponent,
   type APITextDisplayComponent,
-} from 'discord.js'
+} from '../adapters/discord/index.ts'
 
 import { renderMarkdown, type Segment, type TableSegment, type TextSegment } from './render-markdown.ts'
 

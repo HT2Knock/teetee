@@ -23,7 +23,7 @@ import {
   type Client,
   type MessageCreateOptions,
   type SendableChannels,
-} from 'discord.js'
+} from './adapters/discord/index.ts'
 
 import { formatFooter, NOTIFY_MESSAGE_FLAGS, SILENT_MESSAGE_FLAGS, type UiMessage } from './format-parts.ts'
 import { createLogger } from './logger.ts'

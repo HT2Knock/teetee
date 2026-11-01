@@ -3,7 +3,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { Routes } from 'discord.js'
+import { Routes } from './adapters/discord/index.ts'
 import type { DeterministicMatcher } from 'opencode-deterministic-provider'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 

@@ -5,7 +5,7 @@
 
 import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
-import type { TextChannel, ThreadChannel } from 'discord.js'
+import type { TextChannel, ThreadChannel } from './adapters/discord/index.ts'
 
 import {
   cliContext,

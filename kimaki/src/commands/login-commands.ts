@@ -21,7 +21,7 @@ import {
   type ModalSubmitInteraction,
   type ButtonInteraction,
   type MessageComponentInteraction,
-} from 'discord.js'
+} from '../adapters/discord/index.ts'
 import type { IntegrationInfo } from '@opencode/client'
 
 import { oc, type Bot } from '../bot.ts'

@@ -2,7 +2,7 @@
 // including requests of a subagent, shown in the parent thread.
 
 import fs from 'node:fs'
-import { ComponentType, type APIMessage } from 'discord.js'
+import { ComponentType, type APIMessage } from './adapters/discord/index.ts'
 import type { DeterministicMatcher } from 'opencode-deterministic-provider'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 

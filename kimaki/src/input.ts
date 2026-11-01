@@ -5,7 +5,7 @@
 
 import crypto from 'node:crypto'
 import path from 'node:path'
-import { Events, MessageFlags, type Message, type TextChannel, type ThreadChannel } from 'discord.js'
+import { Events, MessageFlags, type Message, type TextChannel, type ThreadChannel } from './adapters/discord/index.ts'
 
 import {
   cliContext,

@@ -22,7 +22,7 @@ import {
   type ChatInputCommandInteraction,
   type MessageComponentInteraction,
   type StringSelectMenuInteraction,
-} from 'discord.js'
+} from '../adapters/discord/index.ts'
 
 import { globalModel, oc, parseModel, type Bot, type ModelChoice } from '../bot.ts'
 import { verbosityFromV1, verbosityToV1, type Verbosity } from '../db.ts'

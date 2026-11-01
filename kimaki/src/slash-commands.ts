@@ -46,7 +46,7 @@ import {
   type ModalSubmitInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
   type StringSelectMenuInteraction,
-} from 'discord.js'
+} from './adapters/discord/index.ts'
 
 import { agentUiRoutes } from './agent-ui.ts'
 import { oc, projectOf, type Bot, type ModelChoice } from './bot.ts'
