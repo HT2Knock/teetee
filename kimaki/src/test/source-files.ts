@@ -1,5 +1,4 @@
-// Every .ts file under a directory, for the boundary tests that scan source
-// text. A test helper, not production code.
+// Every .ts file under a directory, for the boundary tests that scan text.
 
 import { readdir } from 'node:fs/promises'
 import path from 'node:path'
