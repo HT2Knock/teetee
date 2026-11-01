@@ -192,7 +192,7 @@ async function channelDefaultModel(bot: Bot, target: InteractionTarget): Promise
   const channel = parseModel(row?.model_id, row?.variant)
   if (channel) return { ...channel, variant: channel.variant ?? null }
   const agent = row?.agent_name
-  const selected = agent ? await agentSelection(bot, { directory: target.directory, agent }) : null
+  const selected = agent ? await runResult(agentSelection(bot, { directory: target.directory, agent })) : null
   if (selected instanceof Error) return selected
   if (selected?.model) return selected.model
   const global = await runResult(globalModel(bot))
@@ -262,7 +262,7 @@ async function enabledModels(bot: Bot, directory: string) {
 
 // An agent shortcut uses its configured model; /model-variant uses the current model.
 async function baseModel(bot: Bot, { target, agent }: { target: InteractionTarget; agent?: string }) {
-  const selected = agent ? await agentSelection(bot, { directory: target.directory, agent }) : null
+  const selected = agent ? await runResult(agentSelection(bot, { directory: target.directory, agent })) : null
   if (selected instanceof Error) return selected
   const [now, models, fallback] = await Promise.all([
     current(bot, target),
@@ -322,8 +322,8 @@ async function setAgent(
   if (before instanceof Error) return before
   const sessionId = target.sessionId
   const selected = sessionId
-    ? await switchAgent(bot, { sessionId, directory: target.directory, agent, model })
-    : await agentSelection(bot, { directory: target.directory, agent })
+    ? await runResult(switchAgent(bot, { sessionId, directory: target.directory, agent, model }))
+    : await runResult(agentSelection(bot, { directory: target.directory, agent }))
   if (selected instanceof Error) return selected
   if (!sessionId) {
     const choice = model ?? selected.model
@@ -365,7 +365,7 @@ async function agentMenu(bot: Bot, interaction: ChatInputCommandInteraction) {
   const target = await resolveTarget(bot, interaction.channelId)
   if (target instanceof Error) return replyError(interaction, target)
   await interaction.deferReply()
-  const [agents, now] = await Promise.all([primaryAgents(bot, target.directory), current(bot, target)])
+  const [agents, now] = await Promise.all([runResult(primaryAgents(bot, target.directory)), current(bot, target)])
   if (agents instanceof Error) return replyError(interaction, agents)
   if (now instanceof Error) return replyError(interaction, now)
   if (agents.length === 0) return replyError(interaction, new ConfigError({ reason: 'No primary agents available' }))
@@ -514,7 +514,7 @@ function setModelForScope({
   wizard: ModelWizard
   model: ModelChoice
 }) {
-  if (scope === 'session' && sessionId) return switchModel(bot, { sessionId, model })
+  if (scope === 'session' && sessionId) return runResult(switchModel(bot, { sessionId, model }))
   if (scope === 'global') return setGlobalModel(bot, { model })
   return setChannelModel(bot, { channelId: wizard.target.channelId, model })
 }
@@ -686,7 +686,7 @@ export function createPreferenceRoutes(): InteractionRoutes {
       const model = await channelDefaultModel(bot, wizard.target)
       if (model instanceof Error) return replyError(interaction, model)
       if (!model) return replyError(interaction, new ConfigError({ reason: 'No default model configured.' }))
-      const result = await switchModel(bot, { sessionId, model })
+      const result = await runResult(switchModel(bot, { sessionId, model }))
       if (result instanceof Error) return replyError(interaction, result)
       await interaction.editReply({
         content: `Session model reset to the channel default:\n\`${modelLabel(model)}\`\nApplies from the next step.`,

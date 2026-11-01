@@ -130,15 +130,17 @@ async function adoptSession(
       client.session.update({ sessionID: sessionId, metadata: { ...session.metadata, kimaki }, permissions }),
     )
     if (marked instanceof Error) return marked
-    const instructions = await putInstructions(bot, {
-      sessionId,
-      thread,
-      channel,
-      directory: session.location.directory,
-      userId: author.id,
-      parentSessionId,
-      scheduledTask,
-    })
+    const instructions = await runResult(
+      putInstructions(bot, {
+        sessionId,
+        thread,
+        channel,
+        directory: session.location.directory,
+        userId: author.id,
+        parentSessionId,
+        scheduledTask,
+      }),
+    )
     if (instructions instanceof Error) return instructions
     const messages = await oc(bot, 'message.list', (client) =>
       client.message.list({ sessionID: sessionId, order: 'desc', limit: 100 }),
@@ -286,7 +288,7 @@ export async function fork(
       })
     }
   }
-  const project = await threadProject(bot, sourceThread)
+  const project = await runResult(threadProject(bot, sourceThread))
   if (project instanceof Error) return project
   const channel = await runResult(textChannel(bot, project.channelId))
   if (channel instanceof Error) return channel
@@ -307,7 +309,7 @@ export async function fork(
       baseBranch: worktree.baseBranch,
     })
     if (checkout instanceof Error) return checkout
-    const plugin = await bot.features.waitForPlugin(checkout.directory)
+    const plugin = await runResult(bot.features.waitForPlugin(checkout.directory))
     if (plugin instanceof Error) return plugin
     const moved = await oc(bot, 'move worktree fork', (client) =>
       client.session.move({ sessionID: forked.id, directory: checkout.directory }),
@@ -376,7 +378,7 @@ export async function forkBtw(
 > {
   const parentSessionId = rootSession(bot, sourceThread.id)
   if (parentSessionId instanceof Error) return parentSessionId
-  const project = await threadProject(bot, sourceThread)
+  const project = await runResult(threadProject(bot, sourceThread))
   if (project instanceof Error) return project
   const channel = await runResult(textChannel(bot, project.channelId))
   if (channel instanceof Error) return channel
@@ -403,13 +405,15 @@ export async function forkBtw(
     client.session.update({ sessionID: forked.id, metadata: { kimaki } }),
   )
   if (marked instanceof Error) return marked
-  const bound = await bindThread(bot, {
-    threadId: thread.id,
-    sessionId: forked.id,
-    channelId: project.channelId,
-    directory: project.directory,
-    isNew: false,
-  })
+  const bound = await runResult(
+    bindThread(bot, {
+      threadId: thread.id,
+      sessionId: forked.id,
+      channelId: project.channelId,
+      directory: project.directory,
+      isNew: false,
+    }),
+  )
   if (bound instanceof Error) return bound
   await thread.members.add(author.id).catch((e: Error) => logger.warn(`add btw member`, e))
   const intro = await thread
@@ -421,7 +425,7 @@ export async function forkBtw(
     .catch((cause) => new DiscordError({ operation: 'send btw intro', cause }))
   if (intro instanceof Error) return intro
   if (agent) {
-    const switched = await switchAgent(bot, { sessionId: forked.id, directory: project.directory, agent })
+    const switched = await runResult(switchAgent(bot, { sessionId: forked.id, directory: project.directory, agent }))
     if (switched instanceof Error) return switched
   }
 

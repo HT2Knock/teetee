@@ -4,13 +4,14 @@
 // import cycle through sessions.ts.
 
 import path from 'node:path'
-import { setTimeout as sleep } from 'node:timers/promises'
+
+import { Effect } from 'effect'
 
 import type { TextChannel, ThreadChannel } from './adapters/discord/index.ts'
 import type { OpencodeEndpoint } from './adapters/opencode/index.ts'
 import {
   cliContext,
-  oc,
+  ocEffect,
   projectOf,
   readMarker,
   rootSession,
@@ -19,8 +20,8 @@ import {
   type Bot,
   type ModelChoice,
 } from './bot.ts'
-import { runResult } from './effect-bridge.ts'
-import { ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
+import { fromResult } from './effect-bridge.ts'
+import { ConfigError, type DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
 import { createLogger } from './logger.ts'
 import { type ChannelDirectoryRow } from './rows.ts'
 import { baseInstructions, INSTRUCTION_KEY, type ScheduledRun } from './system-prompt.ts'
@@ -58,42 +59,44 @@ export type ChannelDefaults = ReturnType<typeof channelDefaults>
 export const NO_QUESTION_TOOL = { action: 'question', resource: '*', effect: 'deny' } as const
 
 // Project channel, project directory and current cwd of a session thread.
-export async function threadProject(bot: Bot, thread: ThreadChannel) {
-  const channelId = thread.parentId
-  if (!channelId) return new DiscordError({ operation: `find the channel of thread ${thread.id}` })
-  const row = await runResult(projectOf(bot, channelId))
-  if (row instanceof Error) return row
-  if (!row) return new DiscordError({ operation: `find the project of channel ${channelId}` })
-  const sessionId = rootSession(bot, thread.id)
-  if (sessionId instanceof Error) return sessionId
-  const directory = await runResult(sessionDirectory(bot, sessionId))
-  if (directory instanceof Error) return directory
-  return { channelId, projectDirectory: row.directory, directory }
+export function threadProject(bot: Bot, thread: ThreadChannel) {
+  return Effect.gen(function* () {
+    const channelId = thread.parentId
+    if (!channelId) {
+      return yield* Effect.fail(new DiscordError({ operation: `find the channel of thread ${thread.id}` }))
+    }
+    const row = yield* projectOf(bot, channelId)
+    if (!row) return yield* Effect.fail(new DiscordError({ operation: `find the project of channel ${channelId}` }))
+    const sessionId = rootSession(bot, thread.id)
+    if (typeof sessionId !== 'string') return yield* Effect.fail(sessionId)
+    const directory = yield* sessionDirectory(bot, sessionId)
+    return { channelId, projectDirectory: row.directory, directory }
+  })
 }
 
 // /cwd and `kimaki session cwd`: show the cwd, or move the session to a
 // project subfolder or linked worktree.
-export async function sessionCwd(bot: Bot, { thread, directory }: { thread: ThreadChannel; directory?: string }) {
-  const project = await threadProject(bot, thread)
-  if (project instanceof Error) return project
-  if (!directory) return { directory: project.directory }
-  const destination = await resolveWorkingDirectory({
-    projectDirectory: project.projectDirectory,
-    candidate: path.resolve(project.directory, directory),
+export function sessionCwd(bot: Bot, { thread, directory }: { thread: ThreadChannel; directory?: string }) {
+  return Effect.gen(function* () {
+    const project = yield* threadProject(bot, thread)
+    if (!directory) return { directory: project.directory }
+    const destination = yield* fromResult(() =>
+      resolveWorkingDirectory({
+        projectDirectory: project.projectDirectory,
+        candidate: path.resolve(project.directory, directory),
+      }),
+    )
+    yield* bot.features.waitForPlugin(destination)
+    const sessionId = rootSession(bot, thread.id)
+    if (typeof sessionId !== 'string') return yield* Effect.fail(sessionId)
+    yield* ocEffect(bot, 'session.move', (client) =>
+      client.session.move({ sessionID: sessionId, directory: destination, delivery: 'steer' }),
+    )
+    return { requestedDirectory: destination }
   })
-  if (destination instanceof Error) return destination
-  const plugin = await bot.features.waitForPlugin(destination)
-  if (plugin instanceof Error) return plugin
-  const sessionId = rootSession(bot, thread.id)
-  if (sessionId instanceof Error) return sessionId
-  const moved = await oc(bot, 'session.move', (client) =>
-    client.session.move({ sessionID: sessionId, directory: destination, delivery: 'steer' }),
-  )
-  if (moved instanceof Error) return moved
-  return { requestedDirectory: destination }
 }
 
-export async function bindThread(
+export function bindThread(
   bot: Bot,
   {
     threadId,
@@ -102,51 +105,60 @@ export async function bindThread(
     directory,
     isNew,
   }: { threadId: string; sessionId: string; channelId: string; directory: string; isNew: boolean },
-): Promise<DbError | void> {
-  const inserted = await bot.db<
-    unknown[]
-  >`INSERT INTO thread_sessions (thread_id, session_id, source) VALUES (${threadId}, ${sessionId}, ${'kimaki'})`.catch(
-    (cause) => new DbError({ operation: 'insert thread_sessions', cause }),
-  )
-  if (inserted instanceof Error) return inserted
-  await bot.eventLoop.bind({ threadId, sessionId, channelId, directory, isNew })
-  logger.log(`session ${sessionId} bound to thread ${threadId}`)
+): Effect.Effect<void, DbError> {
+  return Effect.gen(function* () {
+    yield* bot.query(
+      'insert thread_sessions',
+      (sql) =>
+        sql`INSERT INTO thread_sessions (thread_id, session_id, source) VALUES (${threadId}, ${sessionId}, ${'kimaki'})`,
+    )
+    yield* Effect.promise(() => bot.eventLoop.bind({ threadId, sessionId, channelId, directory, isNew }))
+    logger.log(`session ${sessionId} bound to thread ${threadId}`)
+  })
 }
 
 // A cold (or evicted) location loads plugin and markdown agents a moment after
 // it answers. integration.list waits for that activation.
 // TODO: drop this once agent/command/skill.list wait too. https://github.com/anomalyco/opencode/issues/51282
-export async function catalogReady(bot: Pick<Bot, 'opencode'>, directory: string) {
-  const ready = await oc(bot, 'integration.list', (client) => client.integration.list({ location: { directory } }))
-  if (ready instanceof Error) return ready
+export function catalogReady(
+  bot: Pick<Bot, 'opencode'>,
+  directory: string,
+): Effect.Effect<void, OpenCodeUnavailableError | OpenCodeError> {
+  return ocEffect(bot, 'integration.list', (client) => client.integration.list({ location: { directory } })).pipe(
+    Effect.asVoid,
+  )
 }
 
 // Agents a session may switch to (not subagents, not hidden ones).
-export async function primaryAgents(bot: Bot, directory: string) {
-  const ready = await catalogReady(bot, directory)
-  if (ready instanceof Error) return ready
-  const agents = await oc(bot, 'agent.list', (client) => client.agent.list({ location: { directory } }))
-  if (agents instanceof Error) return agents
-  return agents.data.filter((agent) => agent.mode !== 'subagent' && !agent.hidden)
+export function primaryAgents(bot: Pick<Bot, 'opencode'>, directory: string) {
+  return Effect.gen(function* () {
+    yield* catalogReady(bot, directory)
+    const agents = yield* ocEffect(bot, 'agent.list', (client) => client.agent.list({ location: { directory } }))
+    return agents.data.filter((agent) => agent.mode !== 'subagent' && !agent.hidden)
+  })
 }
 
-export async function agentSelection(bot: Bot, { directory, agent }: { directory: string; agent: string }) {
-  const agents = await primaryAgents(bot, directory)
-  if (agents instanceof Error) return agents
-  const selected = agents.find(
-    (candidate) =>
-      candidate.id.toLowerCase() === agent.toLowerCase() || candidate.name.toLowerCase() === agent.toLowerCase(),
-  )
-  if (!selected)
-    return new ConfigError({ reason: `Agent \`${agent}\` is not available in this project. Use /agent to select one.` })
-  const model: ModelChoice | null = selected.model
-    ? { ...selected.model, variant: selected.model.variant ?? null }
-    : null
-  return { agent: selected.id, model }
+export function agentSelection(bot: Pick<Bot, 'opencode'>, { directory, agent }: { directory: string; agent: string }) {
+  return Effect.gen(function* () {
+    const agents = yield* primaryAgents(bot, directory)
+    const selected = agents.find(
+      (candidate) =>
+        candidate.id.toLowerCase() === agent.toLowerCase() || candidate.name.toLowerCase() === agent.toLowerCase(),
+    )
+    if (!selected) {
+      return yield* Effect.fail(
+        new ConfigError({ reason: `Agent \`${agent}\` is not available in this project. Use /agent to select one.` }),
+      )
+    }
+    const model: ModelChoice | null = selected.model
+      ? { ...selected.model, variant: selected.model.variant ?? null }
+      : null
+    return { agent: selected.id, model }
+  })
 }
 
 // OpenCode switches the agent and model separately, including the configured variant.
-export async function switchAgent(
+export function switchAgent(
   bot: Bot,
   {
     sessionId,
@@ -155,27 +167,26 @@ export async function switchAgent(
     model,
   }: { sessionId: string; directory: string; agent: string; model?: ModelChoice | null },
 ) {
-  const selected = await agentSelection(bot, { directory, agent })
-  if (selected instanceof Error) return selected
-  const choice = model ?? selected.model
-  if (choice) {
-    const switched = await oc(bot, 'session.switchModel', (client) =>
-      client.session.switchModel({
-        sessionID: sessionId,
-        model: { providerID: choice.providerID, id: choice.id, ...(choice.variant && { variant: choice.variant }) },
-      }),
+  return Effect.gen(function* () {
+    const selected = yield* agentSelection(bot, { directory, agent })
+    const choice = model ?? selected.model
+    if (choice) {
+      yield* ocEffect(bot, 'session.switchModel', (client) =>
+        client.session.switchModel({
+          sessionID: sessionId,
+          model: { providerID: choice.providerID, id: choice.id, ...(choice.variant && { variant: choice.variant }) },
+        }),
+      )
+    }
+    yield* ocEffect(bot, 'session.switchAgent', (client) =>
+      client.session.switchAgent({ sessionID: sessionId, agent: selected.agent }),
     )
-    if (switched instanceof Error) return switched
-  }
-  const switched = await oc(bot, 'session.switchAgent', (client) =>
-    client.session.switchAgent({ sessionID: sessionId, agent: selected.agent }),
-  )
-  if (switched instanceof Error) return switched
-  return { ...selected, model: choice }
+    return { ...selected, model: choice }
+  })
 }
 
 // The one durable system instruction of a session (spec 5.4).
-export async function putInstructions(
+export function putInstructions(
   bot: Bot,
   {
     sessionId,
@@ -194,32 +205,39 @@ export async function putInstructions(
     parentSessionId?: string | null
     scheduledTask?: ScheduledRun | null
   },
-): Promise<OpenCodeUnavailableError | OpenCodeError | void> {
-  // The agent list is optional prompt context: a failure must not strand the thread.
-  const found = await primaryAgents(bot, directory)
-  if (found instanceof Error) logger.warn(`agent list for instructions failed`, found)
-  // The ID is what switchAgent and session.create take.
-  const agents =
-    found instanceof Error ? [] : found.map((agent) => ({ name: agent.id, description: agent.description ?? '' }))
-  const value = baseInstructions({
-    sessionId,
-    threadId: thread.id,
-    channelId: channel.id,
-    guildId: channel.guildId,
-    userId,
-    dataDir: bot.dataDir,
-    channelTopic: channel.topic,
-    agents,
-    parentSessionId,
-    scheduledTask,
+): Effect.Effect<void, OpenCodeUnavailableError | OpenCodeError> {
+  return Effect.gen(function* () {
+    // The agent list is optional prompt context: a failure must not strand the thread.
+    const agents = yield* primaryAgents(bot, directory).pipe(
+      Effect.match({
+        onFailure: (error) => {
+          logger.warn(`agent list for instructions failed`, error)
+          return [] as Array<{ name: string; description: string }>
+        },
+        onSuccess: (found) => found.map((agent) => ({ name: agent.id, description: agent.description ?? '' })),
+      }),
+    )
+    const value = baseInstructions({
+      sessionId,
+      threadId: thread.id,
+      channelId: channel.id,
+      guildId: channel.guildId,
+      userId,
+      dataDir: bot.dataDir,
+      channelTopic: channel.topic,
+      agents,
+      parentSessionId,
+      scheduledTask,
+    })
+    yield* ocEffect(bot, 'instructions.entry.put', (client) =>
+      client.session.instructions.entry.put({ sessionID: sessionId, key: INSTRUCTION_KEY, value }),
+    )
   })
-  const put = await oc(bot, 'instructions.entry.put', (client) =>
-    client.session.instructions.entry.put({ sessionID: sessionId, key: INSTRUCTION_KEY, value }),
-  )
-  if (put instanceof Error) return put
 }
 
-export type PluginWait = (directory: string) => Promise<ConfigError | OpenCodeUnavailableError | OpenCodeError | void>
+export type PluginWait = (
+  directory: string,
+) => Effect.Effect<void, ConfigError | OpenCodeUnavailableError | OpenCodeError>
 
 // The bot writes plugins/kimaki/ on start (adapters/opencode/index.ts), but
 // OpenCode's watcher picks it up a moment later: wait for it, bounded.
@@ -230,42 +248,45 @@ export function createPluginWait(bot: Pick<Bot, 'opencode'>): PluginWait {
   const active = new WeakMap<OpencodeEndpoint, Set<string>>()
   // CRAP is estimated from exports because fallow cannot see e2e coverage.
   // fallow-ignore-next-line complexity
-  return async (directory) => {
-    const connected = bot.opencode.endpoint
-    if (connected && active.get(connected)?.has(directory)) return
-    const location = { directory }
-    const deadline = Date.now() + 10_000
-    while (Date.now() < deadline) {
-      const endpoint = bot.opencode.endpoint
-      if (!endpoint) return new OpenCodeUnavailableError({ reason: 'not connected' })
-      // The integration catalog waits for activations OpenCode already started; plugin.list does not.
-      const activated = await endpoint.client.integration
-        .list({ location })
-        .catch((cause) => new OpenCodeError({ operation: 'integration.list', cause }))
-      if (activated instanceof Error) return activated
-      const plugins = await endpoint.client.plugin
-        .list({ location })
-        .catch((cause) => new OpenCodeError({ operation: 'plugin.list', cause }))
-      if (plugins instanceof Error) return plugins
-      const servers = await endpoint.client.mcp
-        .list({ location })
-        .catch((cause) => new OpenCodeError({ operation: 'mcp.list', cause }))
-      if (servers instanceof Error) return servers
-      if (bot.opencode.endpoint !== endpoint) continue
-      const pluginActive = plugins.data.some((plugin) => plugin.id === 'kimaki' && plugin.state.status === 'active')
-      // Plugin setup registers MCP after the module is active. Waiting for it
-      // here keeps the transform's reload out of the first turn.
-      const mcpRegistered = servers.data.some((server) => server.name === 'teetee')
-      if (pluginActive && mcpRegistered) {
-        active.set(endpoint, (active.get(endpoint) ?? new Set()).add(directory))
-        return
+  return (directory) =>
+    Effect.gen(function* () {
+      const connected = bot.opencode.endpoint
+      if (connected && active.get(connected)?.has(directory)) return
+      const location = { directory }
+      const deadline = Date.now() + 10_000
+      while (Date.now() < deadline) {
+        const endpoint = bot.opencode.endpoint
+        if (!endpoint) return yield* Effect.fail(new OpenCodeUnavailableError({ reason: 'not connected' }))
+        // The integration catalog waits for activations OpenCode already started; plugin.list does not.
+        yield* Effect.tryPromise({
+          try: () => endpoint.client.integration.list({ location }),
+          catch: (cause) => new OpenCodeError({ operation: 'integration.list', cause }),
+        })
+        const plugins = yield* Effect.tryPromise({
+          try: () => endpoint.client.plugin.list({ location }),
+          catch: (cause) => new OpenCodeError({ operation: 'plugin.list', cause }),
+        })
+        const servers = yield* Effect.tryPromise({
+          try: () => endpoint.client.mcp.list({ location }),
+          catch: (cause) => new OpenCodeError({ operation: 'mcp.list', cause }),
+        })
+        if (bot.opencode.endpoint !== endpoint) continue
+        const pluginActive = plugins.data.some((plugin) => plugin.id === 'kimaki' && plugin.state.status === 'active')
+        // Plugin setup registers MCP after the module is active. Waiting for it
+        // here keeps the transform's reload out of the first turn.
+        const mcpRegistered = servers.data.some((server) => server.name === 'teetee')
+        if (pluginActive && mcpRegistered) {
+          active.set(endpoint, (active.get(endpoint) ?? new Set()).add(directory))
+          return
+        }
+        yield* Effect.sleep(200)
       }
-      await sleep(200)
-    }
-    return new ConfigError({
-      reason: `Kimaki plugin is not active in OpenCode for ${directory}. Kimaki writes it to <OpenCode config dir>/plugins/kimaki/ on start; check \`opencode plugin list\` and the OpenCode logs`,
+      return yield* Effect.fail(
+        new ConfigError({
+          reason: `Kimaki plugin is not active in OpenCode for ${directory}. Kimaki writes it to <OpenCode config dir>/plugins/kimaki/ on start; check \`opencode plugin list\` and the OpenCode logs`,
+        }),
+      )
     })
-  }
 }
 
 // The plugin and the agent's `kimaki` calls read metadata.kimaki. Sessions
@@ -273,7 +294,7 @@ export function createPluginWait(bot: Pick<Bot, 'opencode'>): PluginWait {
 // entry; sessions of an older bot run point at its old lock port. Checked
 // on each input instead of for every binding at startup (a V1 install has
 // thousands of bindings).
-export async function ensureSessionMarker(
+export function ensureSessionMarker(
   bot: Bot,
   {
     sessionId,
@@ -288,55 +309,64 @@ export async function ensureSessionMarker(
     directory: string
     userId: string
   },
-): Promise<ConfigError | OpenCodeUnavailableError | OpenCodeError | DiscordError | void> {
-  const plugin = await bot.features.waitForPlugin(directory)
-  if (plugin instanceof Error) return plugin
-  const info = await oc(bot, `get session ${sessionId}`, (client) => client.session.get({ sessionID: sessionId }))
-  if (info instanceof Error) return info
-  const marker = readMarker(info.metadata)
-  if (marker && marker.dataDir === bot.dataDir && marker.lockPort === bot.lockPort) return
-  // Instructions first: the marker means "set up", so a failure here is retried on the next input.
-  if (!marker) {
-    logger.log(`adopting legacy session ${sessionId} of thread ${thread.id}`)
-    const channel = await runResult(textChannel(bot, channelId))
-    if (channel instanceof Error) return channel
-    const instructions = await putInstructions(bot, { sessionId, thread, channel, directory, userId })
-    if (instructions instanceof Error) return instructions
-  }
-  const kimaki = { ...marker?.fields, source: 'discord', ...cliContext(bot), threadId: thread.id, channelId }
-  const updated = await oc(bot, 'session.update', (client) =>
-    client.session.update({ sessionID: sessionId, metadata: { ...info.metadata, kimaki } }),
-  )
-  if (updated instanceof Error) return updated
+): Effect.Effect<void, ConfigError | OpenCodeUnavailableError | OpenCodeError | DiscordError> {
+  return Effect.gen(function* () {
+    yield* bot.features.waitForPlugin(directory)
+    const info = yield* ocEffect(bot, `get session ${sessionId}`, (client) =>
+      client.session.get({ sessionID: sessionId }),
+    )
+    const marker = readMarker(info.metadata)
+    if (marker && marker.dataDir === bot.dataDir && marker.lockPort === bot.lockPort) return
+    // Instructions first: the marker means "set up", so a failure here is retried on the next input.
+    if (!marker) {
+      logger.log(`adopting legacy session ${sessionId} of thread ${thread.id}`)
+      const channel = yield* textChannel(bot, channelId)
+      yield* putInstructions(bot, { sessionId, thread, channel, directory, userId })
+    }
+    const kimaki = { ...marker?.fields, source: 'discord', ...cliContext(bot), threadId: thread.id, channelId }
+    yield* ocEffect(bot, 'session.update', (client) =>
+      client.session.update({ sessionID: sessionId, metadata: { ...info.metadata, kimaki } }),
+    )
+  })
 }
 
 // Running sessions of an older bot run point at its lock port; their agent
 // can call `kimaki` before the next user input (ensureSessionMarker).
-export async function refreshCliContext(bot: Bot) {
-  const active = await oc(bot, 'session.active', (client) => client.session.active())
-  if (active instanceof Error) return active
-  const { sessionThreads } = bot.store.getState()
-  for (const sessionId of Object.keys(active).filter((id) => sessionThreads[id])) {
-    const info = await oc(bot, 'get bound session', (client) => client.session.get({ sessionID: sessionId }))
-    if (info instanceof Error) {
-      logger.warn(info)
-      continue
+export function refreshCliContext(bot: Bot): Effect.Effect<void, OpenCodeUnavailableError | OpenCodeError> {
+  return Effect.gen(function* () {
+    const active = yield* ocEffect(bot, 'session.active', (client) => client.session.active())
+    const { sessionThreads } = bot.store.getState()
+    for (const sessionId of Object.keys(active).filter((id) => sessionThreads[id])) {
+      const info = yield* ocEffect(bot, 'get bound session', (client) =>
+        client.session.get({ sessionID: sessionId }),
+      ).pipe(
+        Effect.match({
+          onFailure: (error) => {
+            logger.warn(error)
+            return null
+          },
+          onSuccess: (found) => found,
+        }),
+      )
+      if (!info) continue
+      const marker = readMarker(info.metadata)
+      if (!marker) continue
+      if (marker.dataDir === bot.dataDir && marker.lockPort === bot.lockPort) continue
+      const metadata = { ...info.metadata, kimaki: { ...marker.fields, ...cliContext(bot) } }
+      yield* ocEffect(bot, 'refresh Kimaki CLI context', (client) =>
+        client.session.update({ sessionID: sessionId, metadata }),
+      )
     }
-    const marker = readMarker(info.metadata)
-    if (!marker) continue
-    if (marker.dataDir === bot.dataDir && marker.lockPort === bot.lockPort) continue
-    const metadata = { ...info.metadata, kimaki: { ...marker.fields, ...cliContext(bot) } }
-    const result = await oc(bot, 'refresh Kimaki CLI context', (client) =>
-      client.session.update({ sessionID: sessionId, metadata }),
-    )
-    if (result instanceof Error) return result
-  }
+  })
 }
+
 // Applies a model to the running session, with its variant when it has one.
-export async function switchModel(bot: Bot, { sessionId, model }: { sessionId: string; model: ModelChoice }) {
+export function switchModel(
+  bot: Bot,
+  { sessionId, model }: { sessionId: string; model: ModelChoice },
+): Effect.Effect<void, OpenCodeUnavailableError | OpenCodeError> {
   const choice = { providerID: model.providerID, id: model.id, ...(model.variant && { variant: model.variant }) }
-  const result = await oc(bot, 'session.switchModel', (client) =>
+  return ocEffect(bot, 'session.switchModel', (client) =>
     client.session.switchModel({ sessionID: sessionId, model: choice }),
-  )
-  if (result instanceof Error) return result
+  ).pipe(Effect.asVoid)
 }

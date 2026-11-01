@@ -415,6 +415,15 @@ error channel instead of as a value, which removes the `instanceof` check at
 every caller. `sessions.ts`, `session-context.ts`, the slash commands and the
 RPC routes are still promise-shaped and bridge these with `runResult`.
 
+Fifth slice, done: `session-context.ts` returns `Effect`. The session facts
+(`threadProject`, `sessionCwd`, `bindThread`) and the agent/model switches
+(`catalogReady`, `primaryAgents`, `agentSelection`, `switchAgent`,
+`switchModel`, `putInstructions`) fail with tagged errors, and `PluginWait` is
+an Effect, so the polling loop yields `Effect.sleep` instead of a promise
+timer. `effect-bridge.ts` gains `fromResult`, the inverse of `runResult`, for
+the helpers that still report a failure as a value (`resolveWorkingDirectory`,
+`eventLoop.bind`). Its callers are promise-shaped and bridge with `runResult`.
+
 Exit: zero cycles, core imports no `discord.js`, no `instanceof Error` in
 production code.
 

@@ -170,7 +170,7 @@ export type Catalog = {
 
 async function readCatalog(bot: Pick<Bot, 'opencode'>, directory: string): Promise<Error | Catalog> {
   // Waits for plugin activation, so a cold location returns its full catalog.
-  const ready = await catalogReady(bot, directory)
+  const ready = await runResult(catalogReady(bot, directory))
   if (ready instanceof Error) return ready
   const location = { directory }
   const [agents, commands, skills] = await Promise.all([
@@ -362,7 +362,7 @@ async function sendInput(
     const reply = await replyWithEcho(interaction, { author, text: echo })
     if (reply instanceof Error) return replyError(interaction, reply)
     if (model && !(route.kind === 'steer' && route.agent)) {
-      const switched = await switchModel(bot, { sessionId: target.sessionId, model })
+      const switched = await runResult(switchModel(bot, { sessionId: target.sessionId, model }))
       if (switched instanceof Error) return replyError(interaction, switched)
     }
     const result = await dispatch(bot, { thread: target.thread, route, author, messageId: reply.id, model })
