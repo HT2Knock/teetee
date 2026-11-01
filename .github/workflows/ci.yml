@@ -46,6 +46,11 @@ jobs:
         env:
           NO_COLOR: '1'
 
+      # `kimaki session diff` shells out to the critique CLI, and the test that
+      # covers it asserts critique's own output.
+      - name: Install critique
+        run: bun add -g critique@0.4.0
+
       # --retry=3: some e2e tests have timing sensitivity on CI hardware
       # (question tool cleanup races, reply ordering under slower I/O).
       - name: Run tests
