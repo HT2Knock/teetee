@@ -5,15 +5,14 @@ import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { wrapJsonSchema, type Goke } from 'goke'
 
-import { BotNotRunningError } from '../errors.ts'
-import { callBot } from '../adapters/http/rpc.ts'
+import { BotNotRunningError } from '../../errors.ts'
+import { callBot } from '../http/rpc.ts'
 import {
   action,
   DATA_DIR_HELP,
   dataDirOrDefault,
   discordApi,
   fail,
-  openCliDb,
   parseTarget,
   printJson,
   readClient,
@@ -106,8 +105,8 @@ export function registerSendCommand(cli: Goke) {
         if (options.sendAt || options.wait)
           fail(new Error('Kimaki bot is not running here. --send-at and --wait need a local bot.'))
         const [{ sendInput }, { sendWithoutBot }] = await Promise.all([
-          import('../adapters/http/routes.ts'),
-          import('../remote-send.ts'),
+          import('../http/routes.ts'),
+          import('../../remote-send.ts'),
         ])
         const parsed = sendInput.safeParse(input)
         if (!parsed.success) fail(new Error(parsed.error.issues.map((issue) => issue.message).join('; ')))
@@ -141,11 +140,13 @@ export function registerScheduleCommands(cli: Goke) {
       .option('--json', 'Output as JSON')
       .option('--all', 'Also list finished and cancelled V1 routines')
       .action(async (options) => {
-        const { listTasks } = await import('../scheduler.ts')
-        const opened = await openCliDb(options.dataDir)
-        const routines = await listTasks({ db: opened.db, all: options.all })
-        await opened.close()
-        if (routines instanceof Error) fail(routines)
+        const result = await callBot({
+          dataDir: dataDirOrDefault(options.dataDir),
+          route: 'routine.list',
+          input: { all: options.all },
+        })
+        if (result instanceof Error) fail(result)
+        const routines = result.data
         if (options.json) return printJson(routines)
         if (routines.length === 0) {
           process.stdout.write('No routines\n')

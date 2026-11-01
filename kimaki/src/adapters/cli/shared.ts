@@ -1,22 +1,23 @@
 // Helpers shared by the CLI command modules. Commands exit through `fail` on
 // errors, so their bodies read top to bottom without error plumbing.
 // Never import bot modules (main.ts, onboarding.ts, scheduler.ts) here:
-// every CLI process loads this file at startup. SQLite and discord.js are
-// imported lazily too: loading them costs ~0.4s and ~250 MB per CLI call, and
-// most commands only talk to the bot over the lock port.
+// every CLI process loads this file at startup. discord.js is imported lazily
+// too: loading it costs ~250 MB per CLI call, and most commands only talk to
+// the bot over the lock port.
+//
+// The CLI never opens kimaki.db. Every read that used SQLite is a control-token
+// RPC route now, and the bot owns the file.
 
 import os from 'node:os'
 import path from 'node:path'
 import type { OpenCodeClient } from '@opencode/client'
 import { ChannelType } from 'discord-api-types/v10'
 
-import { DbError } from '../errors.ts'
-import { canonicalPath } from '../file-edit-log.ts'
-import type { LockRouteInput, LockRouteName } from '../adapters/http/routes.ts'
-import { callBot } from '../adapters/http/rpc.ts'
-import { resolveOpencode } from '../adapters/opencode/index.ts'
-import { parseFirst, type ChannelDirectoryRow } from '../rows.ts'
-import { readSessionMarkdown, resolveSession, waitForSessionReady } from '../session-events.ts'
+import { canonicalPath } from '../../file-edit-log.ts'
+import type { LockRouteInput, LockRouteName } from '../http/routes.ts'
+import { callBot } from '../http/rpc.ts'
+import { resolveOpencode } from '../opencode/index.ts'
+import { readSessionMarkdown, waitForSessionReady } from '../../session-events.ts'
 
 export const DATA_DIR_HELP = 'Data directory (default: ~/.kimaki)'
 export const SESSION_HELP = 'Session ID, Discord thread ID or thread URL (default: OPENCODE_SESSION_ID)'
@@ -55,14 +56,6 @@ export function targetOrEnv(value: string | undefined): SessionTarget | Record<s
   return target
 }
 
-// Opens the existing database; the CLI never migrates (only the bot start does).
-export async function openCliDb(dataDir: string | undefined) {
-  const { openDb } = await import('../db.ts')
-  const opened = await openDb({ dataDir: dataDirOrDefault(dataDir), migrate: false })
-  if (opened instanceof Error) fail(opened)
-  return opened
-}
-
 export function printJson(value: unknown) {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`)
 }
@@ -79,19 +72,21 @@ export async function readClient(errorCode = 1): Promise<OpenCodeClient> {
   return endpoint.client
 }
 
-// Thread and session of any target. Subagent sessions have no row: they keep threadId null.
+// Thread and session of any target. The bot resolves the row; subagent sessions
+// have none, so their ID stays and threadId is null.
 export async function resolveTarget(
   value: string,
   dataDir: string | undefined,
 ): Promise<{ sessionId: string; threadId: string | null }> {
   const target = parseTarget(value)
   if (target instanceof Error) fail(target)
-  const opened = await openCliDb(dataDir)
-  const result = await resolveSession({ db: opened.db, id: target.sessionId ?? target.threadId })
-  await opened.close()
-  if (!(result instanceof Error)) return result
-  if (target.sessionId) return { sessionId: target.sessionId, threadId: null }
-  fail(result)
+  const result = await callBot({
+    dataDir: dataDirOrDefault(dataDir),
+    route: 'session.resolve',
+    input: { id: target.sessionId ?? target.threadId },
+  })
+  if (result instanceof Error) fail(result)
+  return result.data
 }
 
 export async function waitAndPrintSession({
@@ -110,22 +105,21 @@ export async function waitAndPrintSession({
   process.stdout.write(`${markdown}\n`)
 }
 
-// Discord REST with the bot token: KIMAKI_BOT_TOKEN (no kimaki.db needed, e.g. CI), else saved credentials.
+// Discord REST with the bot token: KIMAKI_BOT_TOKEN (CI, no bot needed), else
+// the token of the running bot. Both paths avoid kimaki.db.
 export async function discordApi(dataDir: string | undefined) {
-  const [{ envCredentials, readSavedCredentials }, { createApi }] = await Promise.all([
-    import('../credentials.ts'),
-    import('../project.ts'),
+  const [{ envCredentials }, { createApi }] = await Promise.all([
+    import('../../credentials.ts'),
+    import('../../project.ts'),
   ])
+  const fromEnv = envCredentials()
+  if (fromEnv instanceof Error) fail(fromEnv)
   const credentials = await (async () => {
-    const fromEnv = envCredentials()
     if (fromEnv) return fromEnv
-    const opened = await openCliDb(dataDir)
-    const saved = await readSavedCredentials({ db: opened.db })
-    await opened.close()
-    return saved
+    const result = await callBot({ dataDir: dataDirOrDefault(dataDir), route: 'bot.credentials', input: {} })
+    if (result instanceof Error) fail(result)
+    return { appId: result.data.appId, token: result.data.token }
   })()
-  if (credentials instanceof Error) fail(credentials)
-  if (!credentials) fail(new Error('No saved bot credentials. Start Kimaki first, or set KIMAKI_BOT_TOKEN.'))
   return {
     credentials,
     api: createApi({
@@ -145,7 +139,8 @@ export function isThread<T extends { type: ChannelType }>(channel: T): channel i
   )
 }
 
-// Project directory: --channel resolves through SQLite, else --project, else the current directory.
+// Project directory: --channel resolves through the bot, else --project, else
+// the current directory.
 export async function projectDirectory({
   project,
   channel,
@@ -156,17 +151,13 @@ export async function projectDirectory({
   dataDir: string | undefined
 }) {
   if (!channel) return canonicalPath(project ?? process.cwd())
-  const opened = await openCliDb(dataDir)
-  const rows = await opened.db<
-    ChannelDirectoryRow[]
-  >`SELECT * FROM channel_directories WHERE channel_id = ${channel} LIMIT 1`.catch(
-    (cause) => new DbError({ operation: 'find channel', cause }),
-  )
-  await opened.close()
-  if (rows instanceof Error) fail(rows)
-  const row = parseFirst<ChannelDirectoryRow>('channel_directories', rows)
-  if (!row) fail(new Error(`No project directory for channel ${channel}`))
-  return canonicalPath(row.directory)
+  const result = await callBot({
+    dataDir: dataDirOrDefault(dataDir),
+    route: 'channel.directory',
+    input: { channelId: channel },
+  })
+  if (result instanceof Error) fail(result)
+  return canonicalPath(result.data.directory)
 }
 
 // Runs a lock route on the running bot and prints its JSON result.

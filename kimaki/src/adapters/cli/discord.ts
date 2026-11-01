@@ -7,7 +7,7 @@ import { wrapJsonSchema, type Goke } from 'goke'
 
 import dedent from 'string-dedent'
 
-import { callBot } from '../adapters/http/rpc.ts'
+import { callBot } from '../http/rpc.ts'
 import {
   action,
   DATA_DIR_HELP,
