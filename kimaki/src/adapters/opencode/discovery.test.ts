@@ -6,8 +6,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { expect, test } from 'bun:test'
 
-import { findOpencodeBinary } from './opencode-server.ts'
-import { opencodeBinary } from './test/harness.ts'
+import { findOpencodeBinary } from './index.ts'
+import { opencodeBinary } from '../../test/harness.ts'
 
 test('supported binary wins over OpenCode 1, only OpenCode 1 is an error, nothing found is null', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kimaki-opencode-bin-'))

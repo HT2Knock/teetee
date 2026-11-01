@@ -20,7 +20,7 @@ import {
 import { ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
 import { SILENT_MESSAGE_FLAGS } from './format-parts.ts'
 import { createLogger } from './logger.ts'
-import type { OpenCodeClient } from './opencode-server.ts'
+import type { OpenCodeClient } from './adapters/opencode/index.ts'
 import { prompt } from './prompt.ts'
 import { parseRows, type ChannelDirectoryRow } from './rows.ts'
 import { disabledSkillRules } from './builtin-skills.ts'

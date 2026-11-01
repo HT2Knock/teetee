@@ -121,7 +121,7 @@ export function registerStartCommand(cli: Goke) {
         import('../onboarding.ts'),
         import('../credentials.ts'),
         import('../db.ts'),
-        import('../opencode-server.ts'),
+        import('../adapters/opencode/index.ts'),
         import('../project.ts'),
       ])
       // Non-TTY hosts get the failure as an `error` event too (programmatic onboarding).
