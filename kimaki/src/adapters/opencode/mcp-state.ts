@@ -1,22 +1,15 @@
-// The MCP endpoint of this bot, as the OpenCode plugin finds it. The bot writes
-// it into the OpenCode config dir before the plugin shim, so plugin setup can
-// register the server without a session and without reading kimaki.db.
+// Writes the MCP endpoint of this bot, as the OpenCode plugin finds it. The bot
+// writes it into the OpenCode config dir before the plugin shim, so plugin
+// setup can register the server without a session and without reading
+// kimaki.db.
 //
 // The file is the transport for the control token, not a new secret store: it
 // sits next to the plugin shim, mode 0600, in a directory the user owns.
 
 import fs from 'node:fs'
-import path from 'node:path'
 
 import { ConfigError } from '../../errors.ts'
-
-const MCP_STATE_FILE = 'kimaki-mcp.json'
-
-type McpState = { url: string; token: string }
-
-function mcpStateFile({ configDir }: { configDir: string }): string {
-  return path.join(configDir, MCP_STATE_FILE)
-}
+import { mcpStateFile, type McpState } from './config-dir.ts'
 
 export async function writeMcpState({
   configDir,

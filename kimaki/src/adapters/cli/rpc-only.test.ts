@@ -10,37 +10,31 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 
 import { cliCommand, freePort, tempDataDir } from '../../test/harness.ts'
+import { sourceFiles } from '../../test/source-files.ts'
 
 const exec = promisify(execFile)
 const cliRoot = path.resolve(import.meta.dirname)
 const sourceRoot = path.resolve(cliRoot, '..', '..')
 
-async function filesUnder(directory: string): Promise<string[]> {
-  const entries = await fs.promises.readdir(directory, { withFileTypes: true })
-  const files = await Promise.all(
-    entries.map((entry) => {
-      const full = path.join(directory, entry.name)
-      if (entry.isDirectory()) return filesUnder(full)
-      return entry.name.endsWith('.ts') ? [full] : []
-    }),
-  )
-  return files.flat()
-}
-
 describe('CLI RPC boundary', () => {
   test('only start.ts may open the database', async () => {
     const offenders: string[] = []
-    for (const file of await filesUnder(cliRoot)) {
+    for (const file of await sourceFiles(cliRoot)) {
       const relative = path.relative(sourceRoot, file)
       if (relative === path.join('adapters', 'cli', 'start.ts') || file.endsWith('.test.ts')) continue
       const text = await fs.promises.readFile(file, 'utf8')
-      // A type-only import of db.ts is erased; a runtime import would open it.
+      // A type-only import of db.ts is erased; every other form opens the file.
       const runtime = text
         .split('\n')
         .filter((line) => !line.trimStart().startsWith('import type '))
         .join('\n')
-      if (/from '[^']*\/db\.ts'/.test(runtime)) offenders.push(relative)
-      if (/\bopenDb\(/.test(runtime) || /\bopenCliDb\(/.test(runtime)) offenders.push(relative)
+      const opensDatabase =
+        /\bfrom '[^']*\/(?:db|db-client|migrations)\.ts'/.test(runtime) ||
+        /\bimport\(['"][^'"]*\/(?:db|db-client|migrations)\.ts['"]\)/.test(runtime) ||
+        /\bfrom 'bun:sqlite'/.test(runtime) ||
+        /\bopenDb\(/.test(runtime) ||
+        /\bopenCliDb\(/.test(runtime)
+      if (opensDatabase) offenders.push(relative)
     }
     expect(offenders).toEqual([])
   })

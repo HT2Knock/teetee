@@ -12,8 +12,6 @@ import { ThreadRegistry, createBotStore } from './store.ts'
 const SETTINGS: BotSettings = {
   dataDir: '/tmp/kimaki-test',
   lockPort: 29988,
-  controlToken: 'control-test-token',
-  notifyToken: 'notify-test-token',
   restUrl: null,
   appId: '1422625037164350001',
   supervised: false,

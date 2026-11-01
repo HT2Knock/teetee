@@ -94,8 +94,6 @@ function settingsOf(options: StartBotOptions): BotSettings {
   return {
     dataDir: options.dataDir,
     lockPort: options.lock.port,
-    controlToken: options.lock.tokens.control,
-    notifyToken: options.lock.tokens.notify,
     restUrl: options.discordRestUrl ?? null,
     appId: options.appId,
     supervised: options.lock.supervised,
@@ -116,10 +114,6 @@ function appLayer(options: StartBotOptions) {
     options.clock ? Layer.succeed(Clock, options.clock) : Clock.layer,
     ThreadRegistry.layer,
   )
-}
-
-async function login({ discord, token }: { discord: ReturnType<typeof createDiscordClient>; token: string }) {
-  return loginDiscord({ client: discord, token })
 }
 
 type BuildInput = {
@@ -253,7 +247,7 @@ const runBot = ({ options, settings, clock, store, cleanup, onBot }: BuildInput)
             if (pending.count === 0) resolve(null)
           }
           void opencode.ready.then(settle)
-          void login({ discord, token: options.token }).then(settle)
+          void loginDiscord({ client: discord, token: options.token }).then(settle)
         }),
     )
     if (failure) return failure

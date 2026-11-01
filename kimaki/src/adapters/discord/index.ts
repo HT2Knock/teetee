@@ -1,7 +1,6 @@
 // The one module that imports discord.js. Core modules and tests import the
 // Discord types and builders from here, so the library stays replaceable and a
-// single import site can be audited (see the boundary test in
-// discord-adapter.test.ts).
+// single import site can be audited (see boundary.test.ts).
 //
 // `export *` keeps every discord.js type and builder reachable without
 // re-listing the surface, which would drift as commands add builders.
