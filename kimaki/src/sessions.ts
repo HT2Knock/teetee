@@ -18,6 +18,7 @@ import {
   type PromptFile,
 } from './bot.ts'
 import { ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
+import { runResult } from './effect-bridge.ts'
 import { SILENT_MESSAGE_FLAGS } from './format-parts.ts'
 import { createLogger } from './logger.ts'
 import type { OpenCodeClient } from './adapters/opencode/index.ts'
@@ -421,22 +422,24 @@ export async function forkBtw(
     if (switched instanceof Error) return switched
   }
 
-  const sent = await prompt(bot, {
-    sessionId: forked.id,
-    threadId: thread.id,
-    threadName: thread.name,
-    text: btwPrompt({
-      text,
-      parentSessionId,
-      sourceThreadId: sourceThread.id,
+  const sent = await runResult(
+    prompt(bot, {
       sessionId: forked.id,
       threadId: thread.id,
+      threadName: thread.name,
+      text: btwPrompt({
+        text,
+        parentSessionId,
+        sourceThreadId: sourceThread.id,
+        sessionId: forked.id,
+        threadId: thread.id,
+      }),
+      author,
+      messageId,
+      delivery: 'steer',
+      files,
     }),
-    author,
-    messageId,
-    delivery: 'steer',
-    files,
-  })
+  )
   if (sent instanceof Error) return sent
   return { threadId: thread.id, sessionId: forked.id }
 }

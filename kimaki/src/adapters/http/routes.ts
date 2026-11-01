@@ -248,7 +248,7 @@ function localSession(bot: Bot, input: { sessionId?: string; threadId?: string }
 async function localThread(bot: Bot, input: { sessionId?: string; threadId?: string }) {
   const target = localSession(bot, input)
   if (target instanceof Error) return target
-  const thread = await fetchThread(bot, target.threadId)
+  const thread = await runResult(fetchThread(bot, target.threadId))
   if (thread instanceof Error) return thread
   return { ...target, thread }
 }
@@ -459,7 +459,7 @@ const lockRoutes = {
     run: async (bot, { threadId, ...input }) => {
       const sessionId = sessionOf(bot, { ...input, threadId })
       if (sessionId instanceof Error) return sessionId
-      return createSleep(bot, { ...input, sessionId })
+      return runResult(createSleep(bot, { ...input, sessionId }))
     },
   }),
   // Routines keep the `task.*` route names so older CLIs and bots still talk to each other.

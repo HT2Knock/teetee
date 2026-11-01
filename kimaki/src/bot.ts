@@ -8,6 +8,7 @@
 // marker.
 
 import type { JsonValue, SessionMetadata } from '@opencode/client'
+import { Effect } from 'effect'
 import { ChannelType, type Client, type TextChannel, type ThreadChannel } from './adapters/discord/index.ts'
 
 import type { AgentUi } from './agent-ui.ts'
@@ -80,6 +81,17 @@ export async function oc<T>(
   return run(client).catch((cause) => new OpenCodeError({ operation, cause }))
 }
 
+// Effect form of `oc`, for modules that already return Effect.
+export function ocEffect<A>(
+  bot: Pick<Bot, 'opencode'>,
+  operation: string,
+  run: (client: OpenCodeClient) => Promise<A>,
+): Effect.Effect<A, OpenCodeUnavailableError | OpenCodeError> {
+  const client = bot.opencode.endpoint?.client
+  if (!client) return Effect.fail(new OpenCodeUnavailableError({ reason: 'not connected' }))
+  return Effect.tryPromise({ try: () => run(client), catch: (cause) => new OpenCodeError({ operation, cause }) })
+}
+
 // The project row of a channel; null when the channel is not a project here.
 export async function projectOf(bot: Bot, channelId: string) {
   const rows = await bot.db<
@@ -111,13 +123,17 @@ export function threadOfSession(bot: Bot, sessionId: string): string | null {
   return threadId && roots[threadId] === sessionId ? threadId : null
 }
 
-export async function fetchThread(bot: Bot, threadId: string): Promise<DiscordError | ConfigError | ThreadChannel> {
-  const channel = await bot.discord.channels
-    .fetch(threadId)
-    .catch((cause) => new DiscordError({ operation: `fetch thread ${threadId}`, cause }))
-  if (channel instanceof Error) return channel
-  if (!channel?.isThread()) return new ConfigError({ reason: 'Target is not a thread' })
-  return channel
+export function fetchThread(bot: Bot, threadId: string): Effect.Effect<ThreadChannel, DiscordError | ConfigError> {
+  return Effect.gen(function* () {
+    const channel = yield* Effect.tryPromise({
+      try: () => bot.discord.channels.fetch(threadId),
+      catch: (cause) => new DiscordError({ operation: `fetch thread ${threadId}`, cause }),
+    })
+    if (!channel?.isThread()) {
+      return yield* Effect.fail(new ConfigError({ reason: 'Target is not a thread' }))
+    }
+    return channel
+  })
 }
 
 export async function textChannel(bot: Bot, channelId: string): Promise<DiscordError | TextChannel> {

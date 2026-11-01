@@ -24,6 +24,7 @@ import {
   type PromptFile,
 } from './bot.ts'
 import { ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
+import { runResult } from './effect-bridge.ts'
 import { NOTIFY_MESSAGE_FLAGS, SILENT_MESSAGE_FLAGS } from './format-parts.ts'
 import { createLogger } from './logger.ts'
 import type { SendInput } from './adapters/http/routes.ts'
@@ -491,7 +492,7 @@ async function command(
   if (commands instanceof Error) return commands
   const typed = `/${route.name}${route.arguments ? ` ${route.arguments}` : ''}`
   if (!commands.data.some((candidate) => candidate.name === route.name)) {
-    if (route.queue) return prompt(bot, { ...input, text: typed, delivery: 'queue' })
+    if (route.queue) return runResult(prompt(bot, { ...input, text: typed, delivery: 'queue' }))
     return steer(bot, { ...input, text: typed })
   }
   if (!route.queue) {
@@ -556,7 +557,7 @@ async function runInSession(
     case 'queue':
       // A queued voice message does not switch the agent: that would change the running turn.
       if (route.agent) logger.log(`ignoring agent ${route.agent} of a queued message`)
-      return prompt(bot, { ...base, text: route.text, delivery: 'queue' })
+      return runResult(prompt(bot, { ...base, text: route.text, delivery: 'queue' }))
     case 'steer': {
       const agent = route.agent
       if (agent) {
@@ -592,7 +593,8 @@ export async function dispatch(
   const sessionId = rootSession(bot, thread.id)
   if (sessionId instanceof Error) return sessionId
   // New input supersedes a pending `kimaki sleep` of this session.
-  await cancelSleep(bot, sessionId)
+  const slept = await runResult(cancelSleep(bot, sessionId))
+  if (slept instanceof Error) logger.warn(slept)
   const project = await threadProject(bot, thread)
   if (project instanceof Error) return project
   const marked = await ensureSessionMarker(bot, {
@@ -794,7 +796,7 @@ async function sendToThread(bot: Bot, input: SendInput, context: SendContext) {
   const threadId = input.threadId ?? threadOfSession(bot, input.sessionId!)
   if (!threadId)
     return new ConfigError({ reason: 'No local thread for this session. Use --thread on its owning machine.' })
-  const thread = await fetchThread(bot, threadId)
+  const thread = await runResult(fetchThread(bot, threadId))
   if (thread instanceof Error) return thread
   const sessionId = bot.store.getState().roots[thread.id]
   if (!sessionId) {
@@ -884,7 +886,7 @@ async function sendNewSession(bot: Bot, project: ChannelDirectoryRow, input: Sen
     ...(model && { model: sessionModel(model) }),
   })
   if (started instanceof Error || context.userIds.length < 2) return started
-  const thread = await fetchThread(bot, started.threadId)
+  const thread = await runResult(fetchThread(bot, started.threadId))
   if (thread instanceof Error) logger.warn(`add thread members`, thread)
   else await addMembers(thread, context.userIds.slice(1))
   return started

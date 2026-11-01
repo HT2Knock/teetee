@@ -13,9 +13,11 @@
 // order (prompt, then interrupt with resume) parks queued items for good.
 
 import fs from 'node:fs'
+import { Effect } from 'effect'
 import { type Message } from './adapters/discord/index.ts'
 
-import { oc, projectOf, rootSession, type Author, type Bot, type PromptFile } from './bot.ts'
+import { oc, ocEffect, projectOf, rootSession, type Author, type Bot, type PromptFile } from './bot.ts'
+import { runResult } from './effect-bridge.ts'
 import { ConfigError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
 import { formatError } from './format-parts.ts'
 import { createLogger } from './logger.ts'
@@ -33,7 +35,7 @@ function promptIdForMessage(messageId: string): string {
   return `msg_discord_${messageId}`
 }
 
-export async function prompt(
+export function prompt(
   bot: Bot,
   {
     sessionId,
@@ -64,30 +66,31 @@ export async function prompt(
     // inputs that have no Discord message: wakes, scheduled runs.
     echo?: string
   },
-): Promise<OpenCodeUnavailableError | OpenCodeError | void> {
-  const { attached, attachments } = await splitPromptFiles(files)
-  // The text stays as the user wrote it. The plugin renders the <discord-user>
-  // context from this metadata into the model request only (turnContext()).
-  const discord: TurnContext = {
-    userId: author.id,
-    username: author.username,
-    messageId,
-    threadId,
-    threadName,
-    attachments,
-  }
-  const result = await oc(bot, 'session.prompt', (client) =>
-    client.session.prompt({
-      sessionID: sessionId,
-      id,
-      text,
-      files: attached,
-      ...(skills.length > 0 && { skills: skills.map((skill) => ({ id: skill })) }),
-      delivery,
-      metadata: { discord: { ...discord, ...(echo && { echo }) } },
-    }),
-  )
-  if (result instanceof Error) return result
+): Effect.Effect<void, OpenCodeUnavailableError | OpenCodeError> {
+  return Effect.gen(function* () {
+    const { attached, attachments } = yield* Effect.promise(() => splitPromptFiles(files))
+    // The text stays as the user wrote it. The plugin renders the <discord-user>
+    // context from this metadata into the model request only (turnContext()).
+    const discord: TurnContext = {
+      userId: author.id,
+      username: author.username,
+      messageId,
+      threadId,
+      threadName,
+      attachments,
+    }
+    yield* ocEffect(bot, 'session.prompt', (client) =>
+      client.session.prompt({
+        sessionID: sessionId,
+        id,
+        text,
+        files: attached,
+        ...(skills.length > 0 && { skills: skills.map((skill) => ({ id: skill })) }),
+        delivery,
+        metadata: { discord: { ...discord, ...(echo && { echo }) } },
+      }),
+    )
+  })
 }
 
 // Questions and permissions of the thread (root and children) that wait for the user.
@@ -138,7 +141,7 @@ export async function steer(
   if (cancelled instanceof Error) return cancelled
   const interrupted = await interrupt(bot, input.sessionId)
   if (interrupted instanceof Error) return interrupted
-  return prompt(bot, { ...input, delivery: 'steer' })
+  return runResult(prompt(bot, { ...input, delivery: 'steer' }))
 }
 
 export async function cancelQueuedPrompt(bot: Bot, { threadId, inboxID }: { threadId: string; inboxID: string }) {
@@ -172,7 +175,8 @@ export async function clearQueue(
 export async function abort(bot: Bot, { threadId }: { threadId: string }) {
   const sessionId = rootSession(bot, threadId)
   if (sessionId instanceof Error) return sessionId
-  await cancelSleep(bot, sessionId)
+  const slept = await runResult(cancelSleep(bot, sessionId))
+  if (slept instanceof Error) logger.warn(slept)
   const cleared = await clearQueue(bot, { threadId })
   if (cleared instanceof Error) return cleared
   const cancelled = await cancelPendingUi(bot, threadId)
@@ -198,18 +202,20 @@ export async function requeueEdited(
   const text = route?.kind === 'queue' || route?.kind === 'steer' ? route.text : files.length > 0 ? '' : null
   if (text === null) return
   const thread = message.channel.isThread() ? message.channel : null
-  return prompt(bot, {
-    sessionId,
-    threadId: message.channelId,
-    threadName: thread?.name ?? '',
-    text,
-    author: { id: message.author.id, username: message.author.username },
-    messageId: message.id,
-    delivery: 'queue',
-    files,
-    // IDs are unique per item: every edit gets its own.
-    id: `${promptIdForMessage(message.id)}_e${message.editedTimestamp ?? Date.now()}`,
-  })
+  return runResult(
+    prompt(bot, {
+      sessionId,
+      threadId: message.channelId,
+      threadName: thread?.name ?? '',
+      text,
+      author: { id: message.author.id, username: message.author.username },
+      messageId: message.id,
+      delivery: 'queue',
+      files,
+      // IDs are unique per item: every edit gets its own.
+      id: `${promptIdForMessage(message.id)}_e${message.editedTimestamp ?? Date.now()}`,
+    }),
+  )
 }
 
 // `!cmd` (spec 9.2.1): native session.shell, not interrupting and not

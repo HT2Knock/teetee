@@ -35,6 +35,7 @@ import type { SendInput } from './adapters/http/routes.ts'
 import { send } from './input.ts'
 import { parseFirst, parseRows, toDbDate, type ChannelDirectoryRow, type ScheduledTaskRow } from './rows.ts'
 import { parseFutureUtc, runDueWakes } from './sleeps.ts'
+import { runResult } from './effect-bridge.ts'
 
 const logger = createLogger('ROUTINE')
 const execAsync = promisify(exec)
@@ -487,7 +488,7 @@ async function runTask(bot: Bot, { id, dueAt }: { id: number; dueAt: Date | null
 // One at a time: runs share the OpenCode service and Discord rate limits.
 async function runDueTasks(bot: Bot): Promise<void> {
   const time = bot.clock.now()
-  await runDueWakes(bot, { time, limit: DUE_BATCH })
+  await runResult(runDueWakes(bot, { time, limit: DUE_BATCH }))
   const rows = await bot.db<
     TaskRow[]
   >`SELECT * FROM scheduled_tasks WHERE status = ${'planned'} AND next_run_at <= ${toDbDate(new Date(time))} ORDER BY next_run_at ASC, id ASC LIMIT ${DUE_BATCH}`.catch(
