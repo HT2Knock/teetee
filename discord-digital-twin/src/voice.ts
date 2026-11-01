@@ -8,18 +8,19 @@
 // start() makes a self-signed certificate with the openssl CLI; tests trust it
 // with trustCertificate().
 
+import { execFile } from 'node:child_process'
 import crypto from 'node:crypto'
 import dgram from 'node:dgram'
-import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import https from 'node:https'
 import os from 'node:os'
 import path from 'node:path'
 import tls from 'node:tls'
 import { promisify } from 'node:util'
-import { WebSocketServer, WebSocket } from 'ws'
+
 import { VoiceEncryptionMode, VoiceOpcodes } from 'discord-api-types/voice/v8'
 import type { VoiceSendPayload } from 'discord-api-types/voice/v8'
+import { WebSocketServer, WebSocket } from 'ws'
 
 const execFileAsync = promisify(execFile)
 

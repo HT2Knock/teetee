@@ -1,8 +1,10 @@
+import { afterAll, beforeAll, expect, test } from 'bun:test'
+import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
-import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { afterAll, beforeAll, expect, test } from 'bun:test'
+
+import { send } from './input.ts'
 import type { BotHandle } from './main.ts'
 import {
   cliCommand,
@@ -17,7 +19,6 @@ import {
   type OpencodeTestServer,
   type TestTwin,
 } from './test/harness.ts'
-import { send } from './input.ts'
 
 const exec = promisify(execFile)
 const dataDir = tempDataDir()

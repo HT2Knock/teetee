@@ -1,9 +1,10 @@
 // `. btw` and /btw fork the session into a new "btw:" thread that answers a
 // side question while the source session keeps running.
 
-import fs from 'node:fs'
-import type { DeterministicMatcher } from 'opencode-deterministic-provider'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
+import fs from 'node:fs'
+
+import type { DeterministicMatcher } from 'opencode-deterministic-provider'
 
 import type { BotHandle } from './main.ts'
 import { parseRows, type ThreadSessionRow } from './rows.ts'

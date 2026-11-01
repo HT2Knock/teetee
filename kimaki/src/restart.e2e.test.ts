@@ -1,8 +1,8 @@
 // Phase 1: the thread <-> session binding lives in SQLite, so a restarted bot
 // continues the session of an existing thread.
 
-import fs from 'node:fs'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
+import fs from 'node:fs'
 
 import type { BotHandle } from './main.ts'
 import { parseRows, type ThreadSessionRow } from './rows.ts'

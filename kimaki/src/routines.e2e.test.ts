@@ -2,15 +2,15 @@
 // V1 task rows, `kimaki routine list/edit/run/delete` and /routines with its Run
 // now and Delete buttons. Time is a manual clock.
 
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import { promisify } from 'node:util'
-import { ComponentType, type APIMessage } from './adapters/discord/index.ts'
-import { afterAll, beforeAll, expect, test } from 'bun:test'
 
+import { ComponentType, type APIMessage } from './adapters/discord/index.ts'
+import { runResult } from './effect-bridge.ts'
 import type { BotHandle } from './main.ts'
 import { abort } from './prompt.ts'
-import { runResult } from './effect-bridge.ts'
 import { parseFirst, toDbDate, type ScheduledTaskRow } from './rows.ts'
 import {
   cliCommand,

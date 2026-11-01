@@ -1,7 +1,8 @@
 // Snapshot tests of the markdown pipeline on realistic model outputs.
 
-import dedent from 'string-dedent'
 import { expect, test } from 'bun:test'
+
+import dedent from 'string-dedent'
 
 import { markdownPayloads } from './components.ts'
 import { renderMarkdown } from './render-markdown.ts'

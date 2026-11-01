@@ -3,15 +3,17 @@
 // (migration and credential resolution happen before the bot process exists).
 // Every subcommand is an RPC client instead.
 
-import fs from 'node:fs'
 import { spawn, type ChildProcess } from 'node:child_process'
+import fs from 'node:fs'
+
 import type { Goke } from 'goke'
 
 import { distCliEntry, writeAutostartScript } from '../../autostart.ts'
 import { BUILTIN_SKILL_IDS, parseDisabledSkills } from '../../builtin-skills.ts'
-import { DEFAULT_LOCK_PORT, RESTART_EXIT_CODE, startLockServer } from '../http/rpc.ts'
 import { createLogger, setLogFile } from '../../logger.ts'
 import { runtimeExecutable } from '../../runtime.ts'
+import { DEFAULT_LOCK_PORT, RESTART_EXIT_CODE, startLockServer } from '../http/rpc.ts'
+
 import { DATA_DIR_HELP, dataDirOrDefault, fail } from './shared.ts'
 
 const logger = createLogger('CLI')

@@ -1,11 +1,12 @@
 // Phase 4: permission requests as Accept / Accept Always / Deny buttons,
 // including requests of a subagent, shown in the parent thread.
 
-import fs from 'node:fs'
-import { ComponentType, type APIMessage } from './adapters/discord/index.ts'
-import type { DeterministicMatcher } from 'opencode-deterministic-provider'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
+import fs from 'node:fs'
 
+import type { DeterministicMatcher } from 'opencode-deterministic-provider'
+
+import { ComponentType, type APIMessage } from './adapters/discord/index.ts'
 import type { BotHandle } from './main.ts'
 import {
   TEST_USER_ID,

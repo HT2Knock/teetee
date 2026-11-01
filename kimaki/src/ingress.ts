@@ -9,10 +9,12 @@
 // Attachments become prompt files; voice messages are transcribed into the
 // same Route as text. Edits and deletes of queued messages update the queue.
 
-import { Data } from 'effect'
 import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+
+import { Data } from 'effect'
+
 import {
   Events,
   GuildMember,
@@ -22,17 +24,16 @@ import {
   type Guild,
   type Message,
 } from './adapters/discord/index.ts'
-import { attempt } from './errors.ts'
-import { runResult } from './effect-bridge.ts'
-
-import { projectOf, type Bot, type PromptFile } from './bot.ts'
-import { formatError, NOTIFY_MESSAGE_FLAGS, SILENT_MESSAGE_FLAGS } from './format-parts.ts'
-import { createLogger } from './logger.ts'
 import { parseInput, sendInput } from './adapters/http/routes.ts'
+import { projectOf, type Bot, type PromptFile } from './bot.ts'
+import { runResult } from './effect-bridge.ts'
+import { attempt } from './errors.ts'
+import { formatError, NOTIFY_MESSAGE_FLAGS, SILENT_MESSAGE_FLAGS } from './format-parts.ts'
 import { dispatch, send, startSession } from './input.ts'
+import { createLogger } from './logger.ts'
 import { cancelQueuedPrompt, requeueEdited } from './prompt.ts'
-import { REMOTE_PROMPT_FILE, REMOTE_RESULT_PREFIX, REMOTE_SEND_PREFIX } from './remote-send.ts'
 import { queuedItemFor } from './queue.ts'
+import { REMOTE_PROMPT_FILE, REMOTE_RESULT_PREFIX, REMOTE_SEND_PREFIX } from './remote-send.ts'
 import { parseTextMessage } from './routes.ts'
 
 const logger = createLogger('INGRESS')

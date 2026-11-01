@@ -2,10 +2,11 @@
 // OpenCode catalog: /<agent>-agent, /<cmd>-cmd, /<skill>-skill, and
 // /queue-command. MCP prompts get no slash command; they run as messages.
 
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import path from 'node:path'
+
 import type { DeterministicMatcher } from 'opencode-deterministic-provider'
-import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
 import { entryArgv } from './runtime.ts'

@@ -1,11 +1,11 @@
 // Phase 1: a channel message creates a thread and a session, the reply and a
 // footer appear, and follow-ups continue the same session.
 
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { MessageFlags } from './adapters/discord/index.ts'
-import { afterAll, beforeAll, expect, test } from 'bun:test'
 
+import { MessageFlags } from './adapters/discord/index.ts'
 import type { BotHandle } from './main.ts'
 import { parseFirst, parseRows, type ThreadSessionRow } from './rows.ts'
 import { sessionEventsFile } from './session-events.ts'

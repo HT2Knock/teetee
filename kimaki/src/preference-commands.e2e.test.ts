@@ -2,10 +2,11 @@
 // switch the session in OpenCode (next step); in a channel they set the
 // default for new sessions.
 
-import fs from 'node:fs'
-import type { DeterministicMatcher } from 'opencode-deterministic-provider'
-import { ComponentType } from 'discord-api-types/v10'
 import { afterAll, beforeAll, expect, onTestFinished, test } from 'bun:test'
+import fs from 'node:fs'
+
+import { ComponentType } from 'discord-api-types/v10'
+import type { DeterministicMatcher } from 'opencode-deterministic-provider'
 
 import type { BotHandle } from './main.ts'
 import { parseFirst, type ChannelAgentRow, type ChannelModelRow, type ChannelVerbosityRow } from './rows.ts'

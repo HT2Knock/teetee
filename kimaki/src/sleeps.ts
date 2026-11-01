@@ -6,8 +6,9 @@
 // Any new input in the thread cancels the sleep (prompt.ts dispatch).
 
 import crypto from 'node:crypto'
-import dedent from 'string-dedent'
+
 import { Effect, Semaphore } from 'effect'
+import dedent from 'string-dedent'
 
 import { fetchThread, threadOfSession, type Bot } from './bot.ts'
 import { parseDuration } from './duration.ts'

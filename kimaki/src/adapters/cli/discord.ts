@@ -2,12 +2,13 @@
 // running bot, plus thread/user lookups and uploads with the saved bot token.
 
 import path from 'node:path'
+
 import { ChannelType } from 'discord-api-types/v10'
 import { wrapJsonSchema, type Goke } from 'goke'
-
 import dedent from 'string-dedent'
 
 import { callBot } from '../http/rpc.ts'
+
 import {
   action,
   DATA_DIR_HELP,

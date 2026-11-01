@@ -4,6 +4,7 @@
 // and cross-file isolation comes from separate processes/threads.
 
 import { PrismaLibSql } from '@prisma/adapter-libsql'
+
 import { PrismaClient } from './generated/client.js'
 
 export { PrismaClient }

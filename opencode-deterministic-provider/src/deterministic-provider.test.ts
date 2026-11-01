@@ -1,7 +1,8 @@
 // Tests for deterministic provider matcher selection and tool-call output.
 
-import { describe, expect, test } from 'vitest'
 import type { LanguageModelV3StreamPart } from '@ai-sdk/provider'
+import { describe, expect, test } from 'vitest'
+
 import { buildDeterministicOpencodeConfig, createDeterministicProvider } from './deterministic-provider.js'
 
 describe('createDeterministicProvider', () => {

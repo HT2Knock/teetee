@@ -5,7 +5,7 @@
 
 import crypto from 'node:crypto'
 import type http from 'node:http'
-import { WebSocketServer, WebSocket } from 'ws'
+
 import { GatewayOpcodes, GatewayDispatchEvents, ApplicationFlags } from 'discord-api-types/v10'
 import type {
   GatewaySendPayload,
@@ -25,6 +25,8 @@ import type {
   APISoundboardSound,
   GatewayVoiceServerUpdateDispatchData,
 } from 'discord-api-types/v10'
+import { WebSocketServer, WebSocket } from 'ws'
+
 import type { DiscordVoiceServer } from './voice.js'
 
 interface ConnectedClient {

@@ -4,8 +4,8 @@
 import { expect, test } from 'bun:test'
 
 import { queuedItems } from './queue.ts'
-import { emptyView, isBusy, type ThreadEvent } from './thread-reducer.ts'
 import { effectLines, loadFixture, replay } from './test/replay.ts'
+import { emptyView, isBusy, type ThreadEvent } from './thread-reducer.ts'
 
 test('tools: names from tool.input.started, failed tool lines, read-only tools hidden, one footer', () => {
   const { effects } = replay({ events: loadFixture('tools.events.jsonl') })

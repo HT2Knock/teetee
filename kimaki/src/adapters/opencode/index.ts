@@ -17,7 +17,6 @@
 //     deliver held events, then go live
 //   on error: backoff 0.5s -> 30s, retry
 
-import { Data } from 'effect'
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -25,8 +24,10 @@ import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
+
 import { OpenCode, type OpenCodeClient, type V2Event } from '@opencode/client'
 import { Service } from '@opencode/client/service'
+import { Data } from 'effect'
 import { parse as parseJsonc } from 'jsonc-parser'
 
 import {

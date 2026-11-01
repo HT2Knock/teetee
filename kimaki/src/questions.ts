@@ -14,6 +14,9 @@
 // several questions wait in the createQuestionHandlers closure until the last
 // one (lost on restart, the user picks again).
 
+import type { FormInfo, JsonValue, V2Event } from '@opencode/client'
+import { castDraft, type Draft } from 'immer'
+
 import {
   ActionRowBuilder,
   ComponentType,
@@ -24,14 +27,10 @@ import {
   type ModalSubmitInteraction,
   type StringSelectMenuInteraction,
 } from './adapters/discord/index.ts'
-import type { FormInfo, JsonValue, V2Event } from '@opencode/client'
-
 import { oc, type Bot } from './bot.ts'
-import { createLogger } from './logger.ts'
-import { castDraft, type Draft } from 'immer'
-
 import { textOnly, type UiMessage } from './format-parts.ts'
 import type { InteractionRoutes } from './interaction-context.ts'
+import { createLogger } from './logger.ts'
 import type { Emit, ThreadView } from './thread-reducer.ts'
 
 const logger = createLogger('QUESTION')

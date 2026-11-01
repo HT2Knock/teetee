@@ -3,8 +3,8 @@
 // does. The control token sees every tool; the notify token only the tools that
 // post to Discord, and never a session start or a transcript read.
 
-import fs from 'node:fs'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
+import fs from 'node:fs'
 
 import { send } from '../../input.ts'
 import type { BotHandle } from '../../main.ts'

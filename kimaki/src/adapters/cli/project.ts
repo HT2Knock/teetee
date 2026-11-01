@@ -2,9 +2,11 @@
 // the running bot; channel settings and worktrees go through the bot too.
 
 import path from 'node:path'
+
 import type { Goke } from 'goke'
 
 import { callBot } from '../http/rpc.ts'
+
 import { action, DATA_DIR_HELP, dataDirOrDefault, fail, printJson } from './shared.ts'
 
 const WORKTREE_TIMEOUT_MS = 25 * 60_000

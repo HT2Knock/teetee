@@ -2,10 +2,11 @@
 // /fork and /fork-subagent. Resumed and forked threads replay the recent
 // history, then continue the same OpenCode session.
 
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import path from 'node:path'
+
 import type { DeterministicMatcher } from 'opencode-deterministic-provider'
-import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
 import { parseRows, type ThreadSessionRow } from './rows.ts'

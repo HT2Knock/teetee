@@ -18,7 +18,6 @@ import {
   type StringSelectMenuInteraction,
   type ThreadChannel,
 } from './adapters/discord/index.ts'
-
 import { projectOf, sessionDirectory, type Author, type Bot } from './bot.ts'
 import { runResult } from './effect-bridge.ts'
 import { ConfigError, DiscordError } from './errors.ts'

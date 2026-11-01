@@ -1,11 +1,12 @@
 // Reducer core cases on recorded OpenCode V2 events: banner, text, footer,
 // typing, and the explicit list of event types that produce effects.
 
-import type { JsonValue, V2Event } from '@opencode/client'
 import { expect, test } from 'bun:test'
 
-import { emptyView, reduce, type ThreadEvent } from './thread-reducer.ts'
+import type { JsonValue, V2Event } from '@opencode/client'
+
 import { DEFAULT_PREFS, effectLines, loadFixture, replay, rootSessionId } from './test/replay.ts'
+import { emptyView, reduce, type ThreadEvent } from './thread-reducer.ts'
 
 test('text-only turn: banner, text, typing, footer with context percent', () => {
   const events = loadFixture('tools.events.jsonl').filter((event) => !event.type.startsWith('session.tool.'))

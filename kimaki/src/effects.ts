@@ -16,6 +16,7 @@
 import { execFile } from 'node:child_process'
 import path from 'node:path'
 import { promisify } from 'node:util'
+
 import {
   ComponentType,
   MessageFlags,
@@ -24,12 +25,11 @@ import {
   type MessageCreateOptions,
   type SendableChannels,
 } from './adapters/discord/index.ts'
-
+import { DiscordError } from './errors.ts'
 import { formatFooter, NOTIFY_MESSAGE_FLAGS, SILENT_MESSAGE_FLAGS, type UiMessage } from './format-parts.ts'
 import { createLogger } from './logger.ts'
 import { segmentPayloads, type DiscordPayload } from './markdown/components.ts'
 import { DISCORD_TEXT_LIMIT, renderMarkdown } from './markdown/render-markdown.ts'
-import { DiscordError } from './errors.ts'
 import type { Effect, UploadFile } from './thread-reducer.ts'
 
 const logger = createLogger('EFFECTS')

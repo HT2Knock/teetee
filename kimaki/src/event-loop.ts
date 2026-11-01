@@ -15,14 +15,12 @@
 //                    bot run): read its project channel and directory once.
 
 import { DiscordAPIError, RESTJSONErrorCodes, type Client } from './adapters/discord/index.ts'
-
+import type { ConnectContext, OpenCodeClient, V2Event } from './adapters/opencode/index.ts'
 import { verbosityFromV1, type KimakiDb } from './db.ts'
 import type { EffectsRunner } from './effects.ts'
 import { DbError, DiscordError, OpenCodeError } from './errors.ts'
 import { formatDuration } from './format-parts.ts'
 import { createLogger } from './logger.ts'
-import type { ConnectContext, OpenCodeClient, V2Event } from './adapters/opencode/index.ts'
-import type { EventRecorder } from './session-events.ts'
 import { queuedItems } from './queue.ts'
 import {
   parseFirst,
@@ -31,6 +29,7 @@ import {
   type ChannelVerbosityRow,
   type ThreadSessionRow,
 } from './rows.ts'
+import type { EventRecorder } from './session-events.ts'
 import type { BotStore } from './store.ts'
 import {
   emptyView,

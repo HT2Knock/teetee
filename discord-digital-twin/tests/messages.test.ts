@@ -2,10 +2,11 @@
 // Validates that discord.js Client can send/receive messages through the
 // DigitalDiscord server and that state is correctly persisted in the DB.
 
-import { describe, test, expect, beforeAll, afterAll } from 'vitest'
+import { ComponentType } from 'discord-api-types/v10'
 import { Client, GatewayIntentBits, ChannelType, Events, Partials } from 'discord.js'
 import type { Message as DjsMessage, TextChannel } from 'discord.js'
-import { ComponentType } from 'discord-api-types/v10'
+import { describe, test, expect, beforeAll, afterAll } from 'vitest'
+
 import { DigitalDiscord, getMessageVisibleText } from '../src/index.js'
 
 describe('messages and reactions', () => {

@@ -6,6 +6,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import url from 'node:url'
+
 import { ChannelType, GatewayDispatchEvents, InteractionType, ComponentType } from 'discord-api-types/v10'
 import type {
   APIMessage,
@@ -15,12 +16,13 @@ import type {
   APIInteraction,
   APIMessageReference,
 } from 'discord-api-types/v10'
+
 import { createPrismaClient, type PrismaClient } from './db.js'
-import { generateSnowflake } from './snowflake.js'
-import { createServer, startServer, stopServer, type ServerComponents, type TypingEventRecord } from './server.js'
 import type { GatewayState } from './gateway.js'
-import { DiscordVoiceServer, type VoiceStream } from './voice.js'
 import { userToAPI, guildToAPI, memberToAPI, channelToAPI, messageToAPI, isoTimestamp } from './serializers.js'
+import { createServer, startServer, stopServer, type ServerComponents, type TypingEventRecord } from './server.js'
+import { generateSnowflake } from './snowflake.js'
+import { DiscordVoiceServer, type VoiceStream } from './voice.js'
 
 const MAX_VITEST_WAIT_TIMEOUT_MS = 10_000
 

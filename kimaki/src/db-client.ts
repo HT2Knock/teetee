@@ -7,9 +7,9 @@
 // `yield* sql\`...\`` inside the module that owns the query; the connection,
 // the error type and the Layer are already Effect's.
 
+import { SqliteClient } from '@effect/sql-sqlite-bun'
 import { Cause, Effect, Exit, ManagedRuntime } from 'effect'
 import { SqlClient } from 'effect/sql'
-import { SqliteClient } from '@effect/sql-sqlite-bun'
 
 import { DbError } from './errors.ts'
 

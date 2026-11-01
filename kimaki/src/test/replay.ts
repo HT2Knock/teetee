@@ -3,11 +3,12 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+
 import type { V2Event } from '@opencode/client'
 
-import { emptyView, reduce, type Effect, type Prefs, type ThreadEvent, type ThreadView } from '../thread-reducer.ts'
-import { formatFooter, type UiMessage } from '../format-parts.ts'
 import { ButtonStyle, ComponentType } from '../adapters/discord/index.ts'
+import { formatFooter, type UiMessage } from '../format-parts.ts'
+import { emptyView, reduce, type Effect, type Prefs, type ThreadEvent, type ThreadView } from '../thread-reducer.ts'
 
 const FIXTURES_DIR = path.join(import.meta.dirname, '../../../docs/opencode-v2-events')
 

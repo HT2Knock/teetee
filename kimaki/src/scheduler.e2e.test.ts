@@ -2,12 +2,11 @@
 // one-shot, cron, thread and pre-run routines against the twin and a real
 // OpenCode server. Time is a manual clock; nothing waits for real time.
 
-import fs from 'node:fs'
-import { git } from './worktrees.ts'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
+import fs from 'node:fs'
 
-import type { BotHandle } from './main.ts'
 import { send } from './input.ts'
+import type { BotHandle } from './main.ts'
 import {
   manualClock,
   schedulingKit,
@@ -21,6 +20,7 @@ import {
   type OpencodeTestServer,
   type TestTwin,
 } from './test/harness.ts'
+import { git } from './worktrees.ts'
 
 const dataDir = tempDataDir()
 const clock = manualClock(Date.parse('2030-01-01T09:00:00Z'))

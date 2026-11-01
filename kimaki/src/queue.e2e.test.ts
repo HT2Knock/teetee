@@ -1,10 +1,11 @@
 // Phase 3: the queue on the native OpenCode inbox. `. queue` waits for the run,
 // message delete/edit and /clear-queue change the inbox.
 
+import { afterAll, beforeAll, expect, onTestFinished, test } from 'bun:test'
 import fs from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
+
 import type { DeterministicMatcher } from 'opencode-deterministic-provider'
-import { afterAll, beforeAll, expect, onTestFinished, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
 import {

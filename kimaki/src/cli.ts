@@ -15,12 +15,12 @@ import {
   registerWorktreeCommands,
 } from './adapters/cli/project.ts'
 import { registerScheduleCommands, registerSendCommand } from './adapters/cli/schedule.ts'
-import { registerStartCommand } from './adapters/cli/start.ts'
 import {
   registerSessionActionCommands,
   registerSessionHistoryCommands,
   registerSessionQueryCommands,
 } from './adapters/cli/session.ts'
+import { registerStartCommand } from './adapters/cli/start.ts'
 
 const cli = goke('kimaki')
 

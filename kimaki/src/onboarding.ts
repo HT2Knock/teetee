@@ -10,17 +10,25 @@
 //
 // Existing project mappings also mark an upgraded install as already configured.
 
-import { Data } from 'effect'
 import { execFile, spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
+
 import * as clack from '@clack/prompts'
-import { ChannelType, Events, type Client, type Guild } from './adapters/discord/index.ts'
+import { API } from '@discordjs/core/http-only'
+import { Data } from 'effect'
 import dedent from 'string-dedent'
 
-import { API } from '@discordjs/core/http-only'
-
+import { ChannelType, Events, type Client, type Guild } from './adapters/discord/index.ts'
+import {
+  checkOpencode,
+  findOpencodeBinary,
+  installedOpencodeBinary,
+  OPENCODE_INSTALL_COMMAND,
+} from './adapters/opencode/index.ts'
+import type { Bot } from './bot.ts'
+import { runResult } from './effect-bridge.ts'
 import {
   ConfigError,
   DbError,
@@ -31,16 +39,8 @@ import {
   attempt,
 } from './errors.ts'
 import { NOTIFY_MESSAGE_FLAGS } from './format-parts.ts'
-import { createLogger } from './logger.ts'
-import {
-  checkOpencode,
-  findOpencodeBinary,
-  installedOpencodeBinary,
-  OPENCODE_INSTALL_COMMAND,
-} from './adapters/opencode/index.ts'
-import type { Bot } from './bot.ts'
 import { startSession } from './input.ts'
-import { runResult } from './effect-bridge.ts'
+import { createLogger } from './logger.ts'
 import { addProjectChannel, defaultChannelName, defaultProjectDirectory } from './project.ts'
 import { parseRows, type ChannelDirectoryRow } from './rows.ts'
 

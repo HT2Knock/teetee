@@ -9,6 +9,7 @@
 import fs from 'node:fs'
 
 import { ConfigError } from '../../errors.ts'
+
 import { mcpStateFile, type McpState } from './config-dir.ts'
 
 export async function writeMcpState({

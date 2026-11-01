@@ -2,10 +2,11 @@
 // command through the shim, the bot stores the wake with its clock, the
 // scheduler wakes the same thread, and a user message cancels the sleep.
 
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import { setTimeout as sleep } from 'node:timers/promises'
+
 import type { DeterministicMatcher } from 'opencode-deterministic-provider'
-import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
 import { parseFirst, type SessionSleepRow } from './rows.ts'

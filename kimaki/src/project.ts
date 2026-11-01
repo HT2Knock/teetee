@@ -9,6 +9,7 @@
 
 import os from 'node:os'
 import path from 'node:path'
+
 import { API } from '@discordjs/core/http-only'
 import { Effect } from 'effect'
 

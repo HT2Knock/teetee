@@ -5,8 +5,10 @@
 
 import crypto from 'node:crypto'
 import path from 'node:path'
-import { Events, MessageFlags, type Message, type TextChannel, type ThreadChannel } from './adapters/discord/index.ts'
 
+import { Events, MessageFlags, type Message, type TextChannel, type ThreadChannel } from './adapters/discord/index.ts'
+import type { SendInput } from './adapters/http/routes.ts'
+import type { OpenCodeClient } from './adapters/opencode/index.ts'
 import {
   cliContext,
   fetchThread,
@@ -23,12 +25,11 @@ import {
   type ModelChoice,
   type PromptFile,
 } from './bot.ts'
-import { ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
+import { disabledSkillRules } from './builtin-skills.ts'
 import { runResult } from './effect-bridge.ts'
+import { ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
 import { NOTIFY_MESSAGE_FLAGS, SILENT_MESSAGE_FLAGS } from './format-parts.ts'
 import { createLogger } from './logger.ts'
-import type { SendInput } from './adapters/http/routes.ts'
-import type { OpenCodeClient } from './adapters/opencode/index.ts'
 import { splitPromptFiles } from './prompt-files.ts'
 import { cancelPendingUi, interrupt, prompt, shell, steer } from './prompt.ts'
 import { formatEcho } from './queue.ts'
@@ -42,7 +43,6 @@ import {
 } from './remote-send.ts'
 import { parseTextMessage, type Route } from './routes.ts'
 import { parseFirst, type ChannelDirectoryRow } from './rows.ts'
-import { disabledSkillRules } from './builtin-skills.ts'
 import {
   type ChannelDefaults,
   type ChannelDefaultsRow,

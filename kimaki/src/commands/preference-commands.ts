@@ -16,6 +16,7 @@
 
 import crypto from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
+
 import {
   SlashCommandBuilder,
   type ButtonInteraction,
@@ -23,7 +24,6 @@ import {
   type MessageComponentInteraction,
   type StringSelectMenuInteraction,
 } from '../adapters/discord/index.ts'
-
 import { globalModel, oc, parseModel, type Bot, type ModelChoice } from '../bot.ts'
 import { verbosityFromV1, verbosityToV1, type Verbosity } from '../db.ts'
 import { runResult } from '../effect-bridge.ts'

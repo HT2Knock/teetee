@@ -1,8 +1,9 @@
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import { afterAll, beforeAll, expect, test } from 'bun:test'
+
 import type { BotHandle } from './main.ts'
 import { parseFirst, type GlobalModelRow } from './rows.ts'
 import { RUNTIME_NAME } from './runtime.ts'

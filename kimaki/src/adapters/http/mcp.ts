@@ -3,6 +3,7 @@
 // tokens.ts.
 
 import type { Bot } from '../../bot.ts'
+
 import { runLockRoute } from './routes.ts'
 import type { McpScope } from './tokens.ts'
 

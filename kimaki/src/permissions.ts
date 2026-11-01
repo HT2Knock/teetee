@@ -7,15 +7,14 @@
 //   click              ─▶ permission.reply
 //   permission.replied ─▶ buttons removed, decision shown
 
-import { ButtonStyle, MessageFlags, type ButtonInteraction } from './adapters/discord/index.ts'
 import type { PermissionRequest } from '@opencode/client'
-
-import { oc, type Bot } from './bot.ts'
-import { createLogger } from './logger.ts'
 import { castDraft, type Draft } from 'immer'
 
+import { ButtonStyle, MessageFlags, type ButtonInteraction } from './adapters/discord/index.ts'
+import { oc, type Bot } from './bot.ts'
 import { button, buttonRow, textOnly, type UiMessage } from './format-parts.ts'
 import type { InteractionRoutes } from './interaction-context.ts'
+import { createLogger } from './logger.ts'
 import type { Emit, ThreadView } from './thread-reducer.ts'
 
 const logger = createLogger('PERMISSION')
