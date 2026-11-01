@@ -23,6 +23,7 @@ import {
   type Message,
 } from './adapters/discord/index.ts'
 import { attempt } from './errors.ts'
+import { runResult } from './effect-bridge.ts'
 
 import { projectOf, type Bot, type PromptFile } from './bot.ts'
 import { formatError, NOTIFY_MESSAGE_FLAGS, SILENT_MESSAGE_FLAGS } from './format-parts.ts'
@@ -273,7 +274,7 @@ export function registerIngress(bot: Bot) {
     serialize(message.channelId, async () => {
       const item = queuedItemFor(bot, { threadId: message.channelId, messageId: message.id })
       if (!item) return
-      const result = await cancelQueuedPrompt(bot, { threadId: message.channelId, inboxID: item.inboxID })
+      const result = await runResult(cancelQueuedPrompt(bot, { threadId: message.channelId, inboxID: item.inboxID }))
       if (result instanceof Error) logger.warn(`delete of queued ${message.id} failed`, result)
     })
   })
@@ -298,7 +299,7 @@ export function registerIngress(bot: Bot) {
       // Read again: the item may have started while the files were saved.
       const item = queuedItemFor(bot, { threadId: full.channelId, messageId: full.id })
       if (!item) return
-      const result = await requeueEdited(bot, { message: full, inboxID: item.inboxID, files })
+      const result = await runResult(requeueEdited(bot, { message: full, inboxID: item.inboxID, files }))
       if (result instanceof Error) logger.warn(`edit of queued ${full.id} failed`, result)
     })
   })

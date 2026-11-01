@@ -13,11 +13,11 @@
 // order (prompt, then interrupt with resume) parks queued items for good.
 
 import fs from 'node:fs'
+import type { SessionMessageInfo } from '@opencode/client'
 import { Effect } from 'effect'
 import { type Message } from './adapters/discord/index.ts'
 
-import { oc, ocEffect, projectOf, rootSession, type Author, type Bot, type PromptFile } from './bot.ts'
-import { runResult } from './effect-bridge.ts'
+import { ocEffect, projectOf, rootSession, type Author, type Bot, type PromptFile } from './bot.ts'
 import { ConfigError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
 import { formatError } from './format-parts.ts'
 import { createLogger } from './logger.ts'
@@ -94,36 +94,40 @@ export function prompt(
 }
 
 // Questions and permissions of the thread (root and children) that wait for the user.
-export async function cancelPendingUi(
-  bot: Bot,
-  threadId: string,
-): Promise<OpenCodeUnavailableError | OpenCodeError | void> {
-  if (!bot.opencode.endpoint) return new OpenCodeUnavailableError({ reason: 'not connected' })
-  const view = bot.store.getState().threads[threadId]
-  if (!view) return
-  const forms = Object.entries(view.forms).map(([formID, form]) =>
-    oc(bot, 'session.form.cancel', (client) => client.session.form.cancel({ sessionID: form.sessionId, formID })),
-  )
-  const permissions = Object.entries(view.permissions).map(([requestID, request]) =>
-    oc(bot, 'permission.reply', (client) =>
-      client.permission.reply({ sessionID: request.sessionId, requestID, decision: 'reject' }),
-    ),
-  )
-  // Settled meanwhile by someone else is fine: log and go on.
-  for (const result of await Promise.all([...forms, ...permissions])) {
-    if (result instanceof Error) logger.warn(`cancel pending UI in ${threadId}`, result)
-  }
+export function cancelPendingUi(bot: Bot, threadId: string): Effect.Effect<void, OpenCodeUnavailableError> {
+  return Effect.gen(function* () {
+    if (!bot.opencode.endpoint) return yield* Effect.fail(new OpenCodeUnavailableError({ reason: 'not connected' }))
+    const view = bot.store.getState().threads[threadId]
+    if (!view) return
+    const forms = Object.entries(view.forms).map(([formID, form]) =>
+      ocEffect(bot, 'session.form.cancel', (client) =>
+        client.session.form.cancel({ sessionID: form.sessionId, formID }),
+      ),
+    )
+    const permissions = Object.entries(view.permissions).map(([requestID, request]) =>
+      ocEffect(bot, 'permission.reply', (client) =>
+        client.permission.reply({ sessionID: request.sessionId, requestID, decision: 'reject' }),
+      ),
+    )
+    // Settled meanwhile by someone else is fine: log and go on.
+    const failed = yield* Effect.all(
+      [...forms, ...permissions].map((call) =>
+        call.pipe(Effect.match({ onFailure: (error) => error, onSuccess: () => null })),
+      ),
+      { concurrency: 'unbounded' },
+    )
+    for (const error of failed) if (error) logger.warn(`cancel pending UI in ${threadId}`, error)
+  })
 }
 
-export async function interrupt(bot: Bot, sessionId: string): Promise<OpenCodeUnavailableError | OpenCodeError | void> {
-  const result = await oc(bot, 'session.interrupt', (client) =>
+export function interrupt(bot: Bot, sessionId: string): Effect.Effect<void, OpenCodeUnavailableError | OpenCodeError> {
+  return ocEffect(bot, 'session.interrupt', (client) =>
     client.session.interrupt({ sessionID: sessionId, resume: false }),
-  )
-  if (result instanceof Error) return result
+  ).pipe(Effect.asVoid)
 }
 
 // A plain message: it replaces whatever the session is doing.
-export async function steer(
+export function steer(
   bot: Bot,
   input: {
     sessionId: string
@@ -136,74 +140,80 @@ export async function steer(
     skills?: readonly string[]
     echo?: string
   },
-): Promise<OpenCodeUnavailableError | OpenCodeError | void> {
-  const cancelled = await cancelPendingUi(bot, input.threadId)
-  if (cancelled instanceof Error) return cancelled
-  const interrupted = await interrupt(bot, input.sessionId)
-  if (interrupted instanceof Error) return interrupted
-  return runResult(prompt(bot, { ...input, delivery: 'steer' }))
+): Effect.Effect<void, OpenCodeUnavailableError | OpenCodeError> {
+  return Effect.gen(function* () {
+    yield* cancelPendingUi(bot, input.threadId)
+    yield* interrupt(bot, input.sessionId)
+    yield* prompt(bot, { ...input, delivery: 'steer' })
+  })
 }
 
-export async function cancelQueuedPrompt(bot: Bot, { threadId, inboxID }: { threadId: string; inboxID: string }) {
-  const sessionId = rootSession(bot, threadId)
-  if (sessionId instanceof Error) return sessionId
-  const result = await oc(bot, 'session.inbox.cancel', (client) =>
-    client.session.inbox.cancel({ sessionID: sessionId, inboxID }),
-  )
-  if (result instanceof Error) return result
+export function cancelQueuedPrompt(
+  bot: Bot,
+  { threadId, inboxID }: { threadId: string; inboxID: string },
+): Effect.Effect<void, OpenCodeUnavailableError | OpenCodeError> {
+  return Effect.gen(function* () {
+    const sessionId = rootSession(bot, threadId)
+    if (typeof sessionId !== 'string') return yield* Effect.fail(sessionId)
+    yield* ocEffect(bot, 'session.inbox.cancel', (client) =>
+      client.session.inbox.cancel({ sessionID: sessionId, inboxID }),
+    )
+  })
 }
 
 // Cancels queued items: one by 1-based position, or all of them.
-export async function clearQueue(
+export function clearQueue(
   bot: Bot,
   { threadId, position }: { threadId: string; position?: number | null },
-): Promise<OpenCodeUnavailableError | OpenCodeError | { cleared: number }> {
-  const sessionId = rootSession(bot, threadId)
-  if (sessionId instanceof Error) return sessionId
-  const inbox = await oc(bot, 'session.inbox.list', (client) => client.session.inbox.list({ sessionID: sessionId }))
-  if (inbox instanceof Error) return inbox
-  const queued = inbox.filter((item) => item.type === 'user' && item.delivery === 'queue')
-  const targets = position ? queued.slice(position - 1, position) : queued
-  for (const item of targets) {
-    const result = await cancelQueuedPrompt(bot, { threadId, inboxID: item.id })
-    if (result instanceof Error) return result
-  }
-  return { cleared: targets.length }
+): Effect.Effect<{ cleared: number }, OpenCodeUnavailableError | OpenCodeError> {
+  return Effect.gen(function* () {
+    const sessionId = rootSession(bot, threadId)
+    if (typeof sessionId !== 'string') return yield* Effect.fail(sessionId)
+    const inbox = yield* ocEffect(bot, 'session.inbox.list', (client) =>
+      client.session.inbox.list({ sessionID: sessionId }),
+    )
+    const queued = inbox.filter((item) => item.type === 'user' && item.delivery === 'queue')
+    const targets = position ? queued.slice(position - 1, position) : queued
+    for (const item of targets) yield* cancelQueuedPrompt(bot, { threadId, inboxID: item.id })
+    return { cleared: targets.length }
+  })
 }
 
 // /abort: stop the run, drop the queue, cancel pending questions and permissions.
-export async function abort(bot: Bot, { threadId }: { threadId: string }) {
-  const sessionId = rootSession(bot, threadId)
-  if (sessionId instanceof Error) return sessionId
-  const slept = await runResult(cancelSleep(bot, sessionId))
-  if (slept instanceof Error) logger.warn(slept)
-  const cleared = await clearQueue(bot, { threadId })
-  if (cleared instanceof Error) return cleared
-  const cancelled = await cancelPendingUi(bot, threadId)
-  if (cancelled instanceof Error) return cancelled
-  const interrupted = await interrupt(bot, sessionId)
-  if (interrupted instanceof Error) return interrupted
-  // interrupt does not stop user shells (`!cmd`): they run in the background.
-  const killed = await killShells(bot, { sessionId })
-  if (killed instanceof Error) return killed
-  return cleared
+export function abort(
+  bot: Bot,
+  { threadId }: { threadId: string },
+): Effect.Effect<{ cleared: number }, OpenCodeUnavailableError | OpenCodeError> {
+  return Effect.gen(function* () {
+    const sessionId = rootSession(bot, threadId)
+    if (typeof sessionId !== 'string') return yield* Effect.fail(sessionId)
+    // A sleep that cannot be cancelled is worth a line, not a failed abort.
+    yield* cancelSleep(bot, sessionId).pipe(
+      Effect.catchTag('DbError', (error) => Effect.sync(() => logger.warn(error))),
+    )
+    const cleared = yield* clearQueue(bot, { threadId })
+    yield* cancelPendingUi(bot, threadId)
+    yield* interrupt(bot, sessionId)
+    // interrupt does not stop user shells (`!cmd`): they run in the background.
+    yield* killShells(bot, { sessionId })
+    return cleared
+  })
 }
 
 // An edited queued message: cancel the old item, queue the new text at the end.
-export async function requeueEdited(
+export function requeueEdited(
   bot: Bot,
   { message, inboxID, files }: { message: Message; inboxID: string; files: readonly PromptFile[] },
-) {
-  const route = parseTextMessage({ content: message.content })
-  const sessionId = rootSession(bot, message.channelId)
-  if (sessionId instanceof Error) return sessionId
-  const cancelled = await cancelQueuedPrompt(bot, { threadId: message.channelId, inboxID })
-  if (cancelled instanceof Error) return cancelled
-  const text = route?.kind === 'queue' || route?.kind === 'steer' ? route.text : files.length > 0 ? '' : null
-  if (text === null) return
-  const thread = message.channel.isThread() ? message.channel : null
-  return runResult(
-    prompt(bot, {
+): Effect.Effect<void, OpenCodeUnavailableError | OpenCodeError> {
+  return Effect.gen(function* () {
+    const route = parseTextMessage({ content: message.content })
+    const sessionId = rootSession(bot, message.channelId)
+    if (typeof sessionId !== 'string') return yield* Effect.fail(sessionId)
+    yield* cancelQueuedPrompt(bot, { threadId: message.channelId, inboxID })
+    const text = route?.kind === 'queue' || route?.kind === 'steer' ? route.text : files.length > 0 ? '' : null
+    if (text === null) return
+    const thread = message.channel.isThread() ? message.channel : null
+    yield* prompt(bot, {
       sessionId,
       threadId: message.channelId,
       threadName: thread?.name ?? '',
@@ -214,8 +224,8 @@ export async function requeueEdited(
       files,
       // IDs are unique per item: every edit gets its own.
       id: `${promptIdForMessage(message.id)}_e${message.editedTimestamp ?? Date.now()}`,
-    }),
-  )
+    })
+  })
 }
 
 // `!cmd` (spec 9.2.1): native session.shell, not interrupting and not
@@ -238,41 +248,59 @@ export function shell(
 }
 
 // User shells of a session that still run (for /abort).
-async function killShells(
+function killShells(
   bot: Bot,
   { sessionId }: { sessionId: string },
-): Promise<OpenCodeUnavailableError | OpenCodeError | void> {
-  const info = await oc(bot, 'session.get', (client) => client.session.get({ sessionID: sessionId }))
-  if (info instanceof Error) return info
-  const location = { directory: info.location.directory }
-  const shells = await oc(bot, 'shell.list', (client) => client.shell.list({ location }))
-  if (shells instanceof Error) return shells
-  const running = shells.data.filter((item) => item.status === 'running' && item.metadata['sessionID'] === sessionId)
-  for (const item of running) {
-    const removed = await oc(bot, 'shell.remove', (client) => client.shell.remove({ id: item.id, location }))
-    if (removed instanceof Error) return removed
-  }
+): Effect.Effect<void, OpenCodeUnavailableError | OpenCodeError> {
+  return Effect.gen(function* () {
+    const info = yield* ocEffect(bot, 'session.get', (client) => client.session.get({ sessionID: sessionId }))
+    const location = { directory: info.location.directory }
+    const shells = yield* ocEffect(bot, 'shell.list', (client) => client.shell.list({ location }))
+    const running = shells.data.filter((item) => item.status === 'running' && item.metadata['sessionID'] === sessionId)
+    for (const item of running) {
+      yield* ocEffect(bot, 'shell.remove', (client) => client.shell.remove({ id: item.id, location }))
+    }
+  })
 }
 
 // --- Session history: /undo, /redo.
 
+// allMessages reports a failed page as a value; this puts it in the error
+// channel, so /undo and /redo stay Effect end to end.
+function listUserMessages(
+  bot: Bot,
+  sessionId: string,
+): Effect.Effect<SessionMessageInfo[], OpenCodeUnavailableError | OpenCodeError> {
+  return Effect.gen(function* () {
+    const client = bot.opencode.endpoint?.client
+    if (!client) return yield* Effect.fail(new OpenCodeUnavailableError({ reason: 'not connected' }))
+    const listed = yield* Effect.promise(() => allMessages({ client, sessionId, type: 'user' }))
+    if (listed instanceof OpenCodeError) return yield* Effect.fail(listed)
+    return listed
+  })
+}
+
 // Revert needs an idle session: stop the run first, like the OpenCode TUI.
-async function idleSession(bot: Bot, threadId: string) {
-  const sessionId = rootSession(bot, threadId)
-  if (sessionId instanceof Error) return sessionId
-  const view = bot.store.getState().threads[threadId]
-  if (view && isBusy(view)) {
-    const interrupted = await interrupt(bot, sessionId)
-    if (interrupted instanceof Error) return interrupted
-    const waited = await oc(bot, 'session.wait', (client) => client.session.wait({ sessionID: sessionId }))
-    if (waited instanceof Error) return waited
-  }
-  const info = await oc(bot, 'session.get', (client) => client.session.get({ sessionID: sessionId }))
-  if (info instanceof Error) return info
-  // All user messages, oldest first: revert boundaries are user messages.
-  const messages = await oc(bot, 'message.list', (client) => allMessages({ client, sessionId, type: 'user' }))
-  if (messages instanceof Error) return messages
-  return { sessionId, revert: info.revert?.messageID ?? null, messages }
+function idleSession(
+  bot: Bot,
+  threadId: string,
+): Effect.Effect<
+  { sessionId: string; revert: string | null; messages: SessionMessageInfo[] },
+  OpenCodeUnavailableError | OpenCodeError
+> {
+  return Effect.gen(function* () {
+    const sessionId = rootSession(bot, threadId)
+    if (typeof sessionId !== 'string') return yield* Effect.fail(sessionId)
+    const view = bot.store.getState().threads[threadId]
+    if (view && isBusy(view)) {
+      yield* interrupt(bot, sessionId)
+      yield* ocEffect(bot, 'session.wait', (client) => client.session.wait({ sessionID: sessionId }))
+    }
+    const info = yield* ocEffect(bot, 'session.get', (client) => client.session.get({ sessionID: sessionId }))
+    // All user messages, oldest first: revert boundaries are user messages.
+    const messages = yield* listUserMessages(bot, sessionId)
+    return { sessionId, revert: info.revert?.messageID ?? null, messages }
+  })
 }
 
 // Undo only rewinds the conversation: `files: false` makes OpenCode skip snapshot.restore,
@@ -281,39 +309,44 @@ async function idleSession(bot: Bot, threadId: string) {
 const revertFiles = false
 
 // Hides the last turn. Repeating goes one turn further back.
-export async function undo(bot: Bot, { threadId }: { threadId: string }) {
-  const session = await idleSession(bot, threadId)
-  if (session instanceof Error) return session
-  const { messages } = session
-  const boundary = session.revert ? messages.findIndex((message) => message.id === session.revert) : messages.length
-  const target = messages[boundary - 1]
-  if (!target) return { reverted: false }
-  const staged = await oc(bot, 'session.revert.stage', (client) =>
-    client.session.revert.stage({ sessionID: session.sessionId, messageID: target.id, files: revertFiles }),
-  )
-  if (staged instanceof Error) return staged
-  return { reverted: true }
+export function undo(
+  bot: Bot,
+  { threadId }: { threadId: string },
+): Effect.Effect<{ reverted: boolean }, OpenCodeUnavailableError | OpenCodeError> {
+  return Effect.gen(function* () {
+    const session = yield* idleSession(bot, threadId)
+    const { messages } = session
+    const boundary = session.revert ? messages.findIndex((message) => message.id === session.revert) : messages.length
+    const target = messages[boundary - 1]
+    if (!target) return { reverted: false }
+    yield* ocEffect(bot, 'session.revert.stage', (client) =>
+      client.session.revert.stage({ sessionID: session.sessionId, messageID: target.id, files: revertFiles }),
+    )
+    return { reverted: true }
+  })
 }
 
 // One turn forward again; past the last turn the revert is cleared.
-export async function redo(bot: Bot, { threadId }: { threadId: string }) {
-  const session = await idleSession(bot, threadId)
-  if (session instanceof Error) return session
-  if (!session.revert) return { restored: 'nothing' as const }
-  const index = session.messages.findIndex((message) => message.id === session.revert)
-  const next = index >= 0 ? session.messages[index + 1] : undefined
-  if (!next) {
-    const cleared = await oc(bot, 'session.revert.clear', (client) =>
-      client.session.revert.clear({ sessionID: session.sessionId }),
+export function redo(
+  bot: Bot,
+  { threadId }: { threadId: string },
+): Effect.Effect<{ restored: 'nothing' | 'all' | 'step' }, OpenCodeUnavailableError | OpenCodeError> {
+  return Effect.gen(function* () {
+    const session = yield* idleSession(bot, threadId)
+    if (!session.revert) return { restored: 'nothing' as const }
+    const index = session.messages.findIndex((message) => message.id === session.revert)
+    const next = index >= 0 ? session.messages[index + 1] : undefined
+    if (!next) {
+      yield* ocEffect(bot, 'session.revert.clear', (client) =>
+        client.session.revert.clear({ sessionID: session.sessionId }),
+      )
+      return { restored: 'all' as const }
+    }
+    yield* ocEffect(bot, 'session.revert.stage', (client) =>
+      client.session.revert.stage({ sessionID: session.sessionId, messageID: next.id, files: revertFiles }),
     )
-    if (cleared instanceof Error) return cleared
-    return { restored: 'all' as const }
-  }
-  const staged = await oc(bot, 'session.revert.stage', (client) =>
-    client.session.revert.stage({ sessionID: session.sessionId, messageID: next.id, files: revertFiles }),
-  )
-  if (staged instanceof Error) return staged
-  return { restored: 'step' as const }
+    return { restored: 'step' as const }
+  })
 }
 
 // `kimaki upload-to-discord`: posts local files into the session's thread (or the voice channel chat),

@@ -27,6 +27,7 @@ import {
   type InteractionRoutes,
   type SessionTarget,
 } from '../interaction-context.ts'
+import { runResult } from '../effect-bridge.ts'
 import { shellQuote } from '../onboarding.ts'
 import { dispatch } from '../input.ts'
 import { abort, clearQueue, redo, undo } from '../prompt.ts'
@@ -99,7 +100,7 @@ function parseCritiqueOutput(
 
 async function abortCommand(bot: Bot, interaction: ChatInputCommandInteraction, { thread }: SessionTarget) {
   await interaction.deferReply()
-  const result = await abort(bot, { threadId: thread.id })
+  const result = await runResult(abort(bot, { threadId: thread.id }))
   if (result instanceof Error) return replyError(interaction, result)
   const note = result.cleared > 0 ? `, cleared ${result.cleared} queued message${result.cleared > 1 ? 's' : ''}` : ''
   await interaction.editReply({ content: `Request **aborted**${note}` })
@@ -160,7 +161,9 @@ async function queueCommandChoices(bot: Bot, interaction: AutocompleteInteractio
 
 async function clearQueueCommand(bot: Bot, interaction: ChatInputCommandInteraction, { thread }: SessionTarget) {
   await interaction.deferReply()
-  const result = await clearQueue(bot, { threadId: thread.id, position: interaction.options.getInteger('position') })
+  const result = await runResult(
+    clearQueue(bot, { threadId: thread.id, position: interaction.options.getInteger('position') }),
+  )
   if (result instanceof Error) return replyError(interaction, result)
   const content =
     result.cleared === 0
@@ -193,7 +196,7 @@ async function compactCommand(bot: Bot, interaction: ChatInputCommandInteraction
 
 async function undoCommand(bot: Bot, interaction: ChatInputCommandInteraction, { thread }: SessionTarget) {
   await interaction.deferReply()
-  const result = await undo(bot, { threadId: thread.id })
+  const result = await runResult(undo(bot, { threadId: thread.id }))
   if (result instanceof Error) return replyError(interaction, result)
   if (!result.reverted) {
     await interaction.editReply({ content: 'No messages to undo' })
@@ -204,7 +207,7 @@ async function undoCommand(bot: Bot, interaction: ChatInputCommandInteraction, {
 
 async function redoCommand(bot: Bot, interaction: ChatInputCommandInteraction, { thread }: SessionTarget) {
   await interaction.deferReply()
-  const result = await redo(bot, { threadId: thread.id })
+  const result = await runResult(redo(bot, { threadId: thread.id }))
   if (result instanceof Error) return replyError(interaction, result)
   const content = {
     nothing: 'Nothing to redo - no previous undo found',

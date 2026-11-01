@@ -20,6 +20,7 @@ import {
 } from './test/harness.ts'
 import { send } from './input.ts'
 import { abort } from './prompt.ts'
+import { runResult } from './effect-bridge.ts'
 
 const exec = promisify(execFile)
 const dataDir = tempDataDir()
@@ -128,6 +129,6 @@ test('session wait returns for a real pending question; active discovery errors 
     env: { ...process.env, KIMAKI_OPENCODE_SERVICE_FILE: path.join(server.root, 'missing-service.json') },
   }).catch((error: Error & { code: number }) => error)
   expect(failure instanceof Error && failure.code).toBe(64)
-  const aborted = await abort(bot, { threadId: first.threadId })
+  const aborted = await runResult(abort(bot, { threadId: first.threadId }))
   if (aborted instanceof Error) throw aborted
 })
