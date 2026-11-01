@@ -24,7 +24,7 @@ import { ConfigError, OpenCodeError, OpenCodeUnavailableError } from './errors.t
 import { formatError } from './format-parts.ts'
 import { createLogger } from './logger.ts'
 import { splitPromptFiles } from './prompt-files.ts'
-import { parseTextMessage } from './routes.ts'
+import { parseTextMessage, type Route } from './routes.ts'
 import { allMessages } from './session-events.ts'
 import { cancelSleep } from './sleep-store.ts'
 import { type TurnContext } from './system-prompt.ts'
@@ -202,6 +202,13 @@ export function abort(
   })
 }
 
+// An edit keeps the typed text, an edit that only adds files re-queues an
+// empty prompt, and anything else drops the queued item.
+function editedPromptText({ route, fileCount }: { route: Route | null; fileCount: number }): string | null {
+  if (route?.kind === 'queue' || route?.kind === 'steer') return route.text
+  return fileCount > 0 ? '' : null
+}
+
 // An edited queued message: cancel the old item, queue the new text at the end.
 export function requeueEdited(
   bot: Bot,
@@ -212,7 +219,7 @@ export function requeueEdited(
     const sessionId = rootSession(bot, message.channelId)
     if (typeof sessionId !== 'string') return yield* Effect.fail(sessionId)
     yield* cancelQueuedPrompt(bot, { threadId: message.channelId, inboxID })
-    const text = route?.kind === 'queue' || route?.kind === 'steer' ? route.text : files.length > 0 ? '' : null
+    const text = editedPromptText({ route, fileCount: files.length })
     if (text === null) return
     const thread = message.channel.isThread() ? message.channel : null
     yield* prompt(bot, {
@@ -368,8 +375,8 @@ export async function upload(bot: Bot, { id, files }: { id: string; files: Array
     if (!stat?.isFile()) return new ConfigError({ reason: `File not found: ${file.path}` })
     sized.push({ ...file, size: stat.size })
   }
-  const error = await new Promise<Error | null>((settle) =>
-    bot.effects.run(threadId, [{ type: 'attachments', files: sized, settle }]),
+  const error = await new Promise<Error | null>((resolve) =>
+    bot.effects.run(threadId, [{ type: 'attachments', files: sized, settle: resolve }]),
   )
   if (error) return error
   return { uploaded: files.map((file) => file.name) }

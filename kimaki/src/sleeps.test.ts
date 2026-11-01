@@ -9,7 +9,7 @@ import { Effect } from 'effect'
 import { ConfigError } from './errors.ts'
 import { createSleepLock } from './sleeps.ts'
 
-const tick = Effect.promise(() => new Promise<void>((done) => setTimeout(done, 5)))
+const tick = Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 5)))
 
 test('the sleep lock runs one session at a time and releases after a failure', async () => {
   const withSleepLock = createSleepLock()

@@ -71,7 +71,8 @@ export async function resolveTarget(bot: Bot, channelId: string | null): Promise
     .catch((cause) => new DiscordError({ operation: `fetch channel ${channelId}`, cause }))
   if (channel instanceof Error) return channel
   const thread = channel?.isThread() && channel.type !== ChannelType.AnnouncementThread ? channel : null
-  const projectChannelId = thread ? thread.parentId : channel?.type === ChannelType.GuildText ? channel.id : null
+  const textChannelId = channel?.type === ChannelType.GuildText ? channel.id : null
+  const projectChannelId = thread ? thread.parentId : textChannelId
   if (!projectChannelId) return new ConfigError({ reason: 'This command can only be used in text channels or threads' })
   const row = await runResult(projectOf(bot, projectChannelId))
   if (row instanceof Error) return row

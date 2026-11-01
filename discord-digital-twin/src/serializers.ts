@@ -12,16 +12,20 @@
 // For enum bitfield "zero" values (no flags set), we use a small helper
 // that keeps the cast localized to one place.
 
-import { GuildMemberFlags, GuildSystemChannelFlags, Locale, RoleFlags, ThreadMemberFlags } from 'discord-api-types/v10'
-import type {
-  APIUser,
-  APIGuild,
-  APIChannel,
-  APIMessage,
-  APIGuildMember,
-  APIRole,
-  APIThreadMember,
-  GuildFeature,
+import {
+  type APIChannel,
+  type APIGuild,
+  type APIGuildMember,
+  type APIMessage,
+  type APIRole,
+  type APIThreadMember,
+  type APIUser,
+  type GuildFeature,
+  type GuildMemberFlags,
+  type GuildSystemChannelFlags,
+  Locale,
+  RoleFlags,
+  type ThreadMemberFlags,
 } from 'discord-api-types/v10'
 
 import type { User, Guild, Channel, Message, GuildMember, Role, ThreadMember } from './generated/client.js'

@@ -255,6 +255,22 @@ async function localThread(bot: Bot, input: { sessionId?: string; threadId?: str
   return { ...target, thread }
 }
 
+// A session that waits on a form or permission is "waiting"; `active` lists the
+// running ones, so anything else is idle.
+function sessionStatus({
+  sessionID,
+  active,
+  waiting,
+}: {
+  sessionID: string
+  active: Readonly<Record<string, unknown>>
+  waiting: ReadonlySet<string>
+}): 'waiting' | 'busy' | 'idle' {
+  if (waiting.has(sessionID)) return 'waiting'
+  if (sessionID in active) return 'busy'
+  return 'idle'
+}
+
 // A session ID as is (it can be a subagent), else the root session of the thread.
 function sessionOf(bot: Bot, input: { sessionId?: string; threadId?: string }) {
   if (input.sessionId) return input.sessionId
@@ -905,10 +921,7 @@ const lockRoutes = {
       const excluded = input.exclude ?? []
       const rows = sessions
         .filter((session) => !excluded.includes(session.id) && (!input.active || session.id in active))
-        .map((session) => ({
-          ...session,
-          status: waiting.has(session.id) ? 'waiting' : session.id in active ? 'busy' : 'idle',
-        }))
+        .map((session) => ({ ...session, status: sessionStatus({ sessionID: session.id, active, waiting }) }))
       return rows
     },
   }),

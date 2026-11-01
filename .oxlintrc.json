@@ -10,16 +10,33 @@
   "rules": {
     "eqeqeq": ["error", "always", { "null": "ignore" }],
     "eslint/no-console": "error",
+    "eslint/no-else-return": "error",
+    "eslint/no-lonely-if": "error",
+    "eslint/no-nested-ternary": "error",
     "eslint/no-shadow": "error",
+    "eslint/no-throw-literal": "error",
+    "eslint/no-unneeded-ternary": "error",
     "eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
     "eslint/no-unsafe-finally": "error",
     "eslint/no-unsafe-optional-chaining": "error",
+    "eslint/no-useless-call": "error",
     "eslint/no-useless-escape": "error",
+    "eslint/no-useless-rename": "error",
+    "eslint/no-var": "error",
+    "eslint/object-shorthand": "error",
+    "eslint/prefer-const": "error",
+    "eslint/prefer-object-spread": "error",
+    "eslint/prefer-rest-params": "error",
+    "eslint/prefer-template": "error",
     "import/no-duplicates": "error",
+    "promise/param-names": "error",
+    "typescript/consistent-type-imports": "error",
     "typescript/no-explicit-any": "error",
     "unicorn/no-invalid-fetch-options": "error",
+    "unicorn/no-thenable": "off",
     "unicorn/no-useless-spread": "error",
-    "unicorn/no-thenable": "off"
+    "unicorn/prefer-node-protocol": "error",
+    "unicorn/prefer-number-properties": "error"
   },
   "overrides": [
     {
@@ -32,6 +49,15 @@
               {
                 "name": "discord.js",
                 "message": "Import Discord types and clients from src/adapters/discord instead."
+              },
+              {
+                "name": "@opencode-ai/sdk",
+                "message": "Use @opencode/client (OpenCode V2). @opencode-ai/sdk is OpenCode V1."
+              },
+              {
+                "name": "node:child_process",
+                "importNames": ["execSync", "spawnSync"],
+                "message": "Use async execFile or spawn with a timeout."
               }
             ]
           }
@@ -42,6 +68,37 @@
       "files": ["kimaki/src/adapters/discord/**"],
       "rules": {
         "no-restricted-imports": "off"
+      }
+    },
+    {
+      "files": ["kimaki/src/plugin/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "discord.js",
+                "message": "Plugin code runs inside OpenCode: no Discord client."
+              },
+              {
+                "name": "@opencode-ai/sdk",
+                "message": "Use @opencode/client (OpenCode V2). @opencode-ai/sdk is OpenCode V1."
+              },
+              {
+                "name": "node:child_process",
+                "importNames": ["execSync", "spawnSync"],
+                "message": "Use async execFile or spawn with a timeout."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["**/db.ts", "**/db-client.ts", "**/logger.ts", "**/schema.ts", "**/schema-sql.ts"],
+                "message": "Plugin code runs inside OpenCode: it must not import the logger or the database."
+              }
+            ]
+          }
+        ]
       }
     },
     {

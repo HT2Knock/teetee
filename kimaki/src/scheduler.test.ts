@@ -7,8 +7,11 @@ import { decodeTaskPayload, encodeTaskPayload, nextCronRun, nextRunOf, parseSend
 import { parseWakeAt } from './sleeps.ts'
 
 const at = (iso: string) => Date.parse(iso)
-const iso = (value: number | Error | null) =>
-  typeof value === 'number' ? new Date(value).toISOString() : value instanceof Error ? `Error: ${value.message}` : value
+const iso = (value: number | Error | null) => {
+  if (typeof value === 'number') return new Date(value).toISOString()
+  if (value instanceof Error) return `Error: ${value.message}`
+  return value
+}
 
 test('next run of one-shot and cron tasks, V1 timezones included', () => {
   const now = at('2026-01-01T10:00:00Z')
