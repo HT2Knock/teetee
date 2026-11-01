@@ -60,8 +60,10 @@ export function replay({
 function uiLine(message: UiMessage): string {
   const controls = message.components.flatMap((row) =>
     row.components.map((component) => {
-      if (component.type === ComponentType.Button) return component.style === ButtonStyle.Premium ? 'sku' : (component.label ?? '')
-      if (component.type === ComponentType.StringSelect) return component.options.map((option) => option.label).join('/')
+      if (component.type === ComponentType.Button)
+        return component.style === ButtonStyle.Premium ? 'sku' : (component.label ?? '')
+      if (component.type === ComponentType.StringSelect)
+        return component.options.map((option) => option.label).join('/')
       return String(component.type)
     }),
   )

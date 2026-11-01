@@ -25,7 +25,13 @@ import { createLogger } from './logger.ts'
 import type { ConnectContext, OpenCodeClient, V2Event } from './opencode-server.ts'
 import type { EventRecorder } from './session-events.ts'
 import { queuedItems } from './queue.ts'
-import { parseFirst, parseRows, type ChannelDirectoryRow, type ChannelVerbosityRow, type ThreadSessionRow } from './rows.ts'
+import {
+  parseFirst,
+  parseRows,
+  type ChannelDirectoryRow,
+  type ChannelVerbosityRow,
+  type ThreadSessionRow,
+} from './rows.ts'
 import type { BotStore } from './store.ts'
 import {
   emptyView,
@@ -43,7 +49,13 @@ const LOAD_RETRIES = 5
 const LOAD_RETRY_MS = 2_000
 const MAX_HELD_EVENTS = 1_000
 // Events that can change model context windows (opencode client data.ts does the same).
-const CATALOG_EVENTS: ReadonlySet<string> = new Set(['model.updated', 'provider.updated', 'integration.updated', 'credential.updated', 'credential.switched'])
+const CATALOG_EVENTS: ReadonlySet<string> = new Set([
+  'model.updated',
+  'provider.updated',
+  'integration.updated',
+  'credential.updated',
+  'credential.switched',
+])
 
 type Held = { events: ThreadEvent[]; loading: boolean; failures: number }
 
@@ -100,7 +112,9 @@ export function createEventLoop({
     if (!client) return Promise.resolve()
     const existing = modelLimits.get(directory)
     if (existing && !reload) return existing.load
-    const models = client.model.list({ location: { directory } }).catch((e) => new OpenCodeError({ operation: 'model.list', cause: e }))
+    const models = client.model
+      .list({ location: { directory } })
+      .catch((e) => new OpenCodeError({ operation: 'model.list', cause: e }))
     const load = models.then((result) => {
       // A reconnect or a newer reload replaced this load: its result is stale.
       if (modelLimits.get(directory)?.load !== load) return
@@ -109,7 +123,9 @@ export function createEventLoop({
         logger.warn(result)
         return
       }
-      const limits = Object.fromEntries(result.data.map((model) => [`${model.providerID}/${model.id}`, model.limit.context]))
+      const limits = Object.fromEntries(
+        result.data.map((model) => [`${model.providerID}/${model.id}`, model.limit.context]),
+      )
       modelLimits.set(directory, { load, limits })
     })
     modelLimits.set(directory, { load, limits: existing?.limits ?? null })
@@ -124,9 +140,11 @@ export function createEventLoop({
     const verbosity = state.verbosity[view.channelId] ?? verbosityFromV1(null)
     const contextLimits = modelLimits.get(view.directory)?.limits ?? {}
     const result = reduce({ view, event, prefs: { verbosity, contextLimits } })
-    if (result.view !== view) store.setState((current) => ({ threads: { ...current.threads, [threadId]: result.view } }))
+    if (result.view !== view)
+      store.setState((current) => ({ threads: { ...current.threads, [threadId]: result.view } }))
     effects.run(threadId, result.effects)
-    if (event.type === 'session.moved' && event.data.sessionID === view.sessionId) void loadModelLimits(event.data.location.directory)
+    if (event.type === 'session.moved' && event.data.sessionID === view.sessionId)
+      void loadModelLimits(event.data.location.directory)
   }
 
   // One line per run start and end of a root session, so the log shows what each thread did.
@@ -139,7 +157,9 @@ export function createEventLoop({
     // Read before the fold clears it.
     const turn = threads[threadId]?.turn
     const summary = (at: number) =>
-      turn ? ` after ${formatDuration(at - turn.startedAt)}${turn.model ? `, ${turn.model.providerID}/${turn.model.id}` : ''}, ${turn.tokens} tokens` : ''
+      turn
+        ? ` after ${formatDuration(at - turn.startedAt)}${turn.model ? `, ${turn.model.providerID}/${turn.model.id}` : ''}, ${turn.tokens} tokens`
+        : ''
     switch (event.type) {
       case 'session.execution.started':
         return logger.log(`run started in ${where}`)
@@ -160,11 +180,20 @@ export function createEventLoop({
     recorder.record(threadId, event)
     if (!isKimakiEvent(event)) analytics.observe(event, store.getState().roots[threadId] === eventSessionId(event))
     // Interrupted runs are skipped: a new message or /abort caused them.
-    if ((event.type === 'session.execution.succeeded' || event.type === 'session.execution.failed') && store.getState().roots[threadId] === event.data.sessionID) {
-      onRunEnded({ threadId, sessionId: event.data.sessionID, error: event.type === 'session.execution.failed' ? event.data.error.message : null })
+    if (
+      (event.type === 'session.execution.succeeded' || event.type === 'session.execution.failed') &&
+      store.getState().roots[threadId] === event.data.sessionID
+    ) {
+      onRunEnded({
+        threadId,
+        sessionId: event.data.sessionID,
+        error: event.type === 'session.execution.failed' ? event.data.error.message : null,
+      })
     }
     if (
-      (event.type === 'session.execution.succeeded' || event.type === 'session.execution.failed' || event.type === 'session.execution.interrupted') &&
+      (event.type === 'session.execution.succeeded' ||
+        event.type === 'session.execution.failed' ||
+        event.type === 'session.execution.interrupted') &&
       store.getState().roots[threadId] === event.data.sessionID
     ) {
       onTranscriptDue(event.data.sessionID)
@@ -183,17 +212,29 @@ export function createEventLoop({
     const sessionId = store.getState().roots[threadId]
     const loaded = await (async () => {
       if (!sessionId) return null
-      const thread = await discord.channels.fetch(threadId).catch((e) => e instanceof DiscordAPIError && e.code === RESTJSONErrorCodes.UnknownChannel ? null : new DiscordError({ operation: `fetch thread ${threadId}`, cause: e }))
+      const thread = await discord.channels
+        .fetch(threadId)
+        .catch((e) =>
+          e instanceof DiscordAPIError && e.code === RESTJSONErrorCodes.UnknownChannel
+            ? null
+            : new DiscordError({ operation: `fetch thread ${threadId}`, cause: e }),
+        )
       if (thread instanceof Error) return thread
       const channelId = thread?.isThread() ? thread.parentId : null
       if (!channelId) return null
-      const projectRows = await db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories WHERE channel_id = ${channelId} LIMIT 1`.catch((e) => new DbError({ operation: 'read channel_directories', cause: e }))
+      const projectRows = await db<
+        ChannelDirectoryRow[]
+      >`SELECT * FROM channel_directories WHERE channel_id = ${channelId} LIMIT 1`.catch(
+        (e) => new DbError({ operation: 'read channel_directories', cause: e }),
+      )
       if (projectRows instanceof Error) return projectRows
       const project = parseFirst<ChannelDirectoryRow>('channel_directories', projectRows)
       if (!project) return null
       const client = connection.client
       if (!client) return new OpenCodeError({ operation: 'load session directory while disconnected' })
-      const info = await client.session.get({ sessionID: sessionId }).catch((cause) => new OpenCodeError({ operation: 'read session directory', cause }))
+      const info = await client.session
+        .get({ sessionID: sessionId })
+        .catch((cause) => new OpenCodeError({ operation: 'read session directory', cause }))
       if (info instanceof Error) return info
       await loadModelLimits(info.location.directory)
       return { channelId, directory: info.location.directory }
@@ -209,7 +250,10 @@ export function createEventLoop({
     coldThreads.delete(threadId)
     // Unbound, rebound or gone meanwhile: the held events belong to no view.
     if (!sessionId || !loaded || loaded instanceof Error || store.getState().roots[threadId] !== sessionId) {
-      logger.warn(`dropping ${entry.events.length} events of thread ${threadId}`, loaded instanceof Error ? loaded : '(no project channel)')
+      logger.warn(
+        `dropping ${entry.events.length} events of thread ${threadId}`,
+        loaded instanceof Error ? loaded : '(no project channel)',
+      )
       return
     }
     if (!store.getState().threads[threadId]) {
@@ -233,7 +277,9 @@ export function createEventLoop({
     const chain: Array<{ sessionId: string; agent: string }> = []
     let current = sessionId
     for (let depth = 0; depth < 8; depth++) {
-      const info = await client.session.get({ sessionID: current }, { signal }).catch((e) => new OpenCodeError({ operation: 'session.get', cause: e }))
+      const info = await client.session
+        .get({ sessionID: current }, { signal })
+        .catch((e) => new OpenCodeError({ operation: 'session.get', cause: e }))
       if (info instanceof Error) return info
       if (!info.parentID) return null
       chain.unshift({ sessionId: current, agent: info.agent ?? 'subagent' })
@@ -290,7 +336,9 @@ export function createEventLoop({
     // Called after adopting children, right before the state reads start.
     beforeRead?: () => void
   }): Promise<OpenCodeError | ThreadSnapshot[]> {
-    const active = await client.session.active({ signal }).catch((e) => new OpenCodeError({ operation: 'session.active', cause: e }))
+    const active = await client.session
+      .active({ signal })
+      .catch((e) => new OpenCodeError({ operation: 'session.active', cause: e }))
     if (active instanceof Error) return active
     const unknown = Object.keys(active).filter((id) => !store.getState().sessionThreads[id] && !ignoredSessions.has(id))
     const found = await Promise.all(unknown.map((sessionId) => findAncestorThread({ client, sessionId, signal })))
@@ -301,7 +349,9 @@ export function createEventLoop({
     beforeRead?.()
     const { threads, sessionThreads, roots } = store.getState()
     const activeIds = Object.keys(active)
-    const targets = threadIds ?? [...new Set([...Object.keys(threads), ...activeIds.flatMap((id) => sessionThreads[id] ?? [])])]
+    const targets = threadIds ?? [
+      ...new Set([...Object.keys(threads), ...activeIds.flatMap((id) => sessionThreads[id] ?? [])]),
+    ]
     const at = Date.now()
     const results = await Promise.all(
       targets.map(async (threadId): Promise<OpenCodeError | ThreadSnapshot | null> => {
@@ -309,13 +359,17 @@ export function createEventLoop({
         if (!root) return null
         const view = threads[threadId]
         const activeSessionIds = activeIds.filter((id) => sessionThreads[id] === threadId)
-        const shown = view ? [...Object.values(view.forms), ...Object.values(view.permissions)].map((item) => item.sessionId) : []
+        const shown = view
+          ? [...Object.values(view.forms), ...Object.values(view.permissions)].map((item) => item.sessionId)
+          : []
         const queued = view && queuedItems(view).length > 0 ? [root] : []
         const sessionIds = [...new Set([...activeSessionIds, ...shown, ...queued])]
         const [info, sessions] = await Promise.all([
           // A deleted session keeps its last known directory.
           client.session.get({ sessionID: root }, { signal }).catch(() => null),
-          Promise.all(sessionIds.map((sessionId) => readSession({ client, sessionId, isRoot: sessionId === root, signal }))),
+          Promise.all(
+            sessionIds.map((sessionId) => readSession({ client, sessionId, isRoot: sessionId === root, signal })),
+          ),
         ])
         const failed = sessions.find((session) => session instanceof Error)
         if (failed instanceof Error) return failed
@@ -337,11 +391,29 @@ export function createEventLoop({
     return results.filter((result): result is ThreadSnapshot => result !== null && !(result instanceof Error))
   }
 
-  async function readSession({ client, sessionId, isRoot, signal }: { client: OpenCodeClient; sessionId: string; isRoot: boolean; signal: AbortSignal }): Promise<OpenCodeError | SessionSnapshot> {
+  async function readSession({
+    client,
+    sessionId,
+    isRoot,
+    signal,
+  }: {
+    client: OpenCodeClient
+    sessionId: string
+    isRoot: boolean
+    signal: AbortSignal
+  }): Promise<OpenCodeError | SessionSnapshot> {
     const [inbox, forms, permissions] = await Promise.all([
-      isRoot ? client.session.inbox.list({ sessionID: sessionId }, { signal }).catch((e) => new OpenCodeError({ operation: 'session.inbox.list', cause: e })) : null,
-      client.session.form.list({ sessionID: sessionId }, { signal }).catch((e) => new OpenCodeError({ operation: 'session.form.list', cause: e })),
-      client.permission.list({ sessionID: sessionId }, { signal }).catch((e) => new OpenCodeError({ operation: 'permission.list', cause: e })),
+      isRoot
+        ? client.session.inbox
+            .list({ sessionID: sessionId }, { signal })
+            .catch((e) => new OpenCodeError({ operation: 'session.inbox.list', cause: e }))
+        : null,
+      client.session.form
+        .list({ sessionID: sessionId }, { signal })
+        .catch((e) => new OpenCodeError({ operation: 'session.form.list', cause: e })),
+      client.permission
+        .list({ sessionID: sessionId }, { signal })
+        .catch((e) => new OpenCodeError({ operation: 'permission.list', cause: e })),
     ])
     if (inbox instanceof Error) return inbox
     if (forms instanceof Error) return forms
@@ -354,8 +426,12 @@ export function createEventLoop({
     // session after V1 /resume; the most recently updated one wins.
     async load(): Promise<DbError | void> {
       const [sessionRows, verbosityRows] = await Promise.all([
-        db<ThreadSessionRow[]>`SELECT * FROM thread_sessions ORDER BY updated_at ASC`.catch((e) => new DbError({ operation: 'read thread_sessions', cause: e })),
-        db<ChannelVerbosityRow[]>`SELECT * FROM channel_verbosity`.catch((e) => new DbError({ operation: 'read channel_verbosity', cause: e })),
+        db<ThreadSessionRow[]>`SELECT * FROM thread_sessions ORDER BY updated_at ASC`.catch(
+          (e) => new DbError({ operation: 'read thread_sessions', cause: e }),
+        ),
+        db<ChannelVerbosityRow[]>`SELECT * FROM channel_verbosity`.catch(
+          (e) => new DbError({ operation: 'read channel_verbosity', cause: e }),
+        ),
       ])
       if (sessionRows instanceof Error) return sessionRows
       if (verbosityRows instanceof Error) return verbosityRows
@@ -407,7 +483,9 @@ export function createEventLoop({
       store.setState((current) => {
         const { [threadId]: _root, ...roots } = current.roots
         const { [threadId]: _view, ...threads } = current.threads
-        const sessionThreads = Object.fromEntries(Object.entries(current.sessionThreads).filter(([, mapped]) => mapped !== threadId))
+        const sessionThreads = Object.fromEntries(
+          Object.entries(current.sessionThreads).filter(([, mapped]) => mapped !== threadId),
+        )
         return { roots, threads, sessionThreads }
       })
     },
@@ -419,7 +497,12 @@ export function createEventLoop({
       const client = connection.client
       if (!client || coldThreads.has(threadId)) return
       const entry: Held = { events: [], loading: true, failures: 0 }
-      const result = await snapshots({ client, signal: AbortSignal.timeout(10_000), threadIds: [threadId], beforeRead: () => coldThreads.set(threadId, entry) })
+      const result = await snapshots({
+        client,
+        signal: AbortSignal.timeout(10_000),
+        threadIds: [threadId],
+        beforeRead: () => coldThreads.set(threadId, entry),
+      })
       if (coldThreads.get(threadId) === entry) coldThreads.delete(threadId)
       if (!(result instanceof Error)) for (const snapshot of result) deliver(snapshot.threadId, snapshot.event)
       for (const event of entry.events) fold(threadId, event)
@@ -457,7 +540,8 @@ export function createEventLoop({
       const threadId = sessionThreads[sessionId]
       if (threadId) return deliver(threadId, event)
       if (ignoredSessions.has(sessionId)) return
-      const parentThread = event.type === 'session.created' && event.data.parentID ? sessionThreads[event.data.parentID] : null
+      const parentThread =
+        event.type === 'session.created' && event.data.parentID ? sessionThreads[event.data.parentID] : null
       if (parentThread) {
         store.setState((current) => ({ sessionThreads: { ...current.sessionThreads, [sessionId]: parentThread } }))
         return deliver(parentThread, event)

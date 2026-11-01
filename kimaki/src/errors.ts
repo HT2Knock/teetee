@@ -61,7 +61,17 @@ export class OpenCodeV1Error extends Data.TaggedError('OpenCodeV1Error')<{
   message: string
   cause?: unknown
 }> {
-  constructor({ binary, version, install, cause }: { binary: string; version: string; install: string; cause?: unknown }) {
+  constructor({
+    binary,
+    version,
+    install,
+    cause,
+  }: {
+    binary: string
+    version: string
+    install: string
+    cause?: unknown
+  }) {
     super({
       binary,
       version,

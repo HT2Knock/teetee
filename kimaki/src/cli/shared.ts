@@ -80,7 +80,10 @@ export async function readClient(errorCode = 1): Promise<OpenCodeClient> {
 }
 
 // Thread and session of any target. Subagent sessions have no row: they keep threadId null.
-export async function resolveTarget(value: string, dataDir: string | undefined): Promise<{ sessionId: string; threadId: string | null }> {
+export async function resolveTarget(
+  value: string,
+  dataDir: string | undefined,
+): Promise<{ sessionId: string; threadId: string | null }> {
   const target = parseTarget(value)
   if (target instanceof Error) fail(target)
   const opened = await openCliDb(dataDir)
@@ -91,7 +94,15 @@ export async function resolveTarget(value: string, dataDir: string | undefined):
   fail(result)
 }
 
-export async function waitAndPrintSession({ client, sessionId, signal }: { client: OpenCodeClient; sessionId: string; signal?: AbortSignal }) {
+export async function waitAndPrintSession({
+  client,
+  sessionId,
+  signal,
+}: {
+  client: OpenCodeClient
+  sessionId: string
+  signal?: AbortSignal
+}) {
   const waited = await waitForSessionReady({ client, sessionId, signal })
   if (waited instanceof Error) fail(waited)
   const markdown = await readSessionMarkdown({ client, sessionId })
@@ -101,7 +112,10 @@ export async function waitAndPrintSession({ client, sessionId, signal }: { clien
 
 // Discord REST with the bot token: KIMAKI_BOT_TOKEN (no kimaki.db needed, e.g. CI), else saved credentials.
 export async function discordApi(dataDir: string | undefined) {
-  const [{ envCredentials, gatewayUrlsFromEnv, readSavedCredentials, restApiUrl }, { createApi }] = await Promise.all([import('../credentials.ts'), import('../project.ts')])
+  const [{ envCredentials, gatewayUrlsFromEnv, readSavedCredentials, restApiUrl }, { createApi }] = await Promise.all([
+    import('../credentials.ts'),
+    import('../project.ts'),
+  ])
   const credentials = await (async () => {
     const fromEnv = envCredentials({ urls: gatewayUrlsFromEnv() })
     if (fromEnv) return fromEnv
@@ -112,20 +126,42 @@ export async function discordApi(dataDir: string | undefined) {
   })()
   if (credentials instanceof Error) fail(credentials)
   if (!credentials) fail(new Error('No saved bot credentials. Start Kimaki first, or set KIMAKI_BOT_TOKEN.'))
-  return { credentials, api: createApi({ token: credentials.token, restUrl: process.env['KIMAKI_DISCORD_REST_URL'] ?? restApiUrl(credentials) }) }
+  return {
+    credentials,
+    api: createApi({
+      token: credentials.token,
+      restUrl: process.env['KIMAKI_DISCORD_REST_URL'] ?? restApiUrl(credentials),
+    }),
+  }
 }
 
 type ThreadType = ChannelType.PublicThread | ChannelType.PrivateThread | ChannelType.AnnouncementThread
 
 export function isThread<T extends { type: ChannelType }>(channel: T): channel is Extract<T, { type: ThreadType }> {
-  return channel.type === ChannelType.PublicThread || channel.type === ChannelType.PrivateThread || channel.type === ChannelType.AnnouncementThread
+  return (
+    channel.type === ChannelType.PublicThread ||
+    channel.type === ChannelType.PrivateThread ||
+    channel.type === ChannelType.AnnouncementThread
+  )
 }
 
 // Project directory: --channel resolves through SQLite, else --project, else the current directory.
-export async function projectDirectory({ project, channel, dataDir }: { project: string | undefined; channel: string | undefined; dataDir: string | undefined }) {
+export async function projectDirectory({
+  project,
+  channel,
+  dataDir,
+}: {
+  project: string | undefined
+  channel: string | undefined
+  dataDir: string | undefined
+}) {
   if (!channel) return canonicalPath(project ?? process.cwd())
   const opened = await openCliDb(dataDir)
-  const rows = await opened.db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories WHERE channel_id = ${channel} LIMIT 1`.catch((cause) => new DbError({ operation: 'find channel', cause }))
+  const rows = await opened.db<
+    ChannelDirectoryRow[]
+  >`SELECT * FROM channel_directories WHERE channel_id = ${channel} LIMIT 1`.catch(
+    (cause) => new DbError({ operation: 'find channel', cause }),
+  )
   await opened.close()
   if (rows instanceof Error) fail(rows)
   const row = parseFirst<ChannelDirectoryRow>('channel_directories', rows)
@@ -134,7 +170,17 @@ export async function projectDirectory({ project, channel, dataDir }: { project:
 }
 
 // Runs a lock route on the running bot and prints its JSON result.
-export async function action<N extends LockRouteName>({ route, dataDir, input, signal }: { route: N; dataDir: string | undefined; input: LockRouteInput<N>; signal?: AbortSignal }) {
+export async function action<N extends LockRouteName>({
+  route,
+  dataDir,
+  input,
+  signal,
+}: {
+  route: N
+  dataDir: string | undefined
+  input: LockRouteInput<N>
+  signal?: AbortSignal
+}) {
   const result = await callBot({ dataDir: dataDirOrDefault(dataDir), route, input, signal })
   if (result instanceof Error) fail(result)
   process.stdout.write(`${JSON.stringify(result.data)}\n`)

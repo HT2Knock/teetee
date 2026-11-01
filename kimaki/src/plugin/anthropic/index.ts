@@ -30,7 +30,8 @@ const AUTHORIZE_URL = 'https://claude.ai/oauth/authorize'
 const TOKEN_URL = 'https://platform.claude.com/v1/oauth/token'
 const CALLBACK_PORT = 53692
 const REDIRECT_URI = `http://localhost:${CALLBACK_PORT}/callback`
-const SCOPES = 'org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload'
+const SCOPES =
+  'org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload'
 const CLAUDE_CODE_USER_AGENT = 'claude-cli/2.1.280 (external, cli)'
 // Browser: the localhost callback finishes the login. Headless: the user pastes
 // the callback URL, for a browser on another machine than OpenCode (Discord /login).
@@ -60,7 +61,8 @@ async function requestToken({ body, methodID }: { body: Record<string, string>; 
   if (!response.ok) return new AnthropicOAuthError({ reason: `token endpoint returned ${response.status}: ${text}` })
   const json = attempt(() => JSON.parse(text) as { access_token?: string; refresh_token?: string; expires_in?: number })
   if (json instanceof Error) return new AnthropicOAuthError({ reason: 'token response is not JSON', cause: json })
-  if (!json.access_token || !json.refresh_token || !json.expires_in) return new AnthropicOAuthError({ reason: 'token response has no tokens' })
+  if (!json.access_token || !json.refresh_token || !json.expires_in)
+    return new AnthropicOAuthError({ reason: 'token response has no tokens' })
   return Credential.OAuth.make({
     type: 'oauth',
     methodID,
@@ -72,13 +74,16 @@ async function requestToken({ body, methodID }: { body: Record<string, string>; 
 
 // OAuth callbacks fail by rejecting; OpenCode then ends the attempt.
 const tokenEffect = (input: { body: Record<string, string>; methodID: Integration.MethodID }) =>
-  Effect.promise(() => requestToken(input)).pipe(Effect.flatMap((result) => (result instanceof Error ? Effect.fail(result) : Effect.succeed(result))))
+  Effect.promise(() => requestToken(input)).pipe(
+    Effect.flatMap((result) => (result instanceof Error ? Effect.fail(result) : Effect.succeed(result))),
+  )
 
 // The user pastes the final redirect URL, `code#state`, or the bare code.
 export function parseAuthorizationInput(input: string) {
   const trimmed = input.trim()
   const url = attempt(() => new URL(trimmed))
-  if (!(url instanceof Error) && url.searchParams.get('code')) return { code: url.searchParams.get('code') ?? '', state: url.searchParams.get('state') ?? undefined }
+  if (!(url instanceof Error) && url.searchParams.get('code'))
+    return { code: url.searchParams.get('code') ?? '', state: url.searchParams.get('state') ?? undefined }
   const [code = '', state] = trimmed.split('#', 2)
   return { code, state }
 }
@@ -90,24 +95,32 @@ async function startCallbackServer({ state }: { state: string }) {
     const url = new URL(request.url ?? '/', REDIRECT_URI)
     const code = url.searchParams.get('code')
     if (url.pathname !== '/callback' || !code || url.searchParams.get('state') !== state) {
-      response.writeHead(400, { 'content-type': 'text/plain' }).end('Claude login failed: missing code or wrong state. Start the login again.')
+      response
+        .writeHead(400, { 'content-type': 'text/plain' })
+        .end('Claude login failed: missing code or wrong state. Start the login again.')
       return
     }
     received.resolve(code)
     response.writeHead(200, { 'content-type': 'text/plain' }).end('Claude authorized. You can close this page.')
   })
   const error = await new Promise<Error | null>((resolve) => {
-    server.once('error', (error) => resolve(error))
+    server.once('error', (cause) => resolve(cause))
     server.listen(CALLBACK_PORT, '127.0.0.1', () => resolve(null))
   })
-  if (error) return new AnthropicOAuthError({ reason: `cannot bind callback port ${CALLBACK_PORT}. Cancel any pending Claude login or free the port, then retry.`, cause: error })
+  if (error)
+    return new AnthropicOAuthError({
+      reason: `cannot bind callback port ${CALLBACK_PORT}. Cancel any pending Claude login or free the port, then retry.`,
+      cause: error,
+    })
   return { code: received.promise, close: () => server.close() }
 }
 
 const pkce = Effect.gen(function* () {
   const verifier = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url')
   const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url')
-  const challenge = Buffer.from(yield* Effect.promise(() => crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)))).toString('base64url')
+  const challenge = Buffer.from(
+    yield* Effect.promise(() => crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))),
+  ).toString('base64url')
   const params = new URLSearchParams({
     code: 'true',
     client_id: CLIENT_ID,
@@ -120,7 +133,14 @@ const pkce = Effect.gen(function* () {
   })
   const exchange = ({ code, methodID }: { code: string; methodID: Integration.MethodID }) =>
     tokenEffect({
-      body: { grant_type: 'authorization_code', client_id: CLIENT_ID, code, state, redirect_uri: REDIRECT_URI, code_verifier: verifier },
+      body: {
+        grant_type: 'authorization_code',
+        client_id: CLIENT_ID,
+        code,
+        state,
+        redirect_uri: REDIRECT_URI,
+        code_verifier: verifier,
+      },
       methodID,
     })
   return { state, url: `${AUTHORIZE_URL}?${params}`, exchange }
@@ -137,7 +157,9 @@ const authorize = () =>
       mode: 'auto' as const,
       url,
       instructions: 'Authorize in the browser. The login finishes by itself.',
-      callback: Effect.promise(() => callbackServer.code).pipe(Effect.flatMap((code) => exchange({ code, methodID: METHOD_ID }))),
+      callback: Effect.promise(() => callbackServer.code).pipe(
+        Effect.flatMap((code) => exchange({ code, methodID: METHOD_ID })),
+      ),
     }
   })
 
@@ -147,11 +169,16 @@ const authorizeHeadless = () =>
     return {
       mode: 'code' as const,
       url,
-      instructions: 'Authorize in the browser. The last page (localhost:53692) does not load: copy its full URL and paste it here.',
+      instructions:
+        'Authorize in the browser. The last page (localhost:53692) does not load: copy its full URL and paste it here.',
       callback: (input: string) => {
         const pasted = parseAuthorizationInput(input)
-        if (pasted.state !== undefined && pasted.state !== state) return Effect.fail(new AnthropicOAuthError({ reason: 'wrong state in the pasted text. Start the login again.' }))
-        if (!pasted.code) return Effect.fail(new AnthropicOAuthError({ reason: 'no authorization code in the pasted text' }))
+        if (pasted.state !== undefined && pasted.state !== state)
+          return Effect.fail(
+            new AnthropicOAuthError({ reason: 'wrong state in the pasted text. Start the login again.' }),
+          )
+        if (!pasted.code)
+          return Effect.fail(new AnthropicOAuthError({ reason: 'no authorization code in the pasted text' }))
         return exchange({ code: pasted.code, methodID: HEADLESS_METHOD_ID })
       },
     }
@@ -159,12 +186,16 @@ const authorizeHeadless = () =>
 
 // TODO: concurrent sessions can refresh the same token twice; OpenCode's Integration connection.resolve has no single-flight lock.
 const refresh = (credential: Credential.OAuth) =>
-  tokenEffect({ body: { grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: credential.refresh }, methodID: credential.methodID })
+  tokenEffect({
+    body: { grant_type: 'refresh_token', client_id: CLIENT_ID, refresh_token: credential.refresh },
+    methodID: credential.methodID,
+  })
 
 // Anthropic bills subscription requests that carry OpenCode's exact environment
 // block as third-party usage ("Third-party apps now draw from your extra usage").
 // Changing its wrapper keeps every line for the model and avoids the fingerprint.
-const OPENCODE_ENV_BLOCK = /Here is some useful information about the environment you are running in:\n<env>\n([\s\S]*?)<\/env>/
+const OPENCODE_ENV_BLOCK =
+  /Here is some useful information about the environment you are running in:\n<env>\n([\s\S]*?)<\/env>/
 
 // The body comes from OpenCode's Anthropic provider, so its shape is known.
 type MessagesBody = { system?: string | Array<{ type: string; text?: string }> }
@@ -175,8 +206,15 @@ export function rewriteSubscriptionRequest(body: string): string | null {
   const payload = attempt(() => JSON.parse(body) as MessagesBody)
   if (payload instanceof Error) return null
   const blocks = typeof payload.system === 'string' ? [{ type: 'text', text: payload.system }] : (payload.system ?? [])
-  const rewrapped = blocks.map((block) => (block.text === undefined ? block : { ...block, text: block.text.replace(OPENCODE_ENV_BLOCK, '<environment>\n$1</environment>') }))
-  const next = rewrapped[0]?.text === CLAUDE_CODE_IDENTITY ? rewrapped : [{ type: 'text', text: CLAUDE_CODE_IDENTITY }, ...rewrapped]
+  const rewrapped = blocks.map((block) =>
+    block.text === undefined
+      ? block
+      : { ...block, text: block.text.replace(OPENCODE_ENV_BLOCK, '<environment>\n$1</environment>') },
+  )
+  const next =
+    rewrapped[0]?.text === CLAUDE_CODE_IDENTITY
+      ? rewrapped
+      : [{ type: 'text', text: CLAUDE_CODE_IDENTITY }, ...rewrapped]
   if (JSON.stringify(next) === JSON.stringify(payload.system)) return null
   return JSON.stringify({ ...payload, system: next })
 }
@@ -210,7 +248,8 @@ export default Plugin.define({
             if (body === null) return
             const headers = new Headers(request.headers)
             headers.delete('content-length')
-            event.request = new Request(request, { body, headers })
+            if (request.method !== 'GET' && request.method !== 'HEAD')
+              event.request = new Request(request, { method: 'POST', body, headers })
           }),
         { providerID: 'anthropic' },
       )

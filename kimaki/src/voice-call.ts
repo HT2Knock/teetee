@@ -43,7 +43,15 @@ import { DbError, attempt } from './errors.ts'
 import type { RunEnded } from './event-loop.ts'
 import { asSubtext, formatError, formatShellFinished, formatToolFailed, formatToolLine } from './format-parts.ts'
 import { canUseKimaki } from './ingress.ts'
-import { DEFAULT_LIVE_URLS, DEFAULT_LIVE_VOICE, FRAME_BYTES, LIVE_VOICES, startLiveCall, type LiveCall, type LiveEvent } from './live-call.ts'
+import {
+  DEFAULT_LIVE_URLS,
+  DEFAULT_LIVE_VOICE,
+  FRAME_BYTES,
+  LIVE_VOICES,
+  startLiveCall,
+  type LiveCall,
+  type LiveEvent,
+} from './live-call.ts'
 import { createLogger } from './logger.ts'
 import { addVoiceChannel, listProjects } from './project.ts'
 import { formatEcho } from './queue.ts'
@@ -67,7 +75,9 @@ const shellArgs = z.object({
   background: z.boolean().optional(),
   timeoutSeconds: z.number().positive().optional(),
 })
-const postArgs = z.object({ text: z.string({ error: 'text must be a string' }).trim().min(1, { error: 'text must not be empty' }) })
+const postArgs = z.object({
+  text: z.string({ error: 'text must be a string' }).trim().min(1, { error: 'text must not be empty' }),
+})
 const toolInput = z.record(z.string(), z.json())
 const toolError = z.object({ error: z.string() })
 // One line of `kimaki send` output.
@@ -77,7 +87,11 @@ const SPEECH_END_MS = 400
 // Microphone audio queued per user, in 20 ms frames: a stalled clock must not add delay.
 const MAX_QUEUED_FRAMES = 50
 
-class VoiceCallError extends Data.TaggedError('VoiceCallError')<{ operation: string; message: string; cause?: unknown }> {
+class VoiceCallError extends Data.TaggedError('VoiceCallError')<{
+  operation: string
+  message: string
+  cause?: unknown
+}> {
   constructor({ operation, cause }: { operation: string; cause?: unknown }) {
     super({ operation, cause, message: `Voice call ${operation} failed` })
   }
@@ -87,7 +101,8 @@ class NoChatGPTError extends Data.TaggedError('NoChatGPTError')<{ message: strin
   constructor({ cause }: { cause?: unknown } = {}) {
     super({
       cause,
-      message: 'Voice calls need a ChatGPT subscription signed in to OpenCode. Run kimaki login openai, then join the voice channel again',
+      message:
+        'Voice calls need a ChatGPT subscription signed in to OpenCode. Run kimaki login openai, then join the voice channel again',
     })
   }
 }
@@ -102,7 +117,12 @@ class UnknownVoiceError extends Data.TaggedError('UnknownVoiceError')<{
   cause?: unknown
 }> {
   constructor({ voice, voices, cause }: { voice: string; voices: string; cause?: unknown }) {
-    super({ voice, voices, cause, message: `Unknown voice "${voice}". Pass one of: ${voices}. Use --voice default to reset` })
+    super({
+      voice,
+      voices,
+      cause,
+      message: `Unknown voice "${voice}". Pass one of: ${voices}. Use --voice default to reset`,
+    })
   }
 }
 
@@ -114,7 +134,15 @@ export function parseRealtimeVoice(name: string): UnknownVoiceError | { voice: s
 }
 
 // The --voice start flag: a voice saves it, "default" clears it.
-export async function saveVoiceCallVoice({ db, appId, voice }: { db: Bot['db']; appId: string; voice: string | null }): Promise<DbError | void> {
+export async function saveVoiceCallVoice({
+  db,
+  appId,
+  voice,
+}: {
+  db: Bot['db']
+  appId: string
+  voice: string | null
+}): Promise<DbError | void> {
   const saved = await db`INSERT INTO bot_settings (app_id, voice_call_voice)
     VALUES (${appId}, ${voice})
     ON CONFLICT(app_id) DO UPDATE SET voice_call_voice = ${voice}, updated_at = ${toDbDate(new Date())}`
@@ -136,8 +164,7 @@ export async function voiceCallSettings(bot: Pick<Bot, 'db' | 'token' | 'opencod
       FROM bot_tokens t
       LEFT JOIN bot_settings s ON s.app_id = t.app_id
       WHERE t.token = ${bot.token}
-      LIMIT 1`
-      .catch((cause) => new DbError({ operation: 'read voice call settings', cause })),
+      LIMIT 1`.catch((cause) => new DbError({ operation: 'read voice call settings', cause })),
     chatGPTCredential({ dbFile: bot.opencodeDbFile }),
   ])
   if (tokenRows instanceof Error) return tokenRows
@@ -173,8 +200,17 @@ async function globalSkills(bot: Bot, directory: string) {
   const listed = await oc(bot, 'skill.list', (client) => client.skill.list({ location: { directory } }))
   if (listed instanceof Error) return listed
   // Built-in skills have virtual paths like /builtin/report.md that the shell cannot read.
-  const onDisk = await Promise.all(listed.data.map((skill) => fs.promises.stat(skill.path).then((stat) => stat.isFile(), () => false)))
-  return listed.data.filter((_, index) => onDisk[index]).map((skill) => ({ id: skill.id, path: skill.path, description: skill.description ?? '' }))
+  const onDisk = await Promise.all(
+    listed.data.map((skill) =>
+      fs.promises.stat(skill.path).then(
+        (stat) => stat.isFile(),
+        () => false,
+      ),
+    ),
+  )
+  return listed.data
+    .filter((_, index) => onDisk[index])
+    .map((skill) => ({ id: skill.id, path: skill.path, description: skill.description ?? '' }))
 }
 
 // The user's global AGENTS.md and skills, read once per call so the instructions stay fixed.
@@ -184,7 +220,9 @@ async function globalContext(bot: Bot, { configDir }: { configDir: string }) {
   const [content, skills, agents] = await Promise.all([
     fs.promises
       .readFile(agentsPath, 'utf8')
-      .catch((cause: NodeJS.ErrnoException) => (cause.code === 'ENOENT' ? null : new VoiceCallError({ operation: `read ${agentsPath}`, cause }))),
+      .catch((cause: NodeJS.ErrnoException) =>
+        cause.code === 'ENOENT' ? null : new VoiceCallError({ operation: `read ${agentsPath}`, cause }),
+      ),
     globalSkills(bot, configDir),
     primaryAgents(bot, configDir),
   ])
@@ -195,7 +233,8 @@ async function globalContext(bot: Bot, { configDir }: { configDir: string }) {
     agentsMd: typeof content === 'string' && content.trim() ? { path: agentsPath, content } : null,
     skills: skills instanceof Error ? [] : skills,
     // Same list as session threads get: the IDs kimaki send --agent takes.
-    agents: agents instanceof Error ? [] : agents.map((agent) => ({ name: agent.id, description: agent.description ?? '' })),
+    agents:
+      agents instanceof Error ? [] : agents.map((agent) => ({ name: agent.id, description: agent.description ?? '' })),
   }
 }
 
@@ -257,7 +296,11 @@ function createSpeaker(connection: VoiceConnection, { onError }: { onError: (err
   const player = createAudioPlayer({ behaviors: { noSubscriber: NoSubscriberBehavior.Play, maxMissedFrames: 50 } })
   connection.subscribe(player)
   player.on('error', onError)
-  const reply: { stream: PassThrough | null; start: NodeJS.Timeout | null; retire: NodeJS.Timeout | null } = { stream: null, start: null, retire: null }
+  const reply: { stream: PassThrough | null; start: NodeJS.Timeout | null; retire: NodeJS.Timeout | null } = {
+    stream: null,
+    start: null,
+    retire: null,
+  }
   // Resolved by the next voiced packet.
   const waiters: Array<() => void> = []
   const retire = () => {
@@ -277,7 +320,10 @@ function createSpeaker(connection: VoiceConnection, { onError }: { onError: (err
         // Object mode: each write must stay one Opus packet.
         const stream = new PassThrough({ objectMode: true })
         reply.stream = stream
-        reply.start = setTimeout(() => player.play(createAudioResource(stream, { inputType: StreamType.Opus })), PREBUFFER_MS)
+        reply.start = setTimeout(
+          () => player.play(createAudioResource(stream, { inputType: StreamType.Opus })),
+          PREBUFFER_MS,
+        )
       }
       reply.stream.write(packet)
       if (silent) return
@@ -343,13 +389,18 @@ export function createVoiceCalls({ opencodeConfigDir }: { opencodeConfigDir: str
   const chains = new Map<string, Promise<void>>()
 
   function serialize(guildId: string, task: () => Promise<void>) {
-    const next = (chains.get(guildId) ?? Promise.resolve()).then(() => task().catch((error: Error) => logger.error(`voice state`, error)))
+    const next = (chains.get(guildId) ?? Promise.resolve()).then(() =>
+      task().catch((error: Error) => logger.error(`voice state`, error)),
+    )
     chains.set(guildId, next)
     return next
   }
 
   // Bot lines in the text chat of the voice channel, through the same FIFO as session output.
-  function post(bot: Bot, { channelId, text, markdown = false }: { channelId: string; text: string; markdown?: boolean }) {
+  function post(
+    bot: Bot,
+    { channelId, text, markdown = false }: { channelId: string; text: string; markdown?: boolean },
+  ) {
     bot.effects.run(channelId, [markdown ? { type: 'markdown', text, blankLineBefore: false } : { type: 'send', text }])
   }
 
@@ -361,14 +412,17 @@ export function createVoiceCalls({ opencodeConfigDir }: { opencodeConfigDir: str
 
   async function voiceChannelOf(bot: Bot, guildId: string) {
     const rows = await bot.db<ChannelDirectoryRow[]>`
-      SELECT * FROM channel_directories WHERE guild_id = ${guildId} AND channel_type = ${'voice'} LIMIT 1`
-      .catch((cause) => new DbError({ operation: 'read voice channel', cause }))
+      SELECT * FROM channel_directories WHERE guild_id = ${guildId} AND channel_type = ${'voice'} LIMIT 1`.catch(
+      (cause) => new DbError({ operation: 'read voice channel', cause }),
+    )
     if (rows instanceof Error) return rows
     return parseFirst<ChannelDirectoryRow>('channel_directories', rows)
   }
 
   async function permittedUsers(bot: Bot, { guild, channelId }: { guild: Guild; channelId: string }) {
-    const states = guild.voiceStates.cache.filter((state) => state.channelId === channelId && state.id !== bot.discord.user?.id)
+    const states = guild.voiceStates.cache.filter(
+      (state) => state.channelId === channelId && state.id !== bot.discord.user?.id,
+    )
     const users = new Map<string, Author>()
     for (const state of states.values()) {
       if (!(await canUseKimaki(bot, { guild, userId: state.id }))) continue
@@ -385,7 +439,11 @@ export function createVoiceCalls({ opencodeConfigDir }: { opencodeConfigDir: str
     if (call.ending) return
     if (reply instanceof Error) {
       report(bot, { channelId: call.channelId, label: 'voice backend', error: reply })
-      call.live.append({ text: 'The task failed. Tell the users it did not complete.', channel: 'speakable', delegationId })
+      call.live.append({
+        text: 'The task failed. Tell the users it did not complete.',
+        channel: 'speakable',
+        delegationId,
+      })
       return
     }
     // Web search citations like ([npmjs.com](https://...)) must not be read aloud.
@@ -417,16 +475,21 @@ export function createVoiceCalls({ opencodeConfigDir }: { opencodeConfigDir: str
     if (event.type === 'delegation') {
       logger.info(`delegation ${event.id}: ${event.text.slice(0, 300)}`)
       // The delegation can come without text; the transcripts in the backend history have the request.
-      const text = event.text || '<system>The voice model handed you the latest user request. Do it, using the transcript.</system>'
+      const text =
+        event.text ||
+        '<system>The voice model handed you the latest user request. Do it, using the transcript.</system>'
       return void respond(bot, { call, text, delegationId: event.id })
     }
-    if (event.type === 'error') return report(bot, { channelId: call.channelId, label: 'model error', error: event.message })
-    if (event.type === 'closed') return void end(bot, { guildId: call.guildId, reason: `the model connection closed (${event.reason})` })
+    if (event.type === 'error')
+      return report(bot, { channelId: call.channelId, label: 'model error', error: event.message })
+    if (event.type === 'closed')
+      return void end(bot, { guildId: call.guildId, reason: `the model connection closed (${event.reason})` })
     if (!event.text) return
     const speaker = event.role === 'user' ? (call.lastSpeaker?.username ?? 'voice') : 'voice assistant'
     // The backend sees the conversation, so a later "yes, do that" has its context.
     call.agent.note(`<transcript speaker="${speaker}">${event.text}</transcript>`)
-    if (event.role === 'user') post(bot, { channelId: call.channelId, text: formatEcho({ username: speaker, text: event.text }) })
+    if (event.role === 'user')
+      post(bot, { channelId: call.channelId, text: formatEcho({ username: speaker, text: event.text }) })
     else post(bot, { channelId: call.channelId, text: event.text, markdown: true })
   }
 
@@ -445,13 +508,26 @@ export function createVoiceCalls({ opencodeConfigDir }: { opencodeConfigDir: str
   // Runs a shell command; resolves with the exit code and the end of its output.
   // The full output is streamed to a temp file, kept only when the output was truncated.
   // onLine gets each stdout line as it arrives, before the command ends.
-  function runShell(bot: Bot, { call, command, timeoutMs, onLine }: { call: Call; command: string; timeoutMs: number; onLine?: (line: string) => void }) {
+  function runShell(
+    bot: Bot,
+    {
+      call,
+      command,
+      timeoutMs,
+      onLine,
+    }: { call: Call; command: string; timeoutMs: number; onLine?: (line: string) => void },
+  ) {
     const file = path.join(os.tmpdir(), `kimaki-voice-shell-${crypto.randomBytes(6).toString('hex')}.txt`)
     const full = fs.createWriteStream(file)
     full.on('error', (error) => logger.warn(`shell output file ${file}`, error))
     return new Promise<{ exitCode: number | null; output: string }>((resolve) => {
       // Own process group: a timeout or hangup kills the pipeline, not only /bin/sh.
-      const child = spawn('/bin/sh', ['-c', command], { cwd: bot.dataDir, env: shellEnv(bot, call), stdio: ['ignore', 'pipe', 'pipe'], detached: true })
+      const child = spawn('/bin/sh', ['-c', command], {
+        cwd: bot.dataDir,
+        env: shellEnv(bot, call),
+        stdio: ['ignore', 'pipe', 'pipe'],
+        detached: true,
+      })
       call.background.add(child)
       const output = { text: '', total: 0, fileBytes: 0 }
       const append = (chunk: Buffer) => {
@@ -488,8 +564,14 @@ export function createVoiceCalls({ opencodeConfigDir }: { opencodeConfigDir: str
             return
           }
           // Say what was truncated and where the rest is, so the model greps it instead of trusting a partial answer.
-          const saved = output.fileBytes === OUTPUT_FILE_LIMIT ? `the first 10 MB of the output in ${file}` : `full output in ${file}`
-          resolve({ exitCode: code, output: `[output truncated: first ${truncated} characters omitted; ${saved}, use grep or sed on it]\n${output.text}` })
+          const saved =
+            output.fileBytes === OUTPUT_FILE_LIMIT
+              ? `the first 10 MB of the output in ${file}`
+              : `full output in ${file}`
+          resolve({
+            exitCode: code,
+            output: `[output truncated: first ${truncated} characters omitted; ${saved}, use grep or sed on it]\n${output.text}`,
+          })
         })
       })
     })
@@ -498,12 +580,17 @@ export function createVoiceCalls({ opencodeConfigDir }: { opencodeConfigDir: str
   function tools(bot: Bot, { call }: { call: () => Call }): Record<string, AgentTool> {
     return {
       shell: {
-        description: 'Run a shell command with the kimaki CLI on PATH. Returns the exit code and the last 4000 characters of output.',
+        description:
+          'Run a shell command with the kimaki CLI on PATH. Returns the exit code and the last 4000 characters of output.',
         parameters: {
           type: 'object',
           properties: {
             command: { type: 'string', description: 'The command, e.g. kimaki session list --all --active' },
-            background: { type: 'boolean', description: 'Return at once; the output arrives later in a <background-command> message. Use it for slow commands like kimaki send --wait and kimaki session wait.' },
+            background: {
+              type: 'boolean',
+              description:
+                'Return at once; the output arrives later in a <background-command> message. Use it for slow commands like kimaki send --wait and kimaki session wait.',
+            },
             timeoutSeconds: { type: 'number', description: 'Default 120. Background commands default to 1800.' },
           },
           required: ['command'],
@@ -514,7 +601,11 @@ export function createVoiceCalls({ opencodeConfigDir }: { opencodeConfigDir: str
           const input = parsed.data
           const current = call()
           const background = input.background === true
-          const timeoutMs = input.timeoutSeconds ? input.timeoutSeconds * 1000 : background ? BACKGROUND_TIMEOUT_MS : SHELL_TIMEOUT_MS
+          const timeoutMs = input.timeoutSeconds
+            ? input.timeoutSeconds * 1000
+            : background
+              ? BACKGROUND_TIMEOUT_MS
+              : SHELL_TIMEOUT_MS
           const started = /\s--(thread|session)\b/.test(input.command) ? 'prompt sent to' : 'session started in'
           const waits = /\s--wait\b/.test(input.command)
           const sent: string[] = []
@@ -538,18 +629,32 @@ export function createVoiceCalls({ opencodeConfigDir }: { opencodeConfigDir: str
           void run.then(({ exitCode, output }) => {
             if (current.ending) return
             // A null exit code means a signal killed it (timeout or hangup).
-            const finished = formatShellFinished({ description: input.command, state: exitCode === null ? 'killed' : null, exit: exitCode })
+            const finished = formatShellFinished({
+              description: input.command,
+              state: exitCode === null ? 'killed' : null,
+              exit: exitCode,
+            })
             post(bot, { channelId: current.channelId, text: finished })
-            void respond(bot, { call: current, text: `<background-command exit-code="${exitCode}">\n$ ${input.command}\n${output}\n</background-command>` })
+            void respond(bot, {
+              call: current,
+              text: `<background-command exit-code="${exitCode}">\n$ ${input.command}\n${output}\n</background-command>`,
+            })
           })
           return { started: true }
         },
       },
       post_message: {
-        description: 'Post markdown in the text chat of this voice channel: links, IDs, lists, code. The users see the text as is, so write only the content, with no intro like "Here is the link".',
+        description:
+          'Post markdown in the text chat of this voice channel: links, IDs, lists, code. The users see the text as is, so write only the content, with no intro like "Here is the link".',
         parameters: {
           type: 'object',
-          properties: { text: { type: 'string', description: 'Only the content, e.g. "[Signup fix thread](https://discord.com/channels/...)" or a short list' } },
+          properties: {
+            text: {
+              type: 'string',
+              description:
+                'Only the content, e.g. "[Signup fix thread](https://discord.com/channels/...)" or a short list',
+            },
+          },
           required: ['text'],
         },
         execute(args) {
@@ -578,33 +683,49 @@ export function createVoiceCalls({ opencodeConfigDir }: { opencodeConfigDir: str
       call.lastSpeaker = user
       // start fires again after 100ms of silence while the subscription (400ms) is still open.
       if (receiver.subscriptions.has(userId)) return
-      const opus = receiver.subscribe(userId, { end: { behavior: EndBehaviorType.AfterSilence, duration: SPEECH_END_MS } })
+      const opus = receiver.subscribe(userId, {
+        end: { behavior: EndBehaviorType.AfterSilence, duration: SPEECH_END_MS },
+      })
       const decoder = new prism.opus.Decoder({ rate: 48_000, channels: 2, frameSize: 960 })
       decoder.on('data', (pcm: Buffer) => call.mixer.push(userId, pcm))
       // pipeline() destroys the decoder (and frees its codec) when the receive stream closes.
       pipeline(opus, decoder, (error) => {
-        if (error && !call.ending) report(bot, { channelId: call.channelId, label: `audio stream of ${user.username}`, error })
+        if (error && !call.ending)
+          report(bot, { channelId: call.channelId, label: `audio stream of ${user.username}`, error })
       })
     })
   }
 
-  async function start(bot: Bot, { guild, channelId, users }: { guild: Guild; channelId: string; users: Map<string, Author> }) {
+  async function start(
+    bot: Bot,
+    { guild, channelId, users }: { guild: Guild; channelId: string; users: Map<string, Author> },
+  ) {
     const settings = await voiceCallSettings(bot)
     if (settings instanceof Error) {
       logger.warn(`voice call not started`, settings)
       post(bot, { channelId, text: formatError(settings.message) })
       return
     }
-    const connection = joinVoiceChannel({ guildId: guild.id, channelId, adapterCreator: guild.voiceAdapterCreator, selfDeaf: false, selfMute: false })
-    const ready = await entersState(connection, VoiceConnectionStatus.Ready, 20_000)
-      .catch((cause) => new VoiceCallError({ operation: 'join', cause }))
+    const connection = joinVoiceChannel({
+      guildId: guild.id,
+      channelId,
+      adapterCreator: guild.voiceAdapterCreator,
+      selfDeaf: false,
+      selfMute: false,
+    })
+    const ready = await entersState(connection, VoiceConnectionStatus.Ready, 20_000).catch(
+      (cause) => new VoiceCallError({ operation: 'join', cause }),
+    )
     if (ready instanceof Error) {
       connection.destroy()
       logger.error(`voice call`, ready)
       post(bot, { channelId, text: formatError(ready.message) })
       return
     }
-    const [projects, context] = await Promise.all([listProjects({ db: bot.db }), globalContext(bot, { configDir: opencodeConfigDir })])
+    const [projects, context] = await Promise.all([
+      listProjects({ db: bot.db }),
+      globalContext(bot, { configDir: opencodeConfigDir }),
+    ])
     if (projects instanceof Error) logger.warn(`voice call projects`, projects)
     const callContext: VoiceCallContext = {
       users: [...users.values()],
@@ -621,7 +742,9 @@ export function createVoiceCalls({ opencodeConfigDir }: { opencodeConfigDir: str
       agents: context.agents,
     }
     const holder: { call: Call | null } = { call: null }
-    const speaker = createSpeaker(connection, { onError: (error) => report(bot, { channelId, label: 'audio player', error }) })
+    const speaker = createSpeaker(connection, {
+      onError: (error) => report(bot, { channelId, label: 'audio player', error }),
+    })
     const mixer = createMixer()
     const agent = createVoiceAgent({
       auth: settings.auth,
@@ -630,7 +753,8 @@ export function createVoiceCalls({ opencodeConfigDir }: { opencodeConfigDir: str
       tools: tools(bot, { call: () => holder.call! }),
       // Same tool line as in session threads. A posted message shows itself; a failed post still gets its failure line.
       onToolCall: ({ name, args }) => {
-        if (name !== 'post_message') post(bot, { channelId, text: formatToolLine({ name, input: parseJsonAs(toolInput, args) ?? {} }) })
+        if (name !== 'post_message')
+          post(bot, { channelId, text: formatToolLine({ name, input: parseJsonAs(toolInput, args) ?? {} }) })
       },
       onToolResult: (result) => {
         const failed = toolFailedLine(result)
@@ -641,7 +765,10 @@ export function createVoiceCalls({ opencodeConfigDir }: { opencodeConfigDir: str
       auth: settings.auth,
       voice: settings.voice,
       instructions: liveCallInstructions(callContext),
-      urls: { calls: bot.realtimeBaseUrls.calls ?? DEFAULT_LIVE_URLS.calls, sideband: bot.realtimeBaseUrls.sideband ?? DEFAULT_LIVE_URLS.sideband },
+      urls: {
+        calls: bot.realtimeBaseUrls.calls ?? DEFAULT_LIVE_URLS.calls,
+        sideband: bot.realtimeBaseUrls.sideband ?? DEFAULT_LIVE_URLS.sideband,
+      },
       readFrame: mixer.read,
       onOpus: speaker.play,
       onEvent: (event) => {
@@ -684,7 +811,9 @@ export function createVoiceCalls({ opencodeConfigDir }: { opencodeConfigDir: str
     connection.on('error', (error) => report(bot, { channelId, label: 'voice connection', error }))
     if (process.env['KIMAKI_VOICE_DEBUG']) {
       connection.on('debug', (message) => logger.info(`voice debug: ${message}`))
-      connection.on('stateChange', (before, after) => logger.info(`voice connection ${before.status} -> ${after.status}`))
+      connection.on('stateChange', (before, after) =>
+        logger.info(`voice connection ${before.status} -> ${after.status}`),
+      )
       connection.receiver.speaking.on('start', (userId) => logger.info(`speaking start ${userId}`))
       speaker.player.on('stateChange', (before, after) => logger.info(`player ${before.status} -> ${after.status}`))
     }
@@ -714,7 +843,8 @@ export function createVoiceCalls({ opencodeConfigDir }: { opencodeConfigDir: str
     if (after.id === bot.discord.user?.id) {
       // Kicked or moved out by someone else.
       const call = calls.get(guild.id)
-      if (call && after.channelId !== call.channelId) await end(bot, { guildId: guild.id, reason: 'the bot left the voice channel' })
+      if (call && after.channelId !== call.channelId)
+        await end(bot, { guildId: guild.id, reason: 'the bot left the voice channel' })
       return
     }
     const voice = await voiceChannelOf(bot, guild.id)
@@ -742,14 +872,19 @@ export function createVoiceCalls({ opencodeConfigDir }: { opencodeConfigDir: str
   // A thread of any project finished: tell the call of its guild, so nobody polls.
   async function notifyRunEnded(bot: Bot, { threadId, sessionId, error }: RunEnded) {
     if (calls.size === 0) return
-    const thread = await bot.discord.channels.fetch(threadId).catch((cause) => new VoiceCallError({ operation: `fetch thread ${threadId}`, cause }))
+    const thread = await bot.discord.channels
+      .fetch(threadId)
+      .catch((cause) => new VoiceCallError({ operation: `fetch thread ${threadId}`, cause }))
     if (thread instanceof Error) return logger.warn(`thread finished notice`, thread)
     if (!thread?.isThread()) return
     const call = calls.get(thread.guildId)
     if (!call || call.ending) return
     const url = `https://discord.com/channels/${thread.guildId}/${threadId}`
     const state = error === null ? 'finished' : 'failed'
-    post(bot, { channelId: call.channelId, text: asSubtext(`⬦ thread ${state}: ${thread.name} ⋅ ${url} ⋅ ${sessionId}`) })
+    post(bot, {
+      channelId: call.channelId,
+      text: asSubtext(`⬦ thread ${state}: ${thread.name} ⋅ ${url} ⋅ ${sessionId}`),
+    })
     const failure = error === null ? '' : ` Error: ${error}`
     const notice = `<system>Thread ${state}: "${thread.name}". Thread ID ${threadId}, session ID ${sessionId}, URL ${url}.${failure}</system>`
     // Answer only for threads started in this call. A pending kimaki send --wait brings the transcript next.
@@ -771,10 +906,16 @@ export function createVoiceCalls({ opencodeConfigDir }: { opencodeConfigDir: str
       if (registered.bot) void notifyRunEnded(registered.bot, run)
     },
     // A message in the text chat of a voice channel: to the backend, if a call runs there.
-    text(bot: Bot, { guildId, channelId, author, content }: { guildId: string; channelId: string; author: Author; content: string }) {
+    text(
+      bot: Bot,
+      { guildId, channelId, author, content }: { guildId: string; channelId: string; author: Author; content: string },
+    ) {
       const call = calls.get(guildId)
       if (!call || call.channelId !== channelId || call.ending || !content.trim()) return
-      void respond(bot, { call, text: `<chat-message from="${author.username}" user-id="${author.id}">\n${content}\n</chat-message>` })
+      void respond(bot, {
+        call,
+        text: `<chat-message from="${author.username}" user-id="${author.id}">\n${content}\n</chat-message>`,
+      })
     },
     async stop(bot: Bot) {
       if (listener.current) bot.discord.off(Events.VoiceStateUpdate, listener.current)

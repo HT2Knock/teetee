@@ -3,18 +3,8 @@
 // respond via interaction callback, webhook follow-up, and edit endpoints.
 
 import { describe, test, expect, beforeAll, afterAll } from 'vitest'
-import {
-  Client,
-  GatewayIntentBits,
-  ChannelType,
-  InteractionType,
-} from 'discord.js'
-import type {
-  ChatInputCommandInteraction,
-  Interaction,
-  ButtonInteraction,
-  TextChannel,
-} from 'discord.js'
+import { Client, GatewayIntentBits, ChannelType, InteractionType } from 'discord.js'
+import type { ChatInputCommandInteraction, Interaction, ButtonInteraction, TextChannel } from 'discord.js'
 import { DigitalDiscord } from '../src/index.js'
 
 describe('interactions', () => {
@@ -43,11 +33,7 @@ describe('interactions', () => {
     testUserId = users[0]!.id
 
     client = new Client({
-      intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-      ],
+      intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
       rest: {
         api: discord.restUrl,
         version: '10',
@@ -73,15 +59,32 @@ describe('interactions', () => {
 
   test('modal file fields hydrate uploaded attachments in discord.js', async () => {
     const received = new Promise<Interaction>((resolve) => client.once('interactionCreate', resolve))
-    await discord.channel(channelId).user(testUserId).submitModal({
-      customId: 'upload-modal', fields: [], files: [{ customId: 'files', attachments: [{
-        id: '200000000000000999', filename: 'logo.txt', size: 4, url: 'data:text/plain;base64,bG9nbw==', proxy_url: 'data:text/plain;base64,bG9nbw==',
-      }] }],
-    })
+    await discord
+      .channel(channelId)
+      .user(testUserId)
+      .submitModal({
+        customId: 'upload-modal',
+        fields: [],
+        files: [
+          {
+            customId: 'files',
+            attachments: [
+              {
+                id: '200000000000000999',
+                filename: 'logo.txt',
+                size: 4,
+                url: 'data:text/plain;base64,bG9nbw==',
+                proxy_url: 'data:text/plain;base64,bG9nbw==',
+              },
+            ],
+          },
+        ],
+      })
     const interaction = await received
     expect(await discord.channel(channelId).text()).toMatchInlineSnapshot(`""`)
     if (!interaction.isModalSubmit()) throw new Error('Expected a modal')
-    expect(interaction.fields.getUploadedFiles('files', true).map((file) => ({ name: file.name, size: file.size }))).toMatchInlineSnapshot(`
+    expect(interaction.fields.getUploadedFiles('files', true).map((file) => ({ name: file.name, size: file.size })))
+      .toMatchInlineSnapshot(`
       [
         {
           "name": "logo.txt",
@@ -605,11 +608,14 @@ describe('interactions', () => {
         if (i.isModalSubmit()) resolve(i)
       })
     })
-    await discord.channel(channelId).user(testUserId).submitModal({
-      customId: 'answer-modal',
-      messageId: targetMsg.id,
-      fields: [{ customId: 'answer', value: 'custom answer' }],
-    })
+    await discord
+      .channel(channelId)
+      .user(testUserId)
+      .submitModal({
+        customId: 'answer-modal',
+        messageId: targetMsg.id,
+        fields: [{ customId: 'answer', value: 'custom answer' }],
+      })
     const interaction = await received
     if (!interaction.isModalSubmit() || !interaction.isFromMessage()) throw new Error('expected a modal from a message')
     expect(interaction.fields.getTextInputValue('answer')).toBe('custom answer')
@@ -640,11 +646,14 @@ describe('interactions', () => {
       void interaction.respond([{ name: `${focused.name}: ${focused.value}`, value: 'ses_1' }])
     }
     client.on('interactionCreate', handler)
-    const choices = await discord.channel(channelId).user(testUserId).autocomplete({
-      name: 'resume',
-      options: [{ name: 'session', type: 3, value: 'fix' }],
-      focused: 'session',
-    })
+    const choices = await discord
+      .channel(channelId)
+      .user(testUserId)
+      .autocomplete({
+        name: 'resume',
+        options: [{ name: 'session', type: 3, value: 'fix' }],
+        focused: 'session',
+      })
     client.off('interactionCreate', handler)
     expect(choices).toEqual([{ name: 'session: fix', value: 'ses_1' }])
   })

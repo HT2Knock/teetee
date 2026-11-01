@@ -26,8 +26,11 @@ export async function splitPromptFiles(files: readonly PromptFile[]) {
     const tooBig = stat !== null && stat.size > OPENCODE_MAX_ATTACHMENT_BYTES
     if (!tooBig) attached.push({ uri: file.uri, name: file.name })
     // Text files count as not inline: the extension cannot tell text from binary.
-    attachments.push({ name: file.name, path: local, inline: !tooBig && INLINE_MEDIA_EXTENSIONS.has(path.extname(file.name).toLowerCase()) })
+    attachments.push({
+      name: file.name,
+      path: local,
+      inline: !tooBig && INLINE_MEDIA_EXTENSIONS.has(path.extname(file.name).toLowerCase()),
+    })
   }
   return { attached, attachments }
 }
-

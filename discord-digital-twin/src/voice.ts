@@ -89,9 +89,23 @@ export class DiscordVoiceServer {
     await execFileAsync(
       'openssl',
       [
-        'req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:prime256v1', '-nodes',
-        '-keyout', keyPath, '-out', certPath, '-days', '1', '-subj', '/CN=127.0.0.1',
-        '-addext', 'subjectAltName=IP:127.0.0.1',
+        'req',
+        '-x509',
+        '-newkey',
+        'ec',
+        '-pkeyopt',
+        'ec_paramgen_curve:prime256v1',
+        '-nodes',
+        '-keyout',
+        keyPath,
+        '-out',
+        certPath,
+        '-days',
+        '1',
+        '-subj',
+        '/CN=127.0.0.1',
+        '-addext',
+        'subjectAltName=IP:127.0.0.1',
       ],
       { timeout: 10_000 },
     )
@@ -169,7 +183,16 @@ export class DiscordVoiceServer {
   }
 
   private handleConnection(ws: WebSocket): void {
-    const connection: VoiceConnection = { ws, grant: null, ssrc: 0, secretKey: null, sequence: 0, stream: null, udp: null, sendNonce: 0 }
+    const connection: VoiceConnection = {
+      ws,
+      grant: null,
+      ssrc: 0,
+      secretKey: null,
+      sequence: 0,
+      stream: null,
+      udp: null,
+      sendNonce: 0,
+    }
     this.connections.add(connection)
     this.send(connection, VoiceOpcodes.Hello, { v: 8, heartbeat_interval: 13_750 })
     ws.on('message', (raw, isBinary) => {
@@ -272,7 +295,13 @@ export class DiscordVoiceServer {
   }): Promise<void> {
     const listeners = [...this.connections].filter((connection) => {
       const grant = connection.grant
-      return grant?.guildId === guildId && grant.channelId === channelId && grant.userId !== userId && connection.secretKey && connection.udp
+      return (
+        grant?.guildId === guildId &&
+        grant.channelId === channelId &&
+        grant.userId !== userId &&
+        connection.secretKey &&
+        connection.udp
+      )
     })
     if (listeners.length === 0) throw new Error(`No voice client listens in channel ${channelId}`)
     const ssrc = this.userSsrcs.get(userId) ?? this.nextSsrc++

@@ -66,7 +66,12 @@ function loadToolParts(): ToolRow[] {
   // Forked sessions copy the parent history, so the same tool call id shows up again.
   const seen = new Set<string>()
   const unique = rows
-    .map((row) => ({ ...row, model: row.model ?? '?', agent: row.agent ?? '?', part: JSON.parse(row.part) as ToolPart }))
+    .map((row) => ({
+      ...row,
+      model: row.model ?? '?',
+      agent: row.agent ?? '?',
+      part: JSON.parse(row.part) as ToolPart,
+    }))
     .filter((row) => !seen.has(row.part.id) && seen.add(row.part.id))
   log(`loaded ${rows.length} tool parts, ${unique.length} after removing fork copies`)
   return unique
@@ -86,26 +91,44 @@ const shellCategories: Array<{ name: string; dedicatedTool?: string; test: (comm
       /\b(git apply|patch -p\d|apply_patch)\b/.test(c) ||
       redirectTargets(c).length > 0,
   },
-  { name: 'file ops (mv, cp, rm, mkdir, touch, ln, chmod)', test: (c) => firstWords(c).some((w) => /^(mv|cp|rm|mkdir|touch|ln|chmod|rsync)$/.test(w)) },
+  {
+    name: 'file ops (mv, cp, rm, mkdir, touch, ln, chmod)',
+    test: (c) => firstWords(c).some((w) => /^(mv|cp|rm|mkdir|touch|ln|chmod|rsync)$/.test(w)),
+  },
   { name: 'git', test: (c) => firstWords(c).includes('git') },
   { name: 'gh', test: (c) => firstWords(c).includes('gh') },
   {
     name: 'own CLIs (kimaki, zele, sigillo, critique, lintcn, opensrc)',
-    test: (c) => firstWords(c).some((w) => /^(kimaki|zele|sigillo|critique|lintcn|opensrc)$/.test(w)) || /\bcritique\b/.test(c),
+    test: (c) =>
+      firstWords(c).some((w) => /^(kimaki|zele|sigillo|critique|lintcn|opensrc)$/.test(w)) || /\bcritique\b/.test(c),
   },
   {
     name: 'build / test / install',
-    test: (c) => /\b(pnpm|npm|npx|bun|bunx|yarn|tsc|vitest|cargo|go|swift|xcodebuild|make|tsx|uv|uvx|pip)\b/.test(firstWords(c).join(' ')),
+    test: (c) =>
+      /\b(pnpm|npm|npx|bun|bunx|yarn|tsc|vitest|cargo|go|swift|xcodebuild|make|tsx|uv|uvx|pip)\b/.test(
+        firstWords(c).join(' '),
+      ),
   },
-  { name: 'search (grep, rg, find, ls, tree)', dedicatedTool: 'grep/glob', test: (c) => firstWords(c).some((w) => /^(grep|rg|ag|find|fd|ls|tree)$/.test(w)) },
+  {
+    name: 'search (grep, rg, find, ls, tree)',
+    dedicatedTool: 'grep/glob',
+    test: (c) => firstWords(c).some((w) => /^(grep|rg|ag|find|fd|ls|tree)$/.test(w)),
+  },
   {
     name: 'read files (cat, head, tail, sed -n, wc, nl)',
     dedicatedTool: 'read',
     test: (c) => firstWords(c).some((w) => /^(cat|head|tail|less|wc|nl|jq)$/.test(w)) || /\bsed\s+-n\b/.test(c),
   },
-  { name: 'network (curl, wget)', dedicatedTool: 'webfetch', test: (c) => firstWords(c).some((w) => /^(curl|wget|http)$/.test(w)) },
+  {
+    name: 'network (curl, wget)',
+    dedicatedTool: 'webfetch',
+    test: (c) => firstWords(c).some((w) => /^(curl|wget|http)$/.test(w)),
+  },
   { name: 'sqlite3', test: (c) => firstWords(c).includes('sqlite3') },
-  { name: 'browser / devices (playwriter, ghosthand, tuistory, usecomputer)', test: (c) => /\b(playwriter|ghosthand|tuistory|usecomputer)\b/.test(c) },
+  {
+    name: 'browser / devices (playwriter, ghosthand, tuistory, usecomputer)',
+    test: (c) => /\b(playwriter|ghosthand|tuistory|usecomputer)\b/.test(c),
+  },
   { name: 'scripts (python, node)', test: (c) => /\b(python3?|node)\b/.test(firstWords(c).join(' ')) },
   { name: 'other', test: () => true },
 ]
@@ -117,7 +140,13 @@ const shellKeywords = new Set(['do', 'then', 'else', 'time', 'sudo', '{', '('])
 function firstWords(command: string): string[] {
   return command
     .split(/&&|\|\||[;\n]/)
-    .map((segment) => segment.trim().split(/\s+/).find((word) => word && !/^[A-Z_][A-Z0-9_]*=/.test(word) && !shellKeywords.has(word)) ?? '')
+    .map(
+      (segment) =>
+        segment
+          .trim()
+          .split(/\s+/)
+          .find((word) => word && !/^[A-Z_][A-Z0-9_]*=/.test(word) && !shellKeywords.has(word)) ?? '',
+    )
     .filter((word) => word && word !== 'cd')
 }
 
@@ -128,7 +157,7 @@ function redirectTargets(command: string): string[] {
     .replace(/<<-?\s*['"]?(\w+)['"]?[\s\S]*?\n\1\b/g, '<<HEREDOC')
     .replace(/'[^']*'/g, "''")
     .replace(/"(?:[^"\\]|\\.)*"/g, '""')
-  const targets = [...stripped.matchAll(/(?:^|[^0-9&<>=\-])>{1,2}\s*([^\s&|;)<>]+)/g)].map((m) => m[1])
+  const targets = [...stripped.matchAll(/(?:^|[^0-9&<>=-])>{1,2}\s*([^\s&|;)<>]+)/g)].map((m) => m[1])
   return targets.filter((target) => !/^(\/dev\/|&|''|""$)/.test(target) && !/(^|\/)(tmp|var\/folders)\//.test(target))
 }
 
@@ -147,7 +176,11 @@ function percent(part: number, total: number) {
 }
 
 function table(headers: string[], rows: Array<Array<string | number>>) {
-  return [`| ${headers.join(' | ')} |`, `| ${headers.map(() => '---').join(' | ')} |`, ...rows.map((r) => `| ${r.join(' | ')} |`)].join('\n')
+  return [
+    `| ${headers.join(' | ')} |`,
+    `| ${headers.map(() => '---').join(' | ')} |`,
+    ...rows.map((r) => `| ${r.join(' | ')} |`),
+  ].join('\n')
 }
 
 function truncate(text: string, max: number) {
@@ -164,10 +197,19 @@ const executes = rows.filter((row) => row.part.name === 'execute')
 const out: string[] = []
 
 out.push(`# Tool usage, last ${days} days`, '')
-out.push(`${rows.length} tool calls in ${new Set(rows.map((r) => r.sessionID)).size} sessions since ${new Date(since).toISOString()}.`, '')
+out.push(
+  `${rows.length} tool calls in ${new Set(rows.map((r) => r.sessionID)).size} sessions since ${new Date(since).toISOString()}.`,
+  '',
+)
 
 out.push('## All tools', '')
-out.push(table(['tool', 'calls', 'share'], countBy(rows, (r) => r.part.name).map(([name, n]) => [name, n, percent(n, rows.length)])), '')
+out.push(
+  table(
+    ['tool', 'calls', 'share'],
+    countBy(rows, (r) => r.part.name).map(([name, n]) => [name, n, percent(n, rows.length)]),
+  ),
+  '',
+)
 
 out.push('## execute vs shell', '')
 out.push(
@@ -175,7 +217,11 @@ out.push(
     ['', 'shell', 'execute'],
     [
       ['calls', shells.length, executes.length],
-      ['sessions using it', new Set(shells.map((r) => r.sessionID)).size, new Set(executes.map((r) => r.sessionID)).size],
+      [
+        'sessions using it',
+        new Set(shells.map((r) => r.sessionID)).size,
+        new Set(executes.map((r) => r.sessionID)).size,
+      ],
       ['execute per 100 shell', '', ((executes.length / Math.max(shells.length, 1)) * 100).toFixed(2)],
     ],
   ),
@@ -215,7 +261,10 @@ out.push(
   '',
 )
 const instead = categorized.filter((c) => c.category.dedicatedTool)
-out.push(`**${instead.length}** shell calls (${percent(instead.length, shells.length)}) did something a dedicated tool also does.`, '')
+out.push(
+  `**${instead.length}** shell calls (${percent(instead.length, shells.length)}) did something a dedicated tool also does.`,
+  '',
+)
 
 const edits = categorized.filter((c) => c.category.dedicatedTool === 'edit/write')
 out.push('### shell edit methods', '')
@@ -235,18 +284,38 @@ out.push(
   '',
 )
 out.push('### shell edit examples by model', '')
-out.push(table(['model', 'shell edits', 'edit tool', 'write tool'], countBy(edits, (c) => c.row.model).map(([model, n]) => [
-  model,
-  n,
-  rows.filter((r) => r.model === model && (r.part.name === 'edit' || r.part.name === 'patch')).length,
-  rows.filter((r) => r.model === model && r.part.name === 'write').length,
-])), '')
+out.push(
+  table(
+    ['model', 'shell edits', 'edit tool', 'write tool'],
+    countBy(edits, (c) => c.row.model).map(([model, n]) => [
+      model,
+      n,
+      rows.filter((r) => r.model === model && (r.part.name === 'edit' || r.part.name === 'patch')).length,
+      rows.filter((r) => r.model === model && r.part.name === 'write').length,
+    ]),
+  ),
+  '',
+)
 for (const { row, command } of edits.slice(-exampleLimit)) {
-  out.push(`- ${row.model} in "${row.title ?? row.sessionID}" (${row.sessionID})`, '', fence(truncate(command, 600), 'sh'), '')
+  out.push(
+    `- ${row.model} in "${row.title ?? row.sessionID}" (${row.sessionID})`,
+    '',
+    fence(truncate(command, 600), 'sh'),
+    '',
+  )
 }
 
 out.push('## execute (code mode) examples', '')
-out.push(table(['inner tool', 'calls'], countBy(executes.flatMap((r) => r.part.state.metadata?.toolCalls ?? []), (c) => `${c.tool} (${c.status})`)), '')
+out.push(
+  table(
+    ['inner tool', 'calls'],
+    countBy(
+      executes.flatMap((r) => r.part.state.metadata?.toolCalls ?? []),
+      (c) => `${c.tool} (${c.status})`,
+    ),
+  ),
+  '',
+)
 for (const [i, row] of executes.entries()) {
   const part = row.part
   const input = part.state.input ?? {}

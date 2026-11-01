@@ -7,7 +7,6 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import fs from 'node:fs'
 import http from 'node:http'
-import path from 'node:path'
 import { promisify } from 'node:util'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 
@@ -92,19 +91,16 @@ function sseEvents(stdout: string): Array<Record<string, unknown>> {
 test('kimaki --gateway without a TTY installs, onboards and reports ready on stdout', async () => {
   const proxy = new URL('/', twin.discord.restUrl).toString()
   const lockPort = await freePort()
-  child = spawn(
-    ...cliCommand(['--data-dir', dataDir, '--gateway', '--machine-name', 'test-machine']),
-    {
-      env: {
-        ...process.env,
-        KIMAKI_WEBSITE_URL: websiteUrl,
-        KIMAKI_GATEWAY_PROXY_URL: proxy,
-        KIMAKI_LOCK_PORT: String(lockPort),
-        KIMAKI_OPENCODE_SERVICE_FILE: server.serviceFile,
-        OPENCODE_CONFIG_DIR: server.configDir,
-      },
+  child = spawn(...cliCommand(['--data-dir', dataDir, '--gateway', '--machine-name', 'test-machine']), {
+    env: {
+      ...process.env,
+      KIMAKI_WEBSITE_URL: websiteUrl,
+      KIMAKI_GATEWAY_PROXY_URL: proxy,
+      KIMAKI_LOCK_PORT: String(lockPort),
+      KIMAKI_OPENCODE_SERVICE_FILE: server.serviceFile,
+      OPENCODE_CONFIG_DIR: server.configDir,
     },
-  )
+  })
   const output = { stdout: '', stderr: '' }
   child.stdout.on('data', (chunk: Buffer) => (output.stdout += chunk.toString()))
   child.stderr.on('data', (chunk: Buffer) => (output.stderr += chunk.toString()))
@@ -114,7 +110,8 @@ test('kimaki --gateway without a TTY installs, onboards and reports ready on std
     check: async () => sseEvents(output.stdout).some((event) => event['type'] === 'ready'),
   })
 
-  const token = (sseEvents(output.stdout)[0]?.['url'] as string).match(/clientId=([^&]+)&clientSecret=([^&]+)/)
+  const firstEvent = sseEvents(output.stdout)[0]
+  const token = firstEvent ? String(firstEvent['url']).match(/clientId=([^&]+)&clientSecret=([^&]+)/) : null
   expect(
     sseEvents(output.stdout).map((event) =>
       JSON.parse(
@@ -145,9 +142,13 @@ test('kimaki --gateway without a TTY installs, onboards and reports ready on std
     ]
   `)
 
-  const channels = await createApi({ token: twin.discord.botToken, restUrl: twin.discord.restUrl }).guilds.getChannels(twin.discord.guildId)
+  const channels = await createApi({ token: twin.discord.botToken, restUrl: twin.discord.restUrl }).guilds.getChannels(
+    twin.discord.guildId,
+  )
   const names = new Map(channels.map((channel) => [channel.id, channel.name]))
-  expect(channels.map((channel) => `${channel.name}${channel.parent_id ? ` (in ${names.get(channel.parent_id)})` : ''}`)).toMatchInlineSnapshot(`
+  expect(
+    channels.map((channel) => `${channel.name}${channel.parent_id ? ` (in ${names.get(channel.parent_id)})` : ''}`),
+  ).toMatchInlineSnapshot(`
     [
       "project",
       "random",
@@ -171,9 +172,10 @@ test('kimaki --gateway without a TTY installs, onboards and reports ready on std
   `)
 
   // `kimaki restart`: the supervisor starts a new bot process, which reports ready again.
-  const cli = (args: string[]) => execFileAsync(...cliCommand([...args, '--data-dir', dataDir]), {
-    env: { ...process.env, KIMAKI_LOCK_PORT: String(lockPort) },
-  })
+  const cli = (args: string[]) =>
+    execFileAsync(...cliCommand([...args, '--data-dir', dataDir]), {
+      env: { ...process.env, KIMAKI_LOCK_PORT: String(lockPort) },
+    })
   const before = JSON.parse((await cli(['status', '--json'])).stdout) as { pid: number }
   await cli(['restart'])
   await waitFor({
@@ -181,14 +183,24 @@ test('kimaki --gateway without a TTY installs, onboards and reports ready on std
     check: async () => sseEvents(output.stdout).filter((event) => event['type'] === 'ready').length === 2,
   })
   const after = JSON.parse((await cli(['status', '--json'])).stdout) as { pid: number }
-  expect({ newPid: after.pid !== before.pid, supervisorAlive: child.exitCode === null }).toEqual({ newPid: true, supervisorAlive: true })
+  expect({ newPid: after.pid !== before.pid, supervisorAlive: child.exitCode === null }).toEqual({
+    newPid: true,
+    supervisorAlive: true,
+  })
 }, 40_000)
 
 test('--install-url --gateway prints the install URL with the callback and exits', async () => {
   const otherDataDir = tempDataDir()
   const result = await new Promise<{ code: number | null; stdout: string }>((resolve) => {
     const process_ = spawn(
-      ...cliCommand(['--data-dir', otherDataDir, '--install-url', '--gateway', '--gateway-callback-url', 'https://example.com/done']),
+      ...cliCommand([
+        '--data-dir',
+        otherDataDir,
+        '--install-url',
+        '--gateway',
+        '--gateway-callback-url',
+        'https://example.com/done',
+      ]),
       { env: { ...process.env, KIMAKI_WEBSITE_URL: 'https://kimaki.test' } },
     )
     const output = { stdout: '' }

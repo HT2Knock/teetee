@@ -28,12 +28,30 @@ import {
 function sleepTurn({ marker, command }: { marker: string; command: string }): DeterministicMatcher[] {
   const callId = `${marker}-call`
   return [
-    { id: callId, priority: 100, when: { latestUserTextIncludes: marker }, then: { parts: [
-      { type: 'text-start', id: 'intro' }, { type: 'text-delta', id: 'intro', delta: 'Waiting for the deploy.' }, { type: 'text-end', id: 'intro' },
-      ...toolParts({ toolCallId: callId, toolName: 'shell', input: { command, description: 'Sleep until the deploy is done', hasSideEffect: true } }),
-    ] } },
+    {
+      id: callId,
+      priority: 100,
+      when: { latestUserTextIncludes: marker },
+      then: {
+        parts: [
+          { type: 'text-start', id: 'intro' },
+          { type: 'text-delta', id: 'intro', delta: 'Waiting for the deploy.' },
+          { type: 'text-end', id: 'intro' },
+          ...toolParts({
+            toolCallId: callId,
+            toolName: 'shell',
+            input: { command, description: 'Sleep until the deploy is done', hasSideEffect: true },
+          }),
+        ],
+      },
+    },
     // Only after the command printed its result: a failed call must not look like a sleep.
-    { id: `${marker}-done`, priority: 110, when: { latestUserTextIncludes: marker, rawPromptIncludes: 'Sleeping until' }, then: { parts: textParts('Sleeping until the deploy is done.') } },
+    {
+      id: `${marker}-done`,
+      priority: 110,
+      when: { latestUserTextIncludes: marker, rawPromptIncludes: 'Sleeping until' },
+      then: { parts: textParts('Sleeping until the deploy is done.') },
+    },
   ]
 }
 
@@ -45,15 +63,35 @@ let bot: BotHandle
 
 beforeAll(async () => {
   ;[server, twin] = await Promise.all([
-    startOpencodeTestServer({ matchers: [
-      ...sleepTurn({ marker: 'sleep-marker', command: "kimaki sleep --duration 2h --reason 'waiting for the deploy'" }),
-      ...sleepTurn({ marker: 'cancel-marker', command: 'kimaki sleep --until 2030-01-01T12:00:00Z' }),
-      { id: 'wake', priority: 200, when: { latestUserTextIncludes: 'Woke after sleeping until' }, then: { parts: textParts('Awake, checking the deploy.') } },
-      { id: 'never-mind', priority: 200, when: { latestUserTextIncludes: 'Never mind' }, then: { parts: textParts('Noted, no wake needed.') } },
-    ] }),
+    startOpencodeTestServer({
+      matchers: [
+        ...sleepTurn({
+          marker: 'sleep-marker',
+          command: "kimaki sleep --duration 2h --reason 'waiting for the deploy'",
+        }),
+        ...sleepTurn({ marker: 'cancel-marker', command: 'kimaki sleep --until 2030-01-01T12:00:00Z' }),
+        {
+          id: 'wake',
+          priority: 200,
+          when: { latestUserTextIncludes: 'Woke after sleeping until' },
+          then: { parts: textParts('Awake, checking the deploy.') },
+        },
+        {
+          id: 'never-mind',
+          priority: 200,
+          when: { latestUserTextIncludes: 'Never mind' },
+          then: { parts: textParts('Noted, no wake needed.') },
+        },
+      ],
+    }),
     startTwin(),
   ])
-  await seedProjectChannel({ dataDir, channelId: twin.channelId, guildId: twin.discord.guildId, directory: server.projectDirectory })
+  await seedProjectChannel({
+    dataDir,
+    channelId: twin.channelId,
+    guildId: twin.discord.guildId,
+    directory: server.projectDirectory,
+  })
   bot = await startTestBot({ dataDir, twin, server, clock, schedulerIntervalMs: null })
   await warmUp({ server })
 }, 60_000)
@@ -68,13 +106,18 @@ async function start(prompt: string) {
   const { discord, channelId } = twin
   const before = new Set((await discord.channel(channelId).getThreads()).map((thread) => thread.id))
   await discord.channel(channelId).user(TEST_USER_ID).sendMessage({ content: prompt })
-  const thread = await discord.channel(channelId).waitForThread({ timeout: 8_000, predicate: (candidate) => !before.has(candidate.id) })
+  const thread = await discord
+    .channel(channelId)
+    .waitForThread({ timeout: 8_000, predicate: (candidate) => !before.has(candidate.id) })
   await waitForFooter({ discord, threadId: thread.id })
   return { threadId: thread.id, sessionId: bot.store.getState().roots[thread.id]! }
 }
 
 async function sleepRow(sessionId: string) {
-  return parseFirst<SessionSleepRow>('session_sleeps', await bot.db<SessionSleepRow[]>`SELECT * FROM session_sleeps WHERE session_id = ${sessionId} LIMIT 1`)
+  return parseFirst<SessionSleepRow>(
+    'session_sleeps',
+    await bot.db<SessionSleepRow[]>`SELECT * FROM session_sleeps WHERE session_id = ${sessionId} LIMIT 1`,
+  )
 }
 
 test('kimaki sleep wakes the same thread at the clock time', async () => {
@@ -105,10 +148,17 @@ test('kimaki sleep wakes the same thread at the clock time', async () => {
   expect(row?.status).toBe('consumed')
   // Consumed: running again does not wake twice.
   await bot.scheduler.runDueTasks()
-  expect((await twin.discord.thread(threadId).getMessages()).filter((message) => message.content.includes('Woke after')).length).toBe(1)
+  expect(
+    (await twin.discord.thread(threadId).getMessages()).filter((message) => message.content.includes('Woke after'))
+      .length,
+  ).toBe(1)
   // A retried wake reuses the prompt ID: OpenCode returns the delivered item and starts nothing new.
   const client = await server.client()
-  const retry = await client.session.prompt({ sessionID: sessionId, id: `msg_sleep_${row!.delivery_id}`, text: 'again' })
+  const retry = await client.session.prompt({
+    sessionID: sessionId,
+    id: `msg_sleep_${row!.delivery_id}`,
+    text: 'again',
+  })
   expect(retry.payload.text.startsWith('Woke after sleeping until')).toBe(true)
   const users = await client.message.list({ sessionID: sessionId, type: 'user', order: 'asc' })
   expect(users.data.filter((message) => message.type === 'user' && message.text === 'again')).toEqual([])

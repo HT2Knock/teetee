@@ -52,7 +52,7 @@ import { agentUiRoutes } from './agent-ui.ts'
 import { oc, projectOf, type Bot, type ModelChoice } from './bot.ts'
 import { createLoginRoutes } from './commands/login-commands.ts'
 import { applyAgent, createPreferenceRoutes, variantChoices, variantModel } from './commands/preference-commands.ts'
-import { switchModel } from './session-context.ts'
+import { switchModel, catalogReady } from './session-context.ts'
 import { sessionRoutes } from './commands/session-commands.ts'
 import { SKIPPED_COMMANDS, threadRoutes } from './commands/thread-commands.ts'
 import { worktreeRoutes } from './commands/worktree-commands.ts'
@@ -75,13 +75,17 @@ import { dispatch, startSession } from './input.ts'
 import { createQuestionHandlers } from './questions.ts'
 import type { Route } from './routes.ts'
 import { taskRoutes } from './scheduler.ts'
-import { catalogReady } from './session-context.ts'
 
 const logger = createLogger('COMMANDS')
 
 const MAX_COMMANDS = 100
 const NAME_LIMIT = 32
-const CATALOG_EVENTS: ReadonlySet<string> = new Set(['server.connected', 'agent.updated', 'command.updated', 'skill.updated'])
+const CATALOG_EVENTS: ReadonlySet<string> = new Set([
+  'server.connected',
+  'agent.updated',
+  'command.updated',
+  'skill.updated',
+])
 
 // --- The registry: every feature's tables, combined once per bot.
 
@@ -177,7 +181,11 @@ async function readCatalog(bot: Pick<Bot, 'opencode'>, directory: string): Promi
   if (agents instanceof Error) return agents
   if (commands instanceof Error) return commands
   if (skills instanceof Error) return skills
-  return { agents: agents.data, commands: commands.data, skills: skills.data.filter((skill) => !isBuiltinSkill(skill.id)) }
+  return {
+    agents: agents.data,
+    commands: commands.data,
+    skills: skills.data.filter((skill) => !isBuiltinSkill(skill.id)),
+  }
 }
 
 // Autocomplete keeps the whole project catalog reachable beyond Discord's shortcut limit.
@@ -189,7 +197,9 @@ function catalogRoutes(): InteractionRoutes {
       if (kind === 'skill') {
         const skills = await oc(bot, 'skill.list', (client) => client.skill.list({ location }))
         if (skills instanceof Error) return skills
-        return skills.data.filter((skill) => !isBuiltinSkill(skill.id)).map((skill) => ({ name: skill.id, description: skill.description }))
+        return skills.data
+          .filter((skill) => !isBuiltinSkill(skill.id))
+          .map((skill) => ({ name: skill.id, description: skill.description }))
       }
       const list = await oc(bot, 'command.list', (client) => client.command.list({ location }))
       if (list instanceof Error) return list
@@ -199,7 +209,9 @@ function catalogRoutes(): InteractionRoutes {
       definition: new SlashCommandBuilder()
         .setName(kind)
         .setDescription(`Run any OpenCode ${kind} in this project`)
-        .addStringOption((option) => option.setName('name').setDescription(`${kind} name`).setRequired(true).setAutocomplete(true))
+        .addStringOption((option) =>
+          option.setName('name').setDescription(`${kind} name`).setRequired(true).setAutocomplete(true),
+        )
         .addStringOption((option) => option.setName('arguments').setDescription(`Arguments to pass to the ${kind}`)),
       async autocomplete(bot, interaction) {
         const where = await resolveTarget(bot, interaction.channelId)
@@ -207,10 +219,15 @@ function catalogRoutes(): InteractionRoutes {
         const list = await entries(bot, where.directory)
         if (list instanceof Error) return respondChoices(interaction, list)
         const query = interaction.options.getFocused().toLowerCase()
-        return respondChoices(interaction, list.filter((entry) => entry.name.toLowerCase().includes(query)).map((entry) => ({
-          name: `/${entry.name}${entry.description ? ` - ${entry.description}` : ''}`,
-          value: entry.name,
-        })))
+        return respondChoices(
+          interaction,
+          list
+            .filter((entry) => entry.name.toLowerCase().includes(query))
+            .map((entry) => ({
+              name: `/${entry.name}${entry.description ? ` - ${entry.description}` : ''}`,
+              value: entry.name,
+            })),
+        )
       },
       async run(bot, interaction) {
         const where = await resolveTarget(bot, interaction.channelId)
@@ -218,7 +235,11 @@ function catalogRoutes(): InteractionRoutes {
         const list = await entries(bot, where.directory)
         if (list instanceof Error) return replyError(interaction, list)
         const name = interaction.options.getString('name', true).trim().replace(/^\//, '')
-        if (!list.some((entry) => entry.name === name)) return replyError(interaction, new ConfigError({ reason: `Unknown ${kind} \`${name}\`. Use /${kind} autocomplete to select one.` }))
+        if (!list.some((entry) => entry.name === name))
+          return replyError(
+            interaction,
+            new ConfigError({ reason: `Unknown ${kind} \`${name}\`. Use /${kind} autocomplete to select one.` }),
+          )
         const args = (interaction.options.getString('arguments') ?? '').trim()
         return sendInput(bot, {
           interaction,
@@ -243,7 +264,13 @@ function discordCommandName(name: string, suffix: string): string | null {
 }
 
 // Pure: the full command list for a guild (the fixed commands first) plus the owner of each dynamic name.
-export function buildCommands({ fixed, catalog }: { fixed: readonly RESTPostAPIChatInputApplicationCommandsJSONBody[]; catalog: Catalog }): {
+export function buildCommands({
+  fixed,
+  catalog,
+}: {
+  fixed: readonly RESTPostAPIChatInputApplicationCommandsJSONBody[]
+  catalog: Catalog
+}): {
   commands: RESTPostAPIChatInputApplicationCommandsJSONBody[]
   dynamic: Map<string, DynamicCommand>
   // Commands past the Discord limit that were left out.
@@ -268,7 +295,9 @@ export function buildCommands({ fixed, catalog }: { fixed: readonly RESTPostAPIC
           option.setName('variant').setDescription('Thinking level of the current model').setAutocomplete(true),
         )
     } else {
-      builder.addStringOption((option) => option.setName('arguments').setDescription('Arguments to pass to the command'))
+      builder.addStringOption((option) =>
+        option.setName('arguments').setDescription('Arguments to pass to the command'),
+      )
     }
     commands.push(builder.toJSON())
   }
@@ -277,7 +306,7 @@ export function buildCommands({ fixed, catalog }: { fixed: readonly RESTPostAPIC
   // whatever order OpenCode lists them in.
   const sorted = <T>(items: readonly T[], key: (item: T) => string) =>
     items.toSorted((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0))
-  for (const agent of sorted(catalog.agents, (agent) => agent.id)) {
+  for (const agent of sorted(catalog.agents, (candidate) => candidate.id)) {
     if (agent.mode === 'subagent' || agent.hidden) continue
     add({
       name: discordCommandName(agent.id, '-agent'),
@@ -285,7 +314,7 @@ export function buildCommands({ fixed, catalog }: { fixed: readonly RESTPostAPIC
       text: agent.description || `Switch to the ${agent.name} agent`,
     })
   }
-  for (const command of sorted(catalog.commands, (command) => command.name)) {
+  for (const command of sorted(catalog.commands, (candidate) => candidate.name)) {
     if (SKIPPED_COMMANDS.has(command.name) || command.name.includes(':')) continue
     add({
       name: discordCommandName(command.name, '-cmd'),
@@ -293,7 +322,7 @@ export function buildCommands({ fixed, catalog }: { fixed: readonly RESTPostAPIC
       text: command.description || `Run /${command.name}`,
     })
   }
-  for (const skill of sorted(catalog.skills, (skill) => skill.id)) {
+  for (const skill of sorted(catalog.skills, (candidate) => candidate.id)) {
     add({
       name: discordCommandName(skill.id, '-skill'),
       target: { kind: 'skill', id: skill.id },
@@ -335,7 +364,10 @@ async function sendInput(
     return
   }
   if (target.thread) {
-    await interaction.reply({ content: 'Use this command in a thread with a Kimaki session', flags: MessageFlags.Ephemeral })
+    await interaction.reply({
+      content: 'Use this command in a thread with a Kimaki session',
+      flags: MessageFlags.Ephemeral,
+    })
     return
   }
   await interaction.deferReply()
@@ -352,7 +384,10 @@ async function sendInput(
   await interaction.editReply({ content: `Started a new session in <#${started.threadId}>` })
 }
 
-async function handleDynamic(bot: Bot, { interaction, target }: { interaction: ChatInputCommandInteraction; target: DynamicCommand }) {
+async function handleDynamic(
+  bot: Bot,
+  { interaction, target }: { interaction: ChatInputCommandInteraction; target: DynamicCommand },
+) {
   const text = (interaction.options.getString(target.kind === 'agent' ? 'prompt' : 'arguments') ?? '').trim()
   if (target.kind === 'agent') {
     const variant = interaction.options.getString('variant')?.trim()
@@ -362,10 +397,19 @@ async function handleDynamic(bot: Bot, { interaction, target }: { interaction: C
     if (model instanceof Error) return replyError(interaction, model)
     if (!text) return applyAgent(bot, { interaction, target: where, agent: target.name, model })
     const label = model ? `${target.name}, ${model.variant}` : target.name
-    return sendInput(bot, { interaction, route: { kind: 'steer', text, agent: target.name }, echo: `(${label}) ${text}`, model })
+    return sendInput(bot, {
+      interaction,
+      route: { kind: 'steer', text, agent: target.name },
+      echo: `(${label}) ${text}`,
+      model,
+    })
   }
   if (target.kind === 'skill') {
-    return sendInput(bot, { interaction, route: { kind: 'skill', id: target.id, arguments: text }, echo: `/${target.id} ${text}`.trim() })
+    return sendInput(bot, {
+      interaction,
+      route: { kind: 'skill', id: target.id, arguments: text },
+      echo: `/${target.id} ${text}`.trim(),
+    })
   }
   return sendInput(bot, {
     interaction,
@@ -403,7 +447,10 @@ export function registerSlashCommands(
     if (registered.get(guild.id) === signature) {
       // Another Kimaki on the same app can overwrite the list, so compare with Discord.
       const live = await discord.application?.commands.fetch({ guildId: guild.id }).catch(() => null)
-      const same = !live || (live.size === built.commands.length && built.commands.every((command) => live.some((entry) => entry.name === command.name)))
+      const same =
+        !live ||
+        (live.size === built.commands.length &&
+          built.commands.every((command) => live.some((entry) => entry.name === command.name)))
       if (same) {
         dynamic.set(guild.id, built.dynamic)
         return
@@ -442,12 +489,16 @@ export function registerSlashCommands(
     if (target?.kind !== 'agent') return respondChoices(interaction, [])
     const where = await resolveTarget(bot, interaction.channelId)
     if (where instanceof Error) return respondChoices(interaction, where)
-    return respondChoices(interaction, await variantChoices(bot, { target: where, query: interaction.options.getFocused(), agent: target.name }))
+    return respondChoices(
+      interaction,
+      await variantChoices(bot, { target: where, query: interaction.options.getFocused(), agent: target.name }),
+    )
   }
 
   // Provider logins and audio keys are secrets of the whole bot.
   function adminOnly(interaction: Interaction): boolean {
-    if (interaction.isChatInputCommand() || interaction.isAutocomplete()) return registry.commands.get(interaction.commandName)?.admin === true
+    if (interaction.isChatInputCommand() || interaction.isAutocomplete())
+      return registry.commands.get(interaction.commandName)?.admin === true
     if (interaction.isButton()) return byPrefix(registry.buttons, interaction.customId)?.admin === true
     if (interaction.isStringSelectMenu()) return byPrefix(registry.selects, interaction.customId)?.admin === true
     if (interaction.isModalSubmit()) return byPrefix(registry.modals, interaction.customId)?.admin === true
@@ -456,7 +507,9 @@ export function registerSlashCommands(
 
   async function handle(interaction: Interaction) {
     if (!interaction.guildId) return
-    const channel = interaction.channel ?? (interaction.channelId ? await discord.channels.fetch(interaction.channelId).catch(() => null) : null)
+    const channel =
+      interaction.channel ??
+      (interaction.channelId ? await discord.channels.fetch(interaction.channelId).catch(() => null) : null)
     const projectId = channel?.isThread() ? channel.parentId : channel?.id
     const project = projectId ? await projectOf(bot, projectId) : null
     if (project instanceof Error) return logger.warn(project)
@@ -472,7 +525,11 @@ export function registerSlashCommands(
     if (adminOnly(interaction) && guild.ownerId !== interaction.user.id) {
       const member = await guild.members.fetch(interaction.user.id).catch(() => null)
       if (!member?.permissions.has(PermissionFlagsBits.Administrator)) {
-        if (interaction.isRepliable()) await interaction.reply({ content: 'Provider login requires the server owner or an administrator', flags: MessageFlags.Ephemeral })
+        if (interaction.isRepliable())
+          await interaction.reply({
+            content: 'Provider login requires the server owner or an administrator',
+            flags: MessageFlags.Ephemeral,
+          })
         return
       }
     }
@@ -488,7 +545,11 @@ export function registerSlashCommands(
   })
   // One registration pass at a time; a request made during a pass runs one more
   // pass, so an older catalog read never overwrites a newer one.
-  const passes: { active: Promise<void> | null; dirty: boolean; closed: boolean } = { active: null, dirty: false, closed: false }
+  const passes: { active: Promise<void> | null; dirty: boolean; closed: boolean } = {
+    active: null,
+    dirty: false,
+    closed: false,
+  }
 
   // Brings every guild's commands in line with the current OpenCode catalog.
   function registerAll(): Promise<void> {
@@ -507,7 +568,9 @@ export function registerSlashCommands(
           }
           const built = buildCommands({ fixed: registry.definitions, catalog: read })
           if (built.dropped > 0) {
-            logger.log(`${built.dropped} catalog shortcuts do not fit in Discord's 100 commands; all entries remain available through /agent, /command and /skill`)
+            logger.log(
+              `${built.dropped} catalog shortcuts do not fit in Discord's 100 commands; all entries remain available through /agent, /command and /skill`,
+            )
           }
           await Promise.all([...discord.guilds.cache.values()].map((guild) => registerGuild(guild, built)))
         }

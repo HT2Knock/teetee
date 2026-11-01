@@ -92,7 +92,10 @@ export async function sessionTarget(bot: Bot, interaction: ChatInputCommandInter
     return null
   }
   if (!target.thread || !target.sessionId) {
-    await interaction.reply({ content: 'Use this command in a thread with a Kimaki session', flags: MessageFlags.Ephemeral })
+    await interaction.reply({
+      content: 'Use this command in a thread with a Kimaki session',
+      flags: MessageFlags.Ephemeral,
+    })
     return null
   }
   return { ...target, thread: target.thread, sessionId: target.sessionId }
@@ -115,8 +118,15 @@ export async function replyError(
 }
 
 // The visible reply stands in for the user message: acks and prompts point at its ID.
-export async function replyWithEcho(interaction: ChatInputCommandInteraction, { author, text }: { author: Author; text: string }) {
-  await interaction.reply({ content: formatEcho({ username: author.username, text }), allowedMentions: { parse: [] }, flags: SILENT_MESSAGE_FLAGS })
+export async function replyWithEcho(
+  interaction: ChatInputCommandInteraction,
+  { author, text }: { author: Author; text: string },
+) {
+  await interaction.reply({
+    content: formatEcho({ username: author.username, text }),
+    allowedMentions: { parse: [] },
+    flags: SILENT_MESSAGE_FLAGS,
+  })
   return interaction.fetchReply().catch((e: Error) => e)
 }
 
@@ -127,5 +137,7 @@ export async function respondChoices(
 ): Promise<void> {
   if (choices instanceof Error) logger.warn(`autocomplete /${interaction.commandName}`, choices)
   const list = choices instanceof Error ? [] : choices.slice(0, 25)
-  await interaction.respond(list.map((choice) => ({ name: choice.name.slice(0, 100), value: choice.value.slice(0, 100) }))).catch(() => undefined)
+  await interaction
+    .respond(list.map((choice) => ({ name: choice.name.slice(0, 100), value: choice.value.slice(0, 100) })))
+    .catch(() => undefined)
 }

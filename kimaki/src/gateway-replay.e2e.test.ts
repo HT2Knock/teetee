@@ -96,7 +96,10 @@ test('the bot keeps working after the gateway answered 401 for a while', async (
   discord.revokeGatewayClient({ token: discord.botToken })
   // The permission check gets 401, so this message is ignored.
   await discord.channel(channelId).user(TEST_USER_ID).sendMessage({ content: 'message during the 401 window' })
-  const ignored = await bot.discord.guilds.cache.get(discord.guildId)!.members.fetch({ user: TEST_USER_ID, force: true }).catch((error: Error) => error)
+  const ignored = await bot.discord.guilds.cache
+    .get(discord.guildId)!
+    .members.fetch({ user: TEST_USER_ID, force: true })
+    .catch((error: Error) => error)
   expect(ignored).toBeInstanceOf(Error)
   discord.authorizeGatewayClient({ token: discord.botToken, guildIds: [discord.guildId] })
   await discord.channel(channelId).user(TEST_USER_ID).sendMessage({ content: 'message after the gateway recovered' })

@@ -26,7 +26,9 @@ import {
 
 type OtlpValue = { stringValue?: string; intValue?: string | number; doubleValue?: number; boolValue?: boolean }
 type OtlpLogs = {
-  resourceLogs: Array<{ scopeLogs: Array<{ logRecords: Array<{ attributes: Array<{ key: string; value: OtlpValue }> }> }> }>
+  resourceLogs: Array<{
+    scopeLogs: Array<{ logRecords: Array<{ attributes: Array<{ key: string; value: OtlpValue }> }> }>
+  }>
 }
 
 let server: OpencodeTestServer
@@ -45,7 +47,14 @@ beforeAll(async () => {
       if (request.url === '/v1/logs') {
         const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as OtlpLogs
         for (const record of body.resourceLogs.flatMap((logs) => logs.scopeLogs.flatMap((scope) => scope.logRecords))) {
-          received.push(Object.fromEntries(record.attributes.map(({ key, value }) => [key, value.stringValue ?? value.boolValue ?? value.doubleValue ?? Number(value.intValue)])))
+          received.push(
+            Object.fromEntries(
+              record.attributes.map(({ key, value }) => [
+                key,
+                value.stringValue ?? value.boolValue ?? value.doubleValue ?? Number(value.intValue),
+              ]),
+            ),
+          )
         }
       }
       response.writeHead(200, { 'content-type': 'application/json' }).end('{}')
@@ -55,12 +64,22 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => receiver.listen(port, '127.0.0.1', resolve))
   ;[server, twin] = await Promise.all([startOpencodeTestServer(), startTwin()])
   await warmUp({ server })
-  await seedProjectChannel({ dataDir, channelId: twin.channelId, guildId: twin.discord.guildId, directory: server.projectDirectory })
+  await seedProjectChannel({
+    dataDir,
+    channelId: twin.channelId,
+    guildId: twin.discord.guildId,
+    directory: server.projectDirectory,
+  })
   bot = await startTestBot({
     dataDir,
     twin,
     server,
-    analytics: createAnalytics({ dataDir, botMode: 'self_hosted', enabled: true, endpoint: `http://127.0.0.1:${port}` }),
+    analytics: createAnalytics({
+      dataDir,
+      botMode: 'self_hosted',
+      enabled: true,
+      endpoint: `http://127.0.0.1:${port}`,
+    }),
   })
 }, 60_000)
 

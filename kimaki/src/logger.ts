@@ -106,7 +106,10 @@ function time(): string {
 function write({ level, prefix, args }: { level: Level; prefix: string; args: LogArg[] }) {
   // Strings joined by spaces; an Error after text is joined with ": ".
   const text = args
-    .map((arg, index) => `${index === 0 ? '' : arg instanceof Error ? ': ' : ' '}${arg instanceof Error ? errorChain(arg) : String(arg)}`)
+    .map(
+      (arg, index) =>
+        `${index === 0 ? '' : arg instanceof Error ? ': ' : ' '}${arg instanceof Error ? errorChain(arg) : String(arg)}`,
+    )
     .join('')
   const error = level === 'error' ? args.find((arg): arg is Error => arg instanceof Error) : undefined
   const stack = error && rootStack(error)
@@ -131,7 +134,13 @@ function write({ level, prefix, args }: { level: Level; prefix: string; args: Lo
   const indent = ' '.repeat(time().length + PREFIX_WIDTH + 4)
   clackLog.message(
     lines.map((line, index) => (index === 0 ? head + line : indent + line)),
-    { symbol: paint(style.color, style.symbol), secondarySymbol: paint('gray', S_BAR), output: process.stderr, spacing: 0, withGuide: true },
+    {
+      symbol: paint(style.color, style.symbol),
+      secondarySymbol: paint('gray', S_BAR),
+      output: process.stderr,
+      spacing: 0,
+      withGuide: true,
+    },
   )
 }
 
@@ -144,4 +153,3 @@ export function createLogger(prefix: string) {
     error: (...args: LogArg[]) => write({ level: 'error', prefix, args }),
   }
 }
-

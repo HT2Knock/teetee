@@ -83,7 +83,12 @@ test('the lock server creates a missing data dir (fresh install)', async () => {
 test('a second bot on the same lock port stops the running one and takes over', async () => {
   const otherData = tempDataDir()
   const port = await freePort()
-  await seedProjectChannel({ dataDir: otherData, channelId: twin.quietChannelId, guildId: twin.discord.guildId, directory: server.projectDirectory })
+  await seedProjectChannel({
+    dataDir: otherData,
+    channelId: twin.quietChannelId,
+    guildId: twin.discord.guildId,
+    directory: server.projectDirectory,
+  })
   const code = dedent`
     import { startBot } from ${JSON.stringify(path.resolve('src/main.ts'))}
     import { startLockServer } from ${JSON.stringify(path.resolve('src/lock-server.ts'))}
@@ -99,18 +104,33 @@ test('a second bot on the same lock port stops the running one and takes over', 
   const child = spawn(argv[0] ?? 'kimaki', argv.slice(1), { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] })
   const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()))
   onTestFinished(async () => {
-    if (child.exitCode === null && child.signalCode === null) { child.kill('SIGTERM'); await exited }
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGTERM')
+      await exited
+    }
     fs.rmSync(otherData, { recursive: true, force: true })
   })
-  const ready = new Promise<void>((resolve, reject) => { child.once('message', () => resolve()); child.once('error', reject); child.once('exit', () => reject(new Error('Old bot exited before ready'))) })
+  const ready = new Promise<void>((resolve, reject) => {
+    child.once('message', () => resolve())
+    child.once('error', reject)
+    child.once('exit', () => reject(new Error('Old bot exited before ready')))
+  })
   await ready
-  expect(await fetch(`http://127.0.0.1:${port}/health`).then((response) => response.json())).toEqual({ status: 'ok', pid: child.pid, wrapperPid: null })
+  expect(await fetch(`http://127.0.0.1:${port}/health`).then((response) => response.json())).toEqual({
+    status: 'ok',
+    pid: child.pid,
+    wrapperPid: null,
+  })
   // The old bot gets SIGTERM, shuts down cleanly, then the new one binds the port.
   const replacement = await startTestBot({ dataDir: otherData, twin, server, lockPort: port })
   onTestFinished(() => replacement.stop())
   await exited
   expect(child.exitCode).toBe(0)
-  expect(await fetch(`http://127.0.0.1:${port}/health`).then((response) => response.json())).toEqual({ status: 'ok', pid: process.pid, wrapperPid: null })
+  expect(await fetch(`http://127.0.0.1:${port}/health`).then((response) => response.json())).toEqual({
+    status: 'ok',
+    pid: process.pid,
+    wrapperPid: null,
+  })
   await twin.discord.channel(twin.quietChannelId).user(TEST_USER_ID).sendMessage({ content: 'Lock takeover prompt' })
   const thread = await twin.discord.channel(twin.quietChannelId).waitForThread({ timeout: 8000 })
   await waitForFooter({ discord: twin.discord, threadId: thread.id })

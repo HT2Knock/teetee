@@ -84,7 +84,10 @@ async function resumeCommand(bot: Bot, interaction: ChatInputCommandInteraction)
   const target = await resolveTarget(bot, interaction.channelId)
   if (target instanceof Error) return replyError(interaction, target)
   if (target.thread) {
-    return replyError(interaction, new ConfigError({ reason: 'This command can only be used in project channels, not threads' }))
+    return replyError(
+      interaction,
+      new ConfigError({ reason: 'This command can only be used in project channels, not threads' }),
+    )
   }
   await interaction.deferReply()
   const result = await resume(bot, {
@@ -105,7 +108,10 @@ async function forkSource(bot: Bot, interaction: ChatInputCommandInteraction) {
   }
   const sessionId = target.sessionId
   if (!sessionId) {
-    await replyError(interaction, new ConfigError({ reason: 'This command can only be used in a thread with a session' }))
+    await replyError(
+      interaction,
+      new ConfigError({ reason: 'This command can only be used in a thread with a session' }),
+    )
     return null
   }
   await interaction.deferReply({ flags: MessageFlags.Ephemeral })
@@ -169,7 +175,10 @@ async function forkSubagentMenu(bot: Bot, interaction: ChatInputCommandInteracti
 }
 
 // The fork selects carry the source session ID; the source thread is the interaction channel.
-async function forkSelected(bot: Bot, { interaction, subagents }: { interaction: StringSelectMenuInteraction; subagents: boolean }) {
+async function forkSelected(
+  bot: Bot,
+  { interaction, subagents }: { interaction: StringSelectMenuInteraction; subagents: boolean },
+) {
   const sourceSessionId = interaction.customId.slice((subagents ? FORK_SUBAGENT_PREFIX : FORK_PREFIX).length)
   const selected = interaction.values[0]
   const target = await resolveTarget(bot, interaction.channelId)
@@ -205,24 +214,38 @@ async function sessionAutocomplete(bot: Bot, interaction: AutocompleteInteractio
   if (target instanceof Error) return respondChoices(interaction, target)
   const location = { directory: target.directory }
   if (focused.name === 'session') {
-    const project = await oc(bot, 'location.get', (client) => client.location.get({ location: { directory: target.projectDirectory } }))
+    const project = await oc(bot, 'location.get', (client) =>
+      client.location.get({ location: { directory: target.projectDirectory } }),
+    )
     if (project instanceof Error) return respondChoices(interaction, project)
     const sessions = await oc(bot, 'session.list', (client) =>
-      client.session.list({ project: project.project.id, parentID: null, order: 'desc', limit: 100, ...(query && { search: query }) }),
+      client.session.list({
+        project: project.project.id,
+        parentID: null,
+        order: 'desc',
+        limit: 100,
+        ...(query && { search: query }),
+      }),
     )
     if (sessions instanceof Error) return respondChoices(interaction, sessions)
     const inProject = await Promise.all(
       sessions.data.map(async (session) => {
-        const resolved = await resolveWorkingDirectory({ projectDirectory: target.projectDirectory, candidate: session.location.directory })
+        const resolved = await resolveWorkingDirectory({
+          projectDirectory: target.projectDirectory,
+          candidate: session.location.directory,
+        })
         return !(resolved instanceof Error)
       }),
     )
     return respondChoices(
       interaction,
-      sessions.data.filter((_, index) => inProject[index]).slice(0, MAX_OPTIONS).map((session) => {
-        const suffix = ` (${shortDate(session.time.updated)})`
-        return { name: `${flat(session.title ?? 'Untitled', 100 - suffix.length)}${suffix}`, value: session.id }
-      }),
+      sessions.data
+        .filter((_, index) => inProject[index])
+        .slice(0, MAX_OPTIONS)
+        .map((session) => {
+          const suffix = ` (${shortDate(session.time.updated)})`
+          return { name: `${flat(session.title ?? 'Untitled', 100 - suffix.length)}${suffix}`, value: session.id }
+        }),
     )
   }
   if (focused.name === 'agent') {
@@ -238,7 +261,10 @@ async function sessionAutocomplete(bot: Bot, interaction: AutocompleteInteractio
   if (focused.name === 'files') {
     // Comma separated: complete the last entry, keep the ones before.
     const parts = focused.value.split(',')
-    const done = parts.slice(0, -1).map((part) => part.trim()).filter(Boolean)
+    const done = parts
+      .slice(0, -1)
+      .map((part) => part.trim())
+      .filter(Boolean)
     const found = await oc(bot, 'file.find', (client) =>
       client.file.find({ location, query: parts[parts.length - 1]?.trim() ?? '', type: 'file', limit: MAX_OPTIONS }),
     )
@@ -259,11 +285,19 @@ export const sessionRoutes: InteractionRoutes = {
       definition: new SlashCommandBuilder()
         .setName('new-session')
         .setDescription('Start a new OpenCode session')
-        .addStringOption((option) => option.setName('prompt').setDescription('Prompt content for the session').setRequired(true))
         .addStringOption((option) =>
-          option.setName('files').setDescription('Files to attach (comma separated; autocomplete)').setAutocomplete(true).setMaxLength(6000),
+          option.setName('prompt').setDescription('Prompt content for the session').setRequired(true),
         )
-        .addStringOption((option) => option.setName('agent').setDescription('Agent to use for this session').setAutocomplete(true)),
+        .addStringOption((option) =>
+          option
+            .setName('files')
+            .setDescription('Files to attach (comma separated; autocomplete)')
+            .setAutocomplete(true)
+            .setMaxLength(6000),
+        )
+        .addStringOption((option) =>
+          option.setName('agent').setDescription('Agent to use for this session').setAutocomplete(true),
+        ),
       run: newSession,
       autocomplete: sessionAutocomplete,
     },
@@ -277,9 +311,14 @@ export const sessionRoutes: InteractionRoutes = {
       run: resumeCommand,
       autocomplete: sessionAutocomplete,
     },
-    fork: { definition: new SlashCommandBuilder().setName('fork').setDescription('Fork the session from a past user message'), run: forkMenu },
+    fork: {
+      definition: new SlashCommandBuilder().setName('fork').setDescription('Fork the session from a past user message'),
+      run: forkMenu,
+    },
     'fork-subagent': {
-      definition: new SlashCommandBuilder().setName('fork-subagent').setDescription('Fork a subagent task session into a new thread'),
+      definition: new SlashCommandBuilder()
+        .setName('fork-subagent')
+        .setDescription('Fork a subagent task session into a new thread'),
       run: forkSubagentMenu,
     },
   },

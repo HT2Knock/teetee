@@ -26,9 +26,19 @@ type SleepRow = SessionSleepRow
 const UTC_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?Z$/
 
 // Also parses `--send-at` dates (scheduler.ts).
-export function parseFutureUtc({ value, now, flag }: { value: string; now: number; flag: string }): ConfigError | number {
+export function parseFutureUtc({
+  value,
+  now,
+  flag,
+}: {
+  value: string
+  now: number
+  flag: string
+}): ConfigError | number {
   if (!UTC_DATE.test(value)) {
-    return new ConfigError({ reason: `${flag} date must be UTC ISO format ending with Z (example: 2026-03-01T09:00:00Z). Received: ${value}` })
+    return new ConfigError({
+      reason: `${flag} date must be UTC ISO format ending with Z (example: 2026-03-01T09:00:00Z). Received: ${value}`,
+    })
   }
   const time = Date.parse(value)
   if (Number.isNaN(time)) return new ConfigError({ reason: `Invalid UTC date for ${flag}: ${value}` })
@@ -37,7 +47,15 @@ export function parseFutureUtc({ value, now, flag }: { value: string; now: numbe
 }
 
 // `kimaki sleep`: the bot resolves the wake time with its own clock.
-export function parseWakeAt({ duration, until, now }: { duration?: string; until?: string; now: number }): ConfigError | number {
+export function parseWakeAt({
+  duration,
+  until,
+  now,
+}: {
+  duration?: string
+  until?: string
+  now: number
+}): ConfigError | number {
   const relative = duration?.trim() ?? ''
   const absolute = until?.trim() ?? ''
   if (relative && absolute) return new ConfigError({ reason: 'Pass either --duration or --until, not both' })
@@ -75,7 +93,10 @@ export function createSleepLock(): SleepLock {
   return function withSleepLock<T>({ sessionId, run }: { sessionId: string; run: () => Promise<T> }): Promise<T> {
     const previous = locks.get(sessionId) ?? Promise.resolve()
     const next = previous.then(run, run)
-    const settled = next.then(() => undefined, () => undefined)
+    const settled = next.then(
+      () => undefined,
+      () => undefined,
+    )
     locks.set(sessionId, settled)
     void settled.then(() => {
       if (locks.get(sessionId) === settled) locks.delete(sessionId)
@@ -100,7 +121,9 @@ export async function createSleep(
   const threadId = state.sessionThreads[sessionId]
   const root = threadId ? state.roots[threadId] : undefined
   if (!threadId || !root) {
-    return new ConfigError({ reason: `Session ${sessionId} has no Kimaki thread on this machine. Run kimaki sleep inside a Kimaki session.` })
+    return new ConfigError({
+      reason: `Session ${sessionId} has no Kimaki thread on this machine. Run kimaki sleep inside a Kimaki session.`,
+    })
   }
   const time = bot.clock.now()
   const wakeAt = parseWakeAt({ duration, until, now: time })
@@ -127,13 +150,19 @@ export async function createSleep(
           delivery_id = ${values.delivery_id},
           attempts = ${values.attempts},
           last_attempt_at = ${values.last_attempt_at},
-          created_at = ${toDbDate(values.created_at)}`
-        .catch((cause) => new DbError({ operation: 'write session_sleeps', cause })),
+          created_at = ${toDbDate(values.created_at)}`.catch(
+        (cause) => new DbError({ operation: 'write session_sleeps', cause }),
+      ),
   })
   if (saved instanceof Error) return saved
   bot.eventLoop.dispatch(threadId, { type: 'kimaki.sleep' })
   logger.log(`session ${root} sleeps until ${new Date(wakeAt).toISOString()}`)
-  return { sessionId: root, threadId, wakeAt: new Date(wakeAt).toISOString(), output: sleepOutput({ wakeAt, reason: why }) }
+  return {
+    sessionId: root,
+    threadId,
+    wakeAt: new Date(wakeAt).toISOString(),
+    output: sleepOutput({ wakeAt, reason: why }),
+  }
 }
 
 // Delivers a due wake if it is still the planned sleep and its retry delay
@@ -155,21 +184,24 @@ async function wake(bot: Bot, row: SleepRow): Promise<Error | void> {
   const deliver = async () => {
     // session_id, delivery_id and status = 'planned' of this wake.
     const planned = sleepRow(sessionId, deliveryId)
-    const claimed = await bot.db.unsafe<{ attempts: number }[]>(
-      `UPDATE session_sleeps
+    const claimed = await bot.db
+      .unsafe<{ attempts: number }[]>(
+        `UPDATE session_sleeps
         SET attempts = attempts + 1, last_attempt_at = ?
         WHERE ${planned.where}
           AND (last_attempt_at IS NULL OR last_attempt_at <= ?)
         RETURNING attempts`,
-      [toDbDate(new Date(time)), ...planned.values, toDbDate(new Date(time - WAKE_RETRY_MS))],
-    ).catch((cause) => new DbError({ operation: `claim wake of ${sessionId}`, cause }))
+        [toDbDate(new Date(time)), ...planned.values, toDbDate(new Date(time - WAKE_RETRY_MS))],
+      )
+      .catch((cause) => new DbError({ operation: `claim wake of ${sessionId}`, cause }))
     if (claimed instanceof Error) return claimed
     const attempt = parseFirst<{ attempts: number }>('session_sleeps', claimed)
     if (!attempt) return 'stale' as const
     const settle = async (status: 'consumed' | 'failed') => {
-      const settled = await bot.db.unsafe(`UPDATE session_sleeps SET status = ? WHERE ${planned.where}`, [status, ...planned.values])
+      const settled = await bot.db
+        .unsafe(`UPDATE session_sleeps SET status = ? WHERE ${planned.where}`, [status, ...planned.values])
         .catch((cause) => new DbError({ operation: `settle wake of ${sessionId}`, cause }))
-      return settled instanceof Error ? settled : status === 'consumed' ? 'woke' as const : 'failed' as const
+      return settled instanceof Error ? settled : status === 'consumed' ? ('woke' as const) : ('failed' as const)
     }
     // Resolved now, not at sleep time: /resume may have moved the session.
     const threadId = threadOfSession(bot, sessionId)
@@ -210,8 +242,7 @@ export async function runDueWakes(bot: Bot, { time, limit }: { time: number; lim
     WHERE status = ${'planned'} AND wake_at <= ${toDbDate(new Date(time))}
       AND (last_attempt_at IS NULL OR last_attempt_at <= ${toDbDate(new Date(time - WAKE_RETRY_MS))})
     ORDER BY wake_at ASC
-    LIMIT ${limit}`
-    .catch((cause) => new DbError({ operation: 'read due sleeps', cause }))
+    LIMIT ${limit}`.catch((cause) => new DbError({ operation: 'read due sleeps', cause }))
   if (rows instanceof Error) return logger.error(rows)
   const sleeps = parseRows<SessionSleepRow>('session_sleeps', rows)
   for (const row of sleeps) {

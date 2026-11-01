@@ -6,7 +6,19 @@ import { afterAll, beforeAll, expect, test } from 'bun:test'
 import type { BotHandle } from './main.ts'
 import { parseFirst, type GlobalModelRow } from './rows.ts'
 import { RUNTIME_NAME } from './runtime.ts'
-import { cliCommand, seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitFor, waitForFooter, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
+import {
+  cliCommand,
+  seedProjectChannel,
+  startOpencodeTestServer,
+  startTestBot,
+  startTwin,
+  tempDataDir,
+  waitFor,
+  waitForFooter,
+  warmUp,
+  type OpencodeTestServer,
+  type TestTwin,
+} from './test/harness.ts'
 
 const exec = promisify(execFile)
 const dataDir = tempDataDir()
@@ -16,7 +28,12 @@ let bot: BotHandle
 
 beforeAll(async () => {
   ;[server, twin] = await Promise.all([startOpencodeTestServer(), startTwin()])
-  await seedProjectChannel({ dataDir, channelId: twin.channelId, guildId: twin.discord.guildId, directory: server.projectDirectory })
+  await seedProjectChannel({
+    dataDir,
+    channelId: twin.channelId,
+    guildId: twin.discord.guildId,
+    directory: server.projectDirectory,
+  })
   bot = await startTestBot({ dataDir, twin, server })
   await warmUp({ server })
 }, 60_000)
@@ -54,7 +71,9 @@ test('CLI send starts and continues a session through the authenticated bot API'
   expect(unauthorized.status).toBe(401)
   const token = fs.readFileSync(tokenFile, 'utf8')
   const invalid = await fetch(`http://127.0.0.1:${bot.lock.port}/kimaki/send`, {
-    method: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ channelId: { gt: '0' }, prompt: 'unsafe' }),
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    body: JSON.stringify({ channelId: { gt: '0' }, prompt: 'unsafe' }),
   })
   expect(invalid.status).toBe(400)
 })
@@ -382,14 +401,21 @@ test('CLI help documents the supported P7 commands', async () => {
 })
 
 test('CLI registry shares thread actions, preferences, title and archive', async () => {
-  const started = JSON.parse((await cli(['send', '--channel', twin.channelId, '-p', 'Registry first'])).stdout) as { threadId: string; sessionId: string }
+  const started = JSON.parse((await cli(['send', '--channel', twin.channelId, '-p', 'Registry first'])).stdout) as {
+    threadId: string
+    sessionId: string
+  }
   await waitForFooter({ discord: twin.discord, threadId: started.threadId })
   await cli(['channel', 'agent', 'plan', '--channel', twin.channelId])
   await cli(['channel', 'model', 'deterministic-provider/deterministic-v2', '--channel', twin.channelId])
   await cli(['channel', 'verbosity', 'text', '--channel', twin.channelId])
   await cli(['channel', 'model', 'deterministic-provider/deterministic-v2', '--global', '--variant', 'fast'])
-  const global = parseFirst<GlobalModelRow>('global_models', await bot.db<GlobalModelRow[]>`SELECT * FROM global_models LIMIT 1`)
-  expect({ app: global?.app_id === bot.appId, model: global?.model_id, variant: global?.variant }).toMatchInlineSnapshot(`
+  const global = parseFirst<GlobalModelRow>(
+    'global_models',
+    await bot.db<GlobalModelRow[]>`SELECT * FROM global_models LIMIT 1`,
+  )
+  expect({ app: global?.app_id === bot.appId, model: global?.model_id, variant: global?.variant })
+    .toMatchInlineSnapshot(`
     {
       "app": true,
       "model": "deterministic-provider/deterministic-v2",
@@ -397,11 +423,21 @@ test('CLI registry shares thread actions, preferences, title and archive', async
     }
   `)
   await cli(['channel', 'model', '--global', '--clear'])
-  expect(parseFirst<GlobalModelRow>('global_models', await bot.db<GlobalModelRow[]>`SELECT * FROM global_models LIMIT 1`)).toBeUndefined()
+  expect(
+    parseFirst<GlobalModelRow>('global_models', await bot.db<GlobalModelRow[]>`SELECT * FROM global_models LIMIT 1`),
+  ).toBeUndefined()
   // --session takes a session ID, a thread ID or a thread URL.
-  await cli(['session', 'title', 'CLI renamed', '--session', `https://discord.com/channels/${twin.discord.guildId}/${started.threadId}`])
+  await cli([
+    'session',
+    'title',
+    'CLI renamed',
+    '--session',
+    `https://discord.com/channels/${twin.discord.guildId}/${started.threadId}`,
+  ])
   await cli(['session', 'queue', 'add', 'Registry queued', '--session', started.threadId])
-  await expect(cli(['session', 'queue', 'list', '--session', 'not-an-id'])).rejects.toThrow('Not a session ID, Discord thread ID or thread URL: not-an-id')
+  await expect(cli(['session', 'queue', 'list', '--session', 'not-an-id'])).rejects.toThrow(
+    'Not a session ID, Discord thread ID or thread URL: not-an-id',
+  )
   await waitForFooter({ discord: twin.discord, threadId: started.threadId, count: 2 })
   await cli(['session', 'abort', started.sessionId])
   await cli(['session', 'archive', started.threadId])
@@ -414,13 +450,30 @@ test('CLI registry shares thread actions, preferences, title and archive', async
     ok
     -# *project ⋅ main ⋅ Ns ⋅ deterministic-v2*"
   `)
-  expect((await twin.discord.channel(twin.channelId).getThreads()).find((thread) => thread.id === started.threadId)?.name).toBe('CLI renamed')
+  expect(
+    (await twin.discord.channel(twin.channelId).getThreads()).find((thread) => thread.id === started.threadId)?.name,
+  ).toBe('CLI renamed')
 })
 
 test('send settings reach native session creation; notifications create no session', async () => {
   const subdir = path.join(server.projectDirectory, 'subfolder')
   fs.mkdirSync(subdir)
-  const result = await cli(['send', '--channel', twin.channelId, '-p', 'Send settings', '--cwd', subdir, '--permission', 'shell:deny', '--parent-session', 'ses_parent', '--agent', 'build', '--wait'])
+  const result = await cli([
+    'send',
+    '--channel',
+    twin.channelId,
+    '-p',
+    'Send settings',
+    '--cwd',
+    subdir,
+    '--permission',
+    'shell:deny',
+    '--parent-session',
+    'ses_parent',
+    '--agent',
+    'build',
+    '--wait',
+  ])
   const ids = JSON.parse(result.stdout.split('\n')[0]!) as { threadId: string; sessionId: string }
   await waitForFooter({ discord: twin.discord, threadId: ids.threadId })
   expect(await twin.discord.thread(ids.threadId).text()).toMatchInlineSnapshot(`
@@ -436,11 +489,14 @@ test('send settings reach native session creation; notifications create no sessi
     { action: 'question', resource: '*', effect: 'deny' },
     { action: 'shell', resource: '*', effect: 'deny' },
   ])
-  await expect(cli(['send', '--thread', ids.threadId, '-p', 'Must not run', '--permission', 'shell:deny']))
-    .rejects.toMatchObject({ stderr: expect.stringContaining('--permission applies only to new sessions') })
+  await expect(
+    cli(['send', '--thread', ids.threadId, '-p', 'Must not run', '--permission', 'shell:deny']),
+  ).rejects.toMatchObject({ stderr: expect.stringContaining('--permission applies only to new sessions') })
   expect(info.metadata?.['kimaki']).toMatchObject({ parentSessionId: 'ses_parent' })
   expect(result.stdout).toContain('# Send settings')
-  const notice = JSON.parse((await cli(['send', '--channel', twin.channelId, '-p', 'Notification only', '--notify-only'])).stdout) as { threadId: string; sessionId: null }
+  const notice = JSON.parse(
+    (await cli(['send', '--channel', twin.channelId, '-p', 'Notification only', '--notify-only'])).stdout,
+  ) as { threadId: string; sessionId: null }
   expect(await twin.discord.thread(notice.threadId).text()).toMatchInlineSnapshot(`
     "--- from: assistant (TestBot)
     Notification only"
@@ -452,7 +508,19 @@ test('send settings reach native session creation; notifications create no sessi
 test('status reports the running bot, logs prints and follows the log file', async () => {
   const running = JSON.parse((await cli(['status', '--json'])).stdout) as Record<string, unknown>
   const opencode = running['opencode'] as { url: string; version: string; connected: boolean }
-  expect({ ...running, mode: running['mode'] === (twin.discord.botToken.includes(':') ? 'gateway' : 'self_hosted'), runtime: running['runtime'] === RUNTIME_NAME, guilds: (running['guilds'] as Array<{ id: string; name: string }>).map((guild) => ({ ...guild, id: guild.id === twin.discord.guildId })), pid: typeof running['pid'], uptimeSec: typeof running['uptimeSec'], dataDir: running['dataDir'] === dataDir, opencode: { ...opencode, url: opencode.url === bot.opencode.endpoint?.url, version: typeof opencode.version } }).toMatchInlineSnapshot(`
+  expect({
+    ...running,
+    mode: running['mode'] === (twin.discord.botToken.includes(':') ? 'gateway' : 'self_hosted'),
+    runtime: running['runtime'] === RUNTIME_NAME,
+    guilds: (running['guilds'] as Array<{ id: string; name: string }>).map((guild) => ({
+      ...guild,
+      id: guild.id === twin.discord.guildId,
+    })),
+    pid: typeof running['pid'],
+    uptimeSec: typeof running['uptimeSec'],
+    dataDir: running['dataDir'] === dataDir,
+    opencode: { ...opencode, url: opencode.url === bot.opencode.endpoint?.url, version: typeof opencode.version },
+  }).toMatchInlineSnapshot(`
     {
       "analytics": false,
       "dataDir": true,
@@ -477,7 +545,9 @@ test('status reports the running bot, logs prints and follows the log file', asy
 
   // A data dir without a running bot.
   const otherDir = tempDataDir()
-  const stopped = await exec(...cliCommand(['status', '--json', '--data-dir', otherDir])).catch((error: { code: number; stdout: string }) => error)
+  const stopped = await exec(...cliCommand(['status', '--json', '--data-dir', otherDir])).catch(
+    (error: { code: number; stdout: string }) => error,
+  )
   fs.rmSync(otherDir, { recursive: true, force: true })
   expect({ code: 'code' in stopped ? stopped.code : 0, stdout: JSON.parse(stopped.stdout) }).toMatchInlineSnapshot(`
     {

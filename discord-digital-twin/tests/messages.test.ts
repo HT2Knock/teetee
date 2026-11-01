@@ -137,9 +137,7 @@ describe('messages and reactions', () => {
 
   test('channel.send stores message in DB', async () => {
     const guild = client.guilds.cache.first()!
-    const channel = guild.channels.cache.find(
-      (c) => c.name === 'general',
-    ) as TextChannel
+    const channel = guild.channels.cache.find((c) => c.name === 'general') as TextChannel
 
     const sent = await channel.send('Hello from bot!')
     expect(sent.content).toBe('Hello from bot!')
@@ -159,9 +157,7 @@ describe('messages and reactions', () => {
 
   test('typing endpoint events are tracked for channel scope', async () => {
     const guild = client.guilds.cache.first()!
-    const channel = guild.channels.cache.find(
-      (c) => c.name === 'general',
-    ) as TextChannel
+    const channel = guild.channels.cache.find((c) => c.name === 'general') as TextChannel
 
     const ch = discord.channel(channelId)
     ch.clearTypingEvents()
@@ -186,9 +182,7 @@ describe('messages and reactions', () => {
 
   test('message edit updates content and edited_timestamp', async () => {
     const guild = client.guilds.cache.first()!
-    const channel = guild.channels.cache.find(
-      (c) => c.name === 'general',
-    ) as TextChannel
+    const channel = guild.channels.cache.find((c) => c.name === 'general') as TextChannel
 
     const sent = await channel.send('Original content')
     const edited = await sent.edit('Edited content')
@@ -210,9 +204,7 @@ describe('messages and reactions', () => {
 
   test('message delete removes from DB', async () => {
     const guild = client.guilds.cache.first()!
-    const channel = guild.channels.cache.find(
-      (c) => c.name === 'general',
-    ) as TextChannel
+    const channel = guild.channels.cache.find((c) => c.name === 'general') as TextChannel
 
     const sent = await channel.send('To be deleted')
     const sentId = sent.id
@@ -233,9 +225,7 @@ describe('messages and reactions', () => {
 
   test('reactions can be added via message.react', async () => {
     const guild = client.guilds.cache.first()!
-    const channel = guild.channels.cache.find(
-      (c) => c.name === 'general',
-    ) as TextChannel
+    const channel = guild.channels.cache.find((c) => c.name === 'general') as TextChannel
 
     const sent = await channel.send('React to me')
     await sent.react('🔥')
@@ -273,10 +263,7 @@ describe('messages and reactions', () => {
     expect(
       getMessageVisibleText({
         content: '',
-        components: [
-          { type: ComponentType.Separator },
-          { type: ComponentType.TextDisplay, content: 'cv2 body' },
-        ],
+        components: [{ type: ComponentType.Separator }, { type: ComponentType.TextDisplay, content: 'cv2 body' }],
       }),
     ).toMatchInlineSnapshot(`
       "---

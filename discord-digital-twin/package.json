@@ -2,7 +2,19 @@
   "name": "discord-digital-twin",
   "version": "0.1.2",
   "description": "Local Discord API twin for testing discord.js bots without hitting real Discord servers",
-  "type": "module",
+  "keywords": [
+    "discord",
+    "discord.js",
+    "e2e",
+    "esm",
+    "integration-test",
+    "mock",
+    "test-utils",
+    "testing",
+    "typescript"
+  ],
+  "homepage": "https://github.com/remorses/kimaki/tree/main/discord-digital-twin",
+  "bugs": "https://github.com/remorses/kimaki/issues",
   "license": "MIT",
   "author": "remorses <beats.by.morse@gmail.com>",
   "repository": {
@@ -10,21 +22,6 @@
     "url": "git+https://github.com/remorses/kimaki.git",
     "directory": "discord-digital-twin"
   },
-  "homepage": "https://github.com/remorses/kimaki/tree/main/discord-digital-twin",
-  "bugs": "https://github.com/remorses/kimaki/issues",
-  "keywords": [
-    "discord",
-    "testing",
-    "mock",
-    "discord.js",
-    "typescript",
-    "esm",
-    "test-utils",
-    "e2e",
-    "integration-test"
-  ],
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "files": [
     "src",
     "dist",
@@ -32,6 +29,9 @@
     "README.md",
     "CHANGELOG.md"
   ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     "./package.json": "./package.json",
     "./schema.prisma": "./schema.prisma",

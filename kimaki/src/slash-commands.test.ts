@@ -28,7 +28,11 @@ test('catalog names are sanitized, keep their suffix, skip collisions and MCP pr
   // OpenCode's list order does not change which commands fit.
   const reversed = buildCommands({
     fixed,
-    catalog: { agents: catalog.agents.toReversed(), commands: catalog.commands.toReversed(), skills: catalog.skills.toReversed() },
+    catalog: {
+      agents: catalog.agents.toReversed(),
+      commands: catalog.commands.toReversed(),
+      skills: catalog.skills.toReversed(),
+    },
   })
   expect(reversed.commands).toEqual(commands)
   const names = commands.map((command) => command.name)

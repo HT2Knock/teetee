@@ -7,7 +7,8 @@ import { decodeTaskPayload, encodeTaskPayload, nextCronRun, nextRunOf, parseSend
 import { parseWakeAt } from './sleeps.ts'
 
 const at = (iso: string) => Date.parse(iso)
-const iso = (value: number | Error | null) => (typeof value === 'number' ? new Date(value).toISOString() : value instanceof Error ? `Error: ${value.message}` : value)
+const iso = (value: number | Error | null) =>
+  typeof value === 'number' ? new Date(value).toISOString() : value instanceof Error ? `Error: ${value.message}` : value
 
 test('next run of one-shot and cron tasks, V1 timezones included', () => {
   const now = at('2026-01-01T10:00:00Z')
@@ -20,7 +21,8 @@ test('next run of one-shot and cron tasks, V1 timezones included', () => {
     { id: 8, schedule_kind: 'cron' as const, cron_expr: 'not a cron', timezone: null },
     { id: 9, schedule_kind: 'cron' as const, cron_expr: null, timezone: null },
   ]
-  expect(Object.fromEntries(rows.map((row) => [`routine #${row.id}`, iso(nextRunOf({ row, now }))]))).toMatchInlineSnapshot(`
+  expect(Object.fromEntries(rows.map((row) => [`routine #${row.id}`, iso(nextRunOf({ row, now }))])))
+    .toMatchInlineSnapshot(`
     {
       "routine #1": null,
       "routine #2": "2026-01-01T11:00:00.000Z",
@@ -34,11 +36,28 @@ test('next run of one-shot and cron tasks, V1 timezones included', () => {
 
 test('V1 task payloads decode to the send input of each run and encode back unchanged', () => {
   const base = {
-    prompt: 'Weekly check', agent: 'plan', model: 'anthropic/claude', username: 'tommy', userId: '100', permissions: ['bash:*:allow'],
-    injectionGuardPatterns: ['secret'], parentSessionId: 'ses_parent', preRunCommand: 'git fetch', allowConcurrency: true,
+    prompt: 'Weekly check',
+    agent: 'plan',
+    model: 'anthropic/claude',
+    username: 'tommy',
+    userId: '100',
+    permissions: ['bash:*:allow'],
+    injectionGuardPatterns: ['secret'],
+    parentSessionId: 'ses_parent',
+    preRunCommand: 'git fetch',
+    allowConcurrency: true,
   }
   const thread = { ...base, kind: 'thread', threadId: '300', permissions: null }
-  const channel = { ...base, kind: 'channel', channelId: '200', name: 'Weekly', notifyOnly: false, worktreeName: '', cwd: null, baseBranch: 'main' }
+  const channel = {
+    ...base,
+    kind: 'channel',
+    channelId: '200',
+    name: 'Weekly',
+    notifyOnly: false,
+    worktreeName: '',
+    cwd: null,
+    baseBranch: 'main',
+  }
   const decoded = [thread, channel].map((payload) => decodeTaskPayload(JSON.stringify(payload)))
   expect(decoded).toMatchInlineSnapshot(`
     [
@@ -92,7 +111,17 @@ test('V1 task payloads decode to the send input of each run and encode back unch
     return json instanceof Error ? json : JSON.parse(json)
   })
   expect(encoded).toEqual([thread, channel])
-  const empty = { ...channel, name: '', agent: '', model: '', userId: '', parentSessionId: '', permissions: [], cwd: '', baseBranch: '' }
+  const empty = {
+    ...channel,
+    name: '',
+    agent: '',
+    model: '',
+    userId: '',
+    parentSessionId: '',
+    permissions: [],
+    cwd: '',
+    baseBranch: '',
+  }
   const emptyJob = decodeTaskPayload(JSON.stringify(empty))
   if (emptyJob instanceof Error) throw new Error(emptyJob.message)
   const rewritten = encodeTaskPayload({ ...emptyJob, allowConcurrency: false })
@@ -137,12 +166,28 @@ test('V1 task payloads decode to the send input of each run and encode back unch
 
 test('--send-at and sleep wake times resolve against the clock', () => {
   const now = at('2026-01-01T09:00:00Z')
-  const sendAt = ['2026-01-01T10:00:00Z', '2026-01-01T10:00Z', '2026-01-01T08:00:00Z', '2026-01-01T10:00:00+01:00', '0 9 * * 1', '@hourly', 'tomorrow', ' ']
-  expect(Object.fromEntries(sendAt.map((value) => {
-    const parsed = parseSendAt({ value, now })
-    if (parsed instanceof Error) return [value, `Error: ${parsed.message}`]
-    return [value, parsed.kind === 'at' ? `at ${iso(parsed.runAt)}` : `cron ${parsed.cronExpr} next ${iso(parsed.nextRunAt)}`]
-  }))).toMatchInlineSnapshot(`
+  const sendAt = [
+    '2026-01-01T10:00:00Z',
+    '2026-01-01T10:00Z',
+    '2026-01-01T08:00:00Z',
+    '2026-01-01T10:00:00+01:00',
+    '0 9 * * 1',
+    '@hourly',
+    'tomorrow',
+    ' ',
+  ]
+  expect(
+    Object.fromEntries(
+      sendAt.map((value) => {
+        const parsed = parseSendAt({ value, now })
+        if (parsed instanceof Error) return [value, `Error: ${parsed.message}`]
+        return [
+          value,
+          parsed.kind === 'at' ? `at ${iso(parsed.runAt)}` : `cron ${parsed.cronExpr} next ${iso(parsed.nextRunAt)}`,
+        ]
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
     {
       " ": "Error: --send-at cannot be empty",
       "0 9 * * 1": "cron 0 9 * * 1 next 2026-01-05T09:00:00.000Z",
@@ -166,7 +211,8 @@ test('--send-at and sleep wake times resolve against the clock', () => {
     { duration: '1h', until: '2026-01-02T00:00:00Z' },
     {},
   ]
-  expect(wakes.map((input) => `${JSON.stringify(input)} -> ${iso(parseWakeAt({ ...input, now }))}`)).toMatchInlineSnapshot(`
+  expect(wakes.map((input) => `${JSON.stringify(input)} -> ${iso(parseWakeAt({ ...input, now }))}`))
+    .toMatchInlineSnapshot(`
     [
       "{"duration":"2h"} -> 2026-01-01T11:00:00.000Z",
       "{"duration":"90s"} -> 2026-01-01T09:01:30.000Z",
@@ -179,5 +225,7 @@ test('--send-at and sleep wake times resolve against the clock', () => {
       "{} -> Error: Pass --duration or --until",
     ]
   `)
-  expect(iso(nextCronRun({ cronExpr: '0 9 * * *', timezone: 'UTC', from: at('2026-01-01T09:00:00Z') }))).toBe('2026-01-02T09:00:00.000Z')
+  expect(iso(nextCronRun({ cronExpr: '0 9 * * *', timezone: 'UTC', from: at('2026-01-01T09:00:00Z') }))).toBe(
+    '2026-01-02T09:00:00.000Z',
+  )
 })

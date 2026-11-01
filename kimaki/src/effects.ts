@@ -38,7 +38,9 @@ const TYPING_REFRESH_MS = 7_000
 const execFileAsync = promisify(execFile)
 
 async function gitBranch(directory: string): Promise<string | null> {
-  const result = await execFileAsync('git', ['branch', '--show-current'], { cwd: directory, timeout: 5_000 }).catch(() => null)
+  const result = await execFileAsync('git', ['branch', '--show-current'], { cwd: directory, timeout: 5_000 }).catch(
+    () => null,
+  )
   return result?.stdout.trim() || null
 }
 
@@ -122,7 +124,8 @@ function uploadMessage({ files, first, numbered }: { files: readonly UploadFile[
 // Effects that will never run: an upload still waits for its answer.
 function drop(effects: readonly Effect[]) {
   for (const effect of effects) {
-    if (effect.type === 'attachments') effect.settle(new DiscordError({ operation: 'upload (the thread no longer shows a session)' }))
+    if (effect.type === 'attachments')
+      effect.settle(new DiscordError({ operation: 'upload (the thread no longer shows a session)' }))
   }
 }
 
@@ -184,14 +187,28 @@ export function createEffectsRunner({ discord, markViewed }: { discord: Client; 
       if (!channel) return new DiscordError({ operation: `upload to thread ${threadId}` })
       const sent = await channel
         .send({ ...uploadMessage({ files: batch, first, numbered: files.length > 1 }), allowedMentions: { parse: [] } })
-        .catch((cause: Error) => new DiscordError({ operation: `upload of ${batch.map((file) => file.name).join(', ')} (${cause.message})`, cause }))
+        .catch(
+          (cause: Error) =>
+            new DiscordError({
+              operation: `upload of ${batch.map((file) => file.name).join(', ')} (${cause.message})`,
+              cause,
+            }),
+        )
       if (sent instanceof Error) return sent
       first += batch.length
     }
     return null
   }
 
-  async function edit({ channel, messageId, message }: { channel: SendableChannels; messageId: string; message: UiMessage }) {
+  async function edit({
+    channel,
+    messageId,
+    message,
+  }: {
+    channel: SendableChannels
+    messageId: string
+    message: UiMessage
+  }) {
     const edited = await channel.messages
       .edit(messageId, { content: message.content, components: [...message.components] })
       .catch((e: Error) => e)

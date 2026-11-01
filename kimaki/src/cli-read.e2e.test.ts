@@ -4,7 +4,20 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 import type { BotHandle } from './main.ts'
-import { cliCommand, scriptedTurn, seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitForFooter, waitForSelectMenu, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
+import {
+  cliCommand,
+  scriptedTurn,
+  seedProjectChannel,
+  startOpencodeTestServer,
+  startTestBot,
+  startTwin,
+  tempDataDir,
+  waitForFooter,
+  waitForSelectMenu,
+  warmUp,
+  type OpencodeTestServer,
+  type TestTwin,
+} from './test/harness.ts'
 import { send } from './input.ts'
 import { abort } from './prompt.ts'
 
@@ -14,8 +27,32 @@ let server: OpencodeTestServer
 let twin: TestTwin
 let bot: BotHandle
 beforeAll(async () => {
-  ;[server, twin] = await Promise.all([startOpencodeTestServer({ matchers: scriptedTurn({ marker: 'wait-form-marker', steps: [{ id: 'wait-question', tool: 'question', input: { questions: [{ question: 'Continue?', header: 'Next', options: [{ label: 'Yes', description: 'Continue' }] }] } }], finalText: 'Question answered' }) }), startTwin()])
-  await seedProjectChannel({ dataDir, channelId: twin.channelId, guildId: twin.discord.guildId, directory: server.projectDirectory })
+  ;[server, twin] = await Promise.all([
+    startOpencodeTestServer({
+      matchers: scriptedTurn({
+        marker: 'wait-form-marker',
+        steps: [
+          {
+            id: 'wait-question',
+            tool: 'question',
+            input: {
+              questions: [
+                { question: 'Continue?', header: 'Next', options: [{ label: 'Yes', description: 'Continue' }] },
+              ],
+            },
+          },
+        ],
+        finalText: 'Question answered',
+      }),
+    }),
+    startTwin(),
+  ])
+  await seedProjectChannel({
+    dataDir,
+    channelId: twin.channelId,
+    guildId: twin.discord.guildId,
+    directory: server.projectDirectory,
+  })
   bot = await startTestBot({ dataDir, twin, server })
   await warmUp({ server })
 }, 60_000)
@@ -26,7 +63,13 @@ afterAll(async () => {
 })
 function cli(args: string[]) {
   return exec(...cliCommand([...args, '--data-dir', dataDir]), {
-    cwd: process.cwd(), env: { ...process.env, KIMAKI_LOCK_PORT: String(bot.lock.port), KIMAKI_OPENCODE_SERVICE_FILE: server.serviceFile, KIMAKI_DISCORD_REST_URL: twin.discord.restUrl },
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      KIMAKI_LOCK_PORT: String(bot.lock.port),
+      KIMAKI_OPENCODE_SERVICE_FILE: server.serviceFile,
+      KIMAKI_DISCORD_REST_URL: twin.discord.restUrl,
+    },
   })
 }
 test('session read, list, sync, wait, url and events read real session history', async () => {
@@ -53,7 +96,9 @@ test('session read, list, sync, wait, url and events read real session history',
   expect(sync.written + sync.skipped).toBeGreaterThan(0)
   expect([again.written, again.failed, rebuilt.skipped, rebuilt.failed]).toEqual([0, 0, 0, 0])
   expect(fs.readFileSync(path.join(dataDir, 'transcripts', `${first.sessionId}.md`), 'utf8')).toContain('## user')
-  expect(fs.readFileSync(path.join(dataDir, 'transcripts', `${first.sessionId}.md`), 'utf8')).toContain('Reader content marker')
+  expect(fs.readFileSync(path.join(dataDir, 'transcripts', `${first.sessionId}.md`), 'utf8')).toContain(
+    'Reader content marker',
+  )
   expect(read.stdout).toContain('Reader content marker')
   expect(wait.stdout).toContain('Reader content marker')
   expect(url.stdout).toContain(first.threadId)
@@ -63,7 +108,11 @@ test('session read, list, sync, wait, url and events read real session history',
 })
 
 test('session wait returns for a real pending question; active discovery errors use exit 64', async () => {
-  const first = await send(bot, { channelId: twin.channelId, prompt: 'wait-form-marker', permissions: ['question:allow'] })
+  const first = await send(bot, {
+    channelId: twin.channelId,
+    prompt: 'wait-form-marker',
+    permissions: ['question:allow'],
+  })
   if (first instanceof Error || !first.sessionId) throw new Error('Expected a session')
   await waitForSelectMenu({ discord: twin.discord, channelId: first.threadId, prefix: 'form:' })
   const result = await cli(['session', 'wait', first.sessionId, '--timeout', '3s'])

@@ -155,7 +155,10 @@ test('channel message creates a thread with reply and footer, follow-up continue
     ]
   `)
 
-  const rows = parseRows<ThreadSessionRow>('thread_sessions', await bot.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions`)
+  const rows = parseRows<ThreadSessionRow>(
+    'thread_sessions',
+    await bot.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions`,
+  )
   expect(rows.map((row) => ({ thread: row.thread_id === thread.id, source: row.source }))).toEqual([
     { thread: true, source: 'kimaki' },
   ])
@@ -186,8 +189,14 @@ test('message in a channel without a project creates no thread', async () => {
 
 test('/session-id shows the session, thread and attach command; events are recorded per thread', async () => {
   const { discord } = twin
-  const binding = parseFirst<ThreadSessionRow>('thread_sessions', await bot.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions WHERE thread_id = ${helloThreadId} LIMIT 1`)
-  const { id: interactionId } = await discord.thread(helloThreadId).user(TEST_USER_ID).runSlashCommand({ name: 'session-id' })
+  const binding = parseFirst<ThreadSessionRow>(
+    'thread_sessions',
+    await bot.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions WHERE thread_id = ${helloThreadId} LIMIT 1`,
+  )
+  const { id: interactionId } = await discord
+    .thread(helloThreadId)
+    .user(TEST_USER_ID)
+    .runSlashCommand({ name: 'session-id' })
   await discord.thread(helloThreadId).waitForInteractionAck({ interactionId, timeout: 4_000 })
   const response = await discord.thread(helloThreadId).getInteractionResponse(interactionId)
   const content = (JSON.parse(response?.data ?? '{}') as { content?: string }).content ?? ''
@@ -204,7 +213,10 @@ test('/session-id shows the session, thread and attach command; events are recor
     \`\`\`"
   `)
 
-  const lines = fs.readFileSync(sessionEventsFile({ dataDir, threadId: helloThreadId }), 'utf8').trim().split('\n')
+  const lines = fs
+    .readFileSync(sessionEventsFile({ dataDir, threadId: helloThreadId }), 'utf8')
+    .trim()
+    .split('\n')
   const types = lines.map((line) => (JSON.parse(line) as { event: { type: string } }).event.type)
   expect([...new Set(types)].sort()).toMatchInlineSnapshot(`
     [

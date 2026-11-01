@@ -24,10 +24,17 @@ import {
 } from './test/harness.ts'
 
 const matchers: DeterministicMatcher[] = [
-  { id: 'after-deny', priority: 500, when: { latestUserTextIncludes: 'after-deny' }, then: { parts: textParts('continued after deny') } },
+  {
+    id: 'after-deny',
+    priority: 500,
+    when: { latestUserTextIncludes: 'after-deny' },
+    then: { parts: textParts('continued after deny') },
+  },
   ...scriptedTurn({
     marker: 'perm-accept',
-    steps: [{ id: 'call-accept', tool: 'shell', input: { command: 'echo guarded-accept', description: 'Guarded echo' } }],
+    steps: [
+      { id: 'call-accept', tool: 'shell', input: { command: 'echo guarded-accept', description: 'Guarded echo' } },
+    ],
     finalText: 'accept turn done',
   }),
   ...scriptedTurn({
@@ -48,7 +55,9 @@ const matchers: DeterministicMatcher[] = [
   }),
   ...scriptedTurn({
     marker: 'child-guarded',
-    steps: [{ id: 'call-child-shell', tool: 'shell', input: { command: 'echo guarded-child', description: 'Child echo' } }],
+    steps: [
+      { id: 'call-child-shell', tool: 'shell', input: { command: 'echo guarded-child', description: 'Child echo' } },
+    ],
     finalText: 'child done',
   }).map((matcher) => ({ ...matcher, priority: (matcher.priority ?? 0) + 100 })),
 ]

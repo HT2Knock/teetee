@@ -39,7 +39,8 @@ export function remoteEnvelope(input: SendInput) {
   // A prompt over the message limit travels as an attachment; the content keeps a preview.
   const long = prompt.length > 2000
   const footer = `${REMOTE_SEND_PREFIX}${JSON.stringify({ requestId, options, ...(long && { promptFile: REMOTE_PROMPT_FILE }) })}`
-  if (footer.length > 2048) return new ConfigError({ reason: 'Remote send options exceed the Discord embed limit. Send fewer options.' })
+  if (footer.length > 2048)
+    return new ConfigError({ reason: 'Remote send options exceed the Discord embed limit. Send fewer options.' })
   const attachments: Array<{ name: string; attachment: Buffer | string }> = [
     ...(long ? [{ name: REMOTE_PROMPT_FILE, attachment: Buffer.from(prompt) }] : []),
     ...(files ?? []).map((file) => ({ name: file.name, attachment: promptFilePath(file) })),
@@ -48,7 +49,13 @@ export function remoteEnvelope(input: SendInput) {
 }
 
 // null: not the answer to this request. Error: the owning bot reported a failure.
-export function parseRemoteResult({ footer, requestId }: { footer: string | undefined; requestId: string }): ConfigError | RemoteResult | null {
+export function parseRemoteResult({
+  footer,
+  requestId,
+}: {
+  footer: string | undefined
+  requestId: string
+}): ConfigError | RemoteResult | null {
   const prefix = `${REMOTE_RESULT_PREFIX}${requestId}:`
   if (!footer?.startsWith(prefix)) return null
   const parsed = attempt(
@@ -59,26 +66,45 @@ export function parseRemoteResult({ footer, requestId }: { footer: string | unde
   const result = parsed.value
   if (!result || typeof result !== 'object') return new ConfigError({ reason: 'Remote send failed' })
   const threadId = 'threadId' in result && typeof result.threadId === 'string' ? result.threadId : null
-  const sessionId = 'sessionId' in result && (typeof result.sessionId === 'string' || result.sessionId === null) ? result.sessionId : undefined
+  const sessionId =
+    'sessionId' in result && (typeof result.sessionId === 'string' || result.sessionId === null)
+      ? result.sessionId
+      : undefined
   if (threadId && sessionId !== undefined) return { threadId, sessionId }
-  return new ConfigError({ reason: 'error' in result && typeof result.error === 'string' ? result.error : 'Remote send failed' })
+  return new ConfigError({
+    reason: 'error' in result && typeof result.error === 'string' ? result.error : 'Remote send failed',
+  })
 }
 
 export function noAnswerError(): ConfigError {
-  return new ConfigError({ reason: 'No Kimaki bot answered this send. Start Kimaki on the machine that owns this channel.' })
+  return new ConfigError({
+    reason: 'No Kimaki bot answered this send. Start Kimaki on the machine that owns this channel.',
+  })
 }
 
 // `kimaki send` without a local bot: post the envelope over Discord REST with the
 // bot token and poll the channel for the owning bot's reply.
-export async function sendWithoutBot({ api, input }: { api: API; input: SendInput }): Promise<ConfigError | DiscordError | RemoteResult> {
+export async function sendWithoutBot({
+  api,
+  input,
+}: {
+  api: API
+  input: SendInput
+}): Promise<ConfigError | DiscordError | RemoteResult> {
   const channelId = input.threadId ?? input.channelId
   if (!channelId || input.sessionId || input.project) {
-    return new ConfigError({ reason: 'Kimaki bot is not running here. Without a local bot, send needs --channel or --thread (a Discord ID), not --session or --project.' })
+    return new ConfigError({
+      reason:
+        'Kimaki bot is not running here. Without a local bot, send needs --channel or --thread (a Discord ID), not --session or --project.',
+    })
   }
   const envelope = remoteEnvelope(input)
   if (envelope instanceof Error) return envelope
   const files = await Promise.all(
-    envelope.attachments.map(async (file) => ({ name: file.name, data: typeof file.attachment === 'string' ? await fs.promises.readFile(file.attachment) : file.attachment })),
+    envelope.attachments.map(async (file) => ({
+      name: file.name,
+      data: typeof file.attachment === 'string' ? await fs.promises.readFile(file.attachment) : file.attachment,
+    })),
   ).catch((cause) => new ConfigError({ reason: 'Cannot read a --file attachment', cause }))
   if (files instanceof Error) return files
   const posted = await api.channels

@@ -22,7 +22,12 @@ import {
 } from './test/harness.ts'
 
 const matchers: DeterministicMatcher[] = [
-  { id: 'late', priority: 500, when: { latestUserTextIncludes: 'late-marker' }, then: { parts: textParts('late reply') } },
+  {
+    id: 'late',
+    priority: 500,
+    when: { latestUserTextIncludes: 'late-marker' },
+    then: { parts: textParts('late reply') },
+  },
 ]
 
 let server: OpencodeTestServer
@@ -32,8 +37,16 @@ let dataDir: string
 
 beforeAll(async () => {
   dataDir = tempDataDir()
-  ;[server, twin] = await Promise.all([startOpencodeTestServer({ matchers, agents: { late: { description: 'Late agent', mode: 'primary' } } }), startTwin()])
-  await seedProjectChannel({ dataDir, channelId: twin.channelId, guildId: twin.discord.guildId, directory: server.projectDirectory })
+  ;[server, twin] = await Promise.all([
+    startOpencodeTestServer({ matchers, agents: { late: { description: 'Late agent', mode: 'primary' } } }),
+    startTwin(),
+  ])
+  await seedProjectChannel({
+    dataDir,
+    channelId: twin.channelId,
+    guildId: twin.discord.guildId,
+    directory: server.projectDirectory,
+  })
   bot = await startTestBot({ dataDir, twin, server })
 })
 
@@ -64,7 +77,9 @@ test('agents loaded after startup get their slash commands', async () => {
     .channel(channelId)
     .user(TEST_USER_ID)
     .runSlashCommand({ name: 'late-agent', options: [{ name: 'prompt', type: 3, value: 'Go late-marker' }] })
-  const thread = await discord.channel(channelId).waitForThread({ timeout: 8_000, predicate: (found) => !before.has(found.id) })
+  const thread = await discord
+    .channel(channelId)
+    .waitForThread({ timeout: 8_000, predicate: (found) => !before.has(found.id) })
   await waitForFooter({ discord, threadId: thread.id })
   expect(await discord.thread(thread.id).text()).toMatchInlineSnapshot(`
     "--- from: assistant (TestBot)

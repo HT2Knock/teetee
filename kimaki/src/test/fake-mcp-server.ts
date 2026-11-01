@@ -4,7 +4,11 @@
 
 import readline from 'node:readline'
 
-type Request = { id?: number | string; method: string; params?: { protocolVersion?: string; arguments?: Record<string, string> } }
+type Request = {
+  id?: number | string
+  method: string
+  params?: { protocolVersion?: string; arguments?: Record<string, string> }
+}
 
 function send(message: object) {
   process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...message })}\n`)
@@ -19,10 +23,20 @@ function result(request: Request) {
         serverInfo: { name: 'fake', version: '1.0.0' },
       }
     case 'prompts/list':
-      return { prompts: [{ name: 'greet', description: 'Greet someone', arguments: [{ name: 'name', required: false }] }] }
+      return {
+        prompts: [{ name: 'greet', description: 'Greet someone', arguments: [{ name: 'name', required: false }] }],
+      }
     case 'prompts/get':
       return {
-        messages: [{ role: 'user', content: { type: 'text', text: `Say hello to ${request.params?.arguments?.['name'] ?? 'nobody'} mcp-marker` } }],
+        messages: [
+          {
+            role: 'user',
+            content: {
+              type: 'text',
+              text: `Say hello to ${request.params?.arguments?.['name'] ?? 'nobody'} mcp-marker`,
+            },
+          },
+        ],
       }
     case 'tools/list':
       return { tools: [] }

@@ -60,7 +60,9 @@ test('kimaki sleep in a turn makes its footer silent, the next turn notifies aga
   const end = turn.findIndex((event) => event.type === 'session.execution.succeeded')
   const slept = replay({ events: [...turn.slice(0, end), { type: 'kimaki.sleep' }, ...turn.slice(end)] })
   const next = replay({ events: turn, view: slept.view })
-  const footers = [...slept.effects, ...next.effects].flatMap((effect) => (effect.type === 'footer' ? [effect.notify] : []))
+  const footers = [...slept.effects, ...next.effects].flatMap((effect) =>
+    effect.type === 'footer' ? [effect.notify] : [],
+  )
   expect(footers).toMatchInlineSnapshot(`
     [
       false,
@@ -272,15 +274,24 @@ test('retry notices are throttled to one per 10s', () => {
 test('cache miss notice when the cached prefix shrinks, e.g. after the cache TTL', () => {
   const events = loadFixture('tools.events.jsonl')
   const sessionId = rootSessionId(events)
-  const steps = events.flatMap((event, index) => (event.type === 'session.step.ended' && event.data.sessionID === sessionId ? [index] : []))
+  const steps = events.flatMap((event, index) =>
+    event.type === 'session.step.ended' && event.data.sessionID === sessionId ? [index] : [],
+  )
   const lastIndex = steps.at(-1)!
   const last = events[lastIndex]
   if (last?.type !== 'session.step.ended') throw new Error('fixture has no root step.ended')
   // Same turn, but the last request found nothing in cache 10 minutes later.
   const missed = events.map((event, index) =>
-    index === lastIndex ? { ...last, created: last.created + 600_000, data: { ...last.data, tokens: { ...last.data.tokens, cache: { read: 0, write: 0 } } } } : event,
+    index === lastIndex
+      ? {
+          ...last,
+          created: last.created + 600_000,
+          data: { ...last.data, tokens: { ...last.data.tokens, cache: { read: 0, write: 0 } } },
+        }
+      : event,
   )
-  expect(effectLines(replay({ events: missed }).effects).filter((line) => line.includes('cache'))).toMatchInlineSnapshot(`
+  expect(effectLines(replay({ events: missed }).effects).filter((line) => line.includes('cache')))
+    .toMatchInlineSnapshot(`
     [
       "\\n-# ⬦ prompt cache miss: 0 of 25k tokens cached, 10m 1s after the last request",
     ]
@@ -290,7 +301,8 @@ test('cache miss notice when the cached prefix shrinks, e.g. after the cache TTL
 
 test('prompts from other clients echo, except the expanded prompt of a command Kimaki ran', () => {
   const events = loadFixture('queue-plain.events.jsonl')
-  const echoes = (before: ThreadEvent[]) => effectLines(replay({ events: [...before, ...events] }).effects).filter((line) => line.startsWith('»'))
+  const echoes = (before: ThreadEvent[]) =>
+    effectLines(replay({ events: [...before, ...events] }).effects).filter((line) => line.startsWith('»'))
   const command = { type: 'kimaki.command' as const, text: '/review auth', username: 'tommy' }
   expect(echoes([])).toMatchInlineSnapshot(`
     [
@@ -312,9 +324,12 @@ test('prompts from other clients echo, except the expanded prompt of a command K
 
 test('snapshot closes the ack of an item promoted while disconnected, without an echo', () => {
   const events = loadFixture('queue-plain.events.jsonl')
-  const index = events.findIndex((event) => event.type === 'session.inbox.enqueued' && event.data.item.delivery === 'queue')
+  const index = events.findIndex(
+    (event) => event.type === 'session.inbox.enqueued' && event.data.item.delivery === 'queue',
+  )
   const enqueued = events[index]
-  if (enqueued?.type !== 'session.inbox.enqueued' || enqueued.data.item.type !== 'user') throw new Error('fixture has no queued user item')
+  if (enqueued?.type !== 'session.inbox.enqueued' || enqueued.data.item.type !== 'user')
+    throw new Error('fixture has no queued user item')
   const { view } = replay({ events: events.slice(0, index + 1) })
   expect(view.inbox[0]?.acked).toBe(true)
   const snapshot = {
@@ -322,12 +337,22 @@ test('snapshot closes the ack of an item promoted while disconnected, without an
     at: enqueued.created,
     directory: null,
     activeSessionIds: [view.sessionId],
-    sessions: [{
-      sessionId: view.sessionId,
-      inbox: [{ ...enqueued.data.item, id: enqueued.data.inboxID, sessionID: view.sessionId, time: { created: enqueued.created }, delivery: 'steer' as const }],
-      forms: [],
-      permissions: [],
-    }],
+    sessions: [
+      {
+        sessionId: view.sessionId,
+        inbox: [
+          {
+            ...enqueued.data.item,
+            id: enqueued.data.inboxID,
+            sessionID: view.sessionId,
+            time: { created: enqueued.created },
+            delivery: 'steer' as const,
+          },
+        ],
+        forms: [],
+        permissions: [],
+      },
+    ],
   }
   const hydrated = reduce({ view, event: snapshot, prefs: DEFAULT_PREFS })
   expect(effectLines(hydrated.effects)).toMatchInlineSnapshot(`
@@ -351,12 +376,29 @@ test('execute: final metadata shows inner calls whose progress was missed, then 
     { tool: 'opencode.models', status: 'completed', input: { query: 'gpt' } },
     { tool: 'opencode.session_move', status: 'error', input: { directory: '/wt' } },
   ]
-  const progress = (count: number): V2Event => ({ ...base, id: `evt_progress_${count}`, type: 'session.tool.progress', data: { ...call, metadata: { toolCalls: toolCalls.slice(0, count) } } })
+  const progress = (count: number): V2Event => ({
+    ...base,
+    id: `evt_progress_${count}`,
+    type: 'session.tool.progress',
+    data: { ...call, metadata: { toolCalls: toolCalls.slice(0, count) } },
+  })
   const { effects } = replay({
     view,
     events: [
-      { ...base, durable: durable(1), id: 'evt_input', type: 'session.tool.input.started', data: { ...call, name: 'execute' } },
-      { ...base, durable: durable(1), id: 'evt_called', type: 'session.tool.called', data: { ...call, executed: false, input: { code: 'x', description: 'Move to worktree' } } },
+      {
+        ...base,
+        durable: durable(1),
+        id: 'evt_input',
+        type: 'session.tool.input.started',
+        data: { ...call, name: 'execute' },
+      },
+      {
+        ...base,
+        durable: durable(1),
+        id: 'evt_called',
+        type: 'session.tool.called',
+        data: { ...call, executed: false, input: { code: 'x', description: 'Move to worktree' } },
+      },
       progress(1),
       progress(1),
       {
@@ -364,7 +406,12 @@ test('execute: final metadata shows inner calls whose progress was missed, then 
         durable: durable(2),
         id: 'evt_success',
         type: 'session.tool.success',
-        data: { ...call, executed: true, metadata: { toolCalls, error: true }, content: [{ type: 'text', text: 'Error: no such directory\nmore' }] },
+        data: {
+          ...call,
+          executed: true,
+          metadata: { toolCalls, error: true },
+          content: [{ type: 'text', text: 'Error: no such directory\nmore' }],
+        },
       },
     ],
   })

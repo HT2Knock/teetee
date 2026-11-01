@@ -46,10 +46,13 @@ afterAll(async () => {
 test('bot starts on a V1 database and answers in an old thread with the old session', async () => {
   const { discord } = twin
   // What V1 left behind: a thread, and a session with history but no Kimaki marker.
-  const thread = await createApi({ token: discord.botToken, restUrl: discord.restUrl }).channels.createThread(twin.channelId, {
-    name: 'old v1 thread',
-    type: ChannelType.PublicThread,
-  })
+  const thread = await createApi({ token: discord.botToken, restUrl: discord.restUrl }).channels.createThread(
+    twin.channelId,
+    {
+      name: 'old v1 thread',
+      type: ChannelType.PublicThread,
+    },
+  )
   const client = await server.client()
   const session = await client.session.create({ location: { directory: server.projectDirectory } })
   await client.session.prompt({ sessionID: session.id, text: 'message from the V1 days' })
@@ -95,7 +98,11 @@ test('bot starts on a V1 database and answers in an old thread with the old sess
   `)
   const adopted = await client.session.get({ sessionID: session.id })
   const marker = adopted.metadata?.['kimaki']
-  expect(marker && typeof marker === 'object' && !Array.isArray(marker) ? { threadId: marker['threadId'], channelId: marker['channelId'], dataDir: marker['dataDir'] } : null).toEqual({
+  expect(
+    marker && typeof marker === 'object' && !Array.isArray(marker)
+      ? { threadId: marker['threadId'], channelId: marker['channelId'], dataDir: marker['dataDir'] }
+      : null,
+  ).toEqual({
     threadId: thread.id,
     channelId: twin.channelId,
     dataDir,

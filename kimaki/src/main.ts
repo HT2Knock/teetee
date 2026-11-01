@@ -97,7 +97,12 @@ export async function startBot(options: StartBotOptions): Promise<Error | BotHan
   const db = opened.db
 
   const discord = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildVoiceStates],
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.MessageContent,
+      GatewayIntentBits.GuildVoiceStates,
+    ],
     partials: [Partials.Channel, Partials.Message, Partials.User, Partials.ThreadMember],
     ...(options.discordRestUrl && { rest: { api: options.discordRestUrl, version: '10' } }),
   })
@@ -117,9 +122,13 @@ export async function startBot(options: StartBotOptions): Promise<Error | BotHan
     return setToken(token)
   }
   // Gateway lifecycle, to debug reconnects that break voice joins or event delivery.
-  discord.on(Events.ShardDisconnect, (event, id) => logger.warn(`gateway shard ${id} disconnected with code ${event.code}`))
+  discord.on(Events.ShardDisconnect, (event, id) =>
+    logger.warn(`gateway shard ${id} disconnected with code ${event.code}`),
+  )
   discord.on(Events.ShardReconnecting, (id) => logger.warn(`gateway shard ${id} reconnecting`))
-  discord.on(Events.ShardResume, (id, replayed) => logger.info(`gateway shard ${id} resumed, ${replayed} events replayed`))
+  discord.on(Events.ShardResume, (id, replayed) =>
+    logger.info(`gateway shard ${id} resumed, ${replayed} events replayed`),
+  )
   discord.on(Events.ShardReady, (id) => logger.info(`gateway shard ${id} ready`))
   discord.on(Events.ShardError, (error, id) => logger.warn(`gateway shard ${id} error`, error))
   // TODO: await destroy() fully once gateway-proxy uses Fly's `tls` handler. Fly's `http`
@@ -134,18 +143,31 @@ export async function startBot(options: StartBotOptions): Promise<Error | BotHan
     discord,
     // Viewed effects come from OpenCode events, so `opencode` below is always set by then.
     markViewed: async ({ sessionId, idle }) => {
-      const result = await oc({ opencode }, 'mark session viewed', (client) => client.session.view({ sessionID: sessionId, idle }))
+      const result = await oc({ opencode }, 'mark session viewed', (client) =>
+        client.session.view({ sessionID: sessionId, idle }),
+      )
       if (result instanceof Error) return result
     },
   })
   cleanup.defer(() => effects.stop())
   const voiceCalls = createVoiceCalls({ opencodeConfigDir: options.opencodeConfigDir })
   const onTranscriptDue = (sessionId: string) => {
-    void oc({ opencode }, 'sync transcript', (client) => syncSessionTranscript({ client, dataDir: options.dataDir, sessionId })).then((result) => {
+    void oc({ opencode }, 'sync transcript', (client) =>
+      syncSessionTranscript({ client, dataDir: options.dataDir, sessionId }),
+    ).then((result) => {
       if (result instanceof Error) logger.warn(`transcript of ${sessionId} not synced`, result)
     })
   }
-  const eventLoop = createEventLoop({ store, db, discord, effects, recorder, analytics: options.analytics, onRunEnded: voiceCalls.runEnded, onTranscriptDue })
+  const eventLoop = createEventLoop({
+    store,
+    db,
+    discord,
+    effects,
+    recorder,
+    analytics: options.analytics,
+    onRunEnded: voiceCalls.runEnded,
+    onTranscriptDue,
+  })
   const loaded = await eventLoop.load()
   if (loaded instanceof Error) return loaded
   // Before the service is used, so a service started by ensure() loads it at once.
@@ -219,7 +241,9 @@ export async function startBot(options: StartBotOptions): Promise<Error | BotHan
   if (failure) return failure
   const refreshed = await refreshCliContext(bot)
   if (refreshed instanceof Error) return refreshed
-  const commands = registerSlashCommands(bot, createInteractionRegistry(), { globalDirectory: options.opencodeConfigDir })
+  const commands = registerSlashCommands(bot, createInteractionRegistry(), {
+    globalDirectory: options.opencodeConfigDir,
+  })
   cleanup.defer(() => commands.stop())
   // Awaited so the handle is only returned once every guild has its commands.
   await commands.registerAll()
@@ -235,5 +259,10 @@ export async function startBot(options: StartBotOptions): Promise<Error | BotHan
   })
   const resources = cleanup.move()
   let stopping: Promise<void> | undefined
-  return { ...bot, lock, scheduler: { runDueTasks: scheduler.runDueTasks }, stop: () => (stopping ??= resources.disposeAsync()) }
+  return {
+    ...bot,
+    lock,
+    scheduler: { runDueTasks: scheduler.runDueTasks },
+    stop: () => (stopping ??= resources.disposeAsync()),
+  }
 }

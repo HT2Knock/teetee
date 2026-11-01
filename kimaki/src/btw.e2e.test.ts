@@ -25,8 +25,18 @@ import {
 
 const matchers: DeterministicMatcher[] = [
   slowTextMatcher({ marker: 'slow-marker', text: 'slow-done', delayMs: 2_000 }),
-  { id: 'side', priority: 50, when: { latestUserTextIncludes: 'side-marker' }, then: { parts: textParts('side answer') } },
-  { id: 'slash', priority: 50, when: { latestUserTextIncludes: 'slash-marker' }, then: { parts: textParts('slash answer') } },
+  {
+    id: 'side',
+    priority: 50,
+    when: { latestUserTextIncludes: 'side-marker' },
+    then: { parts: textParts('side answer') },
+  },
+  {
+    id: 'slash',
+    priority: 50,
+    when: { latestUserTextIncludes: 'slash-marker' },
+    then: { parts: textParts('slash answer') },
+  },
 ]
 
 let server: OpencodeTestServer
@@ -97,7 +107,10 @@ test('. btw forks into a side thread while the source run continues', async () =
     side answer
     -# *project ⋅ main ⋅ Ns ⋅ N% ⋅ deterministic-v2*"
   `)
-  const rows = parseRows<ThreadSessionRow>('thread_sessions', await bot.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions WHERE thread_id = ${fork.id}`)
+  const rows = parseRows<ThreadSessionRow>(
+    'thread_sessions',
+    await bot.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions WHERE thread_id = ${fork.id}`,
+  )
   expect(rows.length).toBe(1)
   // The plugin only exports KIMAKI_TOOL_CALL to shells when the marker has the CLI context,
   // so `kimaki buttons` failed on the first turn of every fork.
@@ -115,10 +128,13 @@ test('/btw forks from a thread with an idle session', async () => {
   await waitForFooter({ discord, threadId: source.id })
   const existing = new Set((await discord.channel(channelId).getThreads()).map((thread) => thread.id))
 
-  await discord.thread(source.id).user(TEST_USER_ID).runSlashCommand({
-    name: 'btw',
-    options: [{ name: 'prompt', type: 3, value: 'Side slash-marker' }],
-  })
+  await discord
+    .thread(source.id)
+    .user(TEST_USER_ID)
+    .runSlashCommand({
+      name: 'btw',
+      options: [{ name: 'prompt', type: 3, value: 'Side slash-marker' }],
+    })
   const fork = await waitForBtwThread(existing)
   await waitForFooter({ discord, threadId: fork.id })
   expect(hideIds(await discord.thread(fork.id).text())).toMatchInlineSnapshot(`

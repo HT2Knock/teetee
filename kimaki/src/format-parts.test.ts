@@ -13,7 +13,8 @@ const calls: ToolCall[] = [
   {
     name: 'patch',
     input: {
-      patchText: '*** Begin Patch\n*** Add File: a.ts\n+one\n+two\n*** Update File: src/b.ts\n@@\n-old\n+new\n*** End Patch',
+      patchText:
+        '*** Begin Patch\n*** Add File: a.ts\n+one\n+two\n*** Update File: src/b.ts\n@@\n-old\n+new\n*** End Patch',
     },
   },
   { name: 'read', input: { path: 'README.md' } },
@@ -23,7 +24,10 @@ const calls: ToolCall[] = [
   { name: 'subagent', input: { agent: 'general', description: 'List repo folders', prompt: '...', background: true } },
   { name: 'webfetch', input: { url: 'https://kimaki.dev/docs', format: 'markdown' } },
   { name: 'skill', input: { id: 'zele' } },
-  { name: 'execute.opencode.read_mcp_resource', input: { server: 'docs', uri: 'file:///notes/a_long_resource_name_that_keeps_going_and_going.md' } },
+  {
+    name: 'execute.opencode.read_mcp_resource',
+    input: { server: 'docs', uri: 'file:///notes/a_long_resource_name_that_keeps_going_and_going.md' },
+  },
   { name: 'linear_create_issue', input: { team: 'ENG', priority: 2, labels: ['bug'], body: null } },
   { name: 'execute.opencode.list_mcp_resources', input: {} },
   { name: 'question', input: { questions: [] } },

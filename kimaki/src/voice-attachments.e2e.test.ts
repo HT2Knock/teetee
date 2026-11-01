@@ -42,7 +42,8 @@ const matchers: DeterministicMatcher[] = [
     priority: 500,
     // The plugin adds the numbered <attachments> and <discord-user> to the model request only.
     when: {
-      latestUserTextRegex: 'image-marker[\\s\\S]*<attachments>[\\s\\S]*1\\. dot\\.png \\(inline\\): [^\\n]*\\n2\\. notes\\.txt: [^\\n]*\\n3\\. archive\\.zip: [^\\n]*\\n</attachments>\\n<discord-user ',
+      latestUserTextRegex:
+        'image-marker[\\s\\S]*<attachments>[\\s\\S]*1\\. dot\\.png \\(inline\\): [^\\n]*\\n2\\. notes\\.txt: [^\\n]*\\n3\\. archive\\.zip: [^\\n]*\\n</attachments>\\n<discord-user ',
       rawPromptIncludes: 'image/png',
     },
     then: { parts: textParts('I see an image') },
@@ -75,11 +76,17 @@ beforeAll(async () => {
   const user = twin.discord.channel(twin.channelId).user(TEST_USER_ID)
   const { id } = await user.runSlashCommand({ name: 'transcription-key' })
   await twin.discord.channel(twin.channelId).waitForInteractionAck({ interactionId: id })
-  await user.submitModal({ customId: TRANSCRIPTION_KEY_MODAL, fields: [{ customId: 'apikey', value: 'AIza-test-gemini-key' }] })
+  await user.submitModal({
+    customId: TRANSCRIPTION_KEY_MODAL,
+    fields: [{ customId: 'apikey', value: 'AIza-test-gemini-key' }],
+  })
   await waitForBotMessageContaining({ discord: twin.discord, threadId: twin.channelId, text: 'Gemini API key saved' })
   const savedBot = parseFirst<BotTokenRow>('bot_tokens', await bot.db<BotTokenRow[]>`SELECT * FROM bot_tokens LIMIT 1`)
   const savedKeys = savedBot
-    ? parseFirst<BotApiKeyRow>('bot_api_keys', await bot.db<BotApiKeyRow[]>`SELECT * FROM bot_api_keys WHERE app_id = ${savedBot.app_id} LIMIT 1`)
+    ? parseFirst<BotApiKeyRow>(
+        'bot_api_keys',
+        await bot.db<BotApiKeyRow[]>`SELECT * FROM bot_api_keys WHERE app_id = ${savedBot.app_id} LIMIT 1`,
+      )
     : undefined
   expect(savedKeys?.gemini_api_key).toBe('AIza-test-gemini-key')
 })
@@ -101,28 +108,38 @@ async function newThread(send: () => Promise<unknown>) {
 
 test('image and text attachments reach the model as files', async () => {
   const thread = await newThread(() =>
-    twin.discord.channel(twin.channelId).user(TEST_USER_ID).sendMessage({
-      content: 'What is this image-marker',
-      attachments: [
-        { id: '1', filename: 'dot.png', size: 70, url: `data:image/png;base64,${PNG_1X1}`, proxy_url: '', content_type: 'image/png' },
-        {
-          id: '2',
-          filename: 'notes.txt',
-          size: 20,
-          url: `data:text/plain;base64,${Buffer.from('attached-text-body').toString('base64')}`,
-          proxy_url: '',
-          content_type: 'text/plain',
-        },
-        {
-          id: '3',
-          filename: 'archive.zip',
-          size: 6,
-          url: `data:application/zip;base64,${Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0]).toString('base64')}`,
-          proxy_url: '',
-          content_type: 'application/zip',
-        },
-      ],
-    }),
+    twin.discord
+      .channel(twin.channelId)
+      .user(TEST_USER_ID)
+      .sendMessage({
+        content: 'What is this image-marker',
+        attachments: [
+          {
+            id: '1',
+            filename: 'dot.png',
+            size: 70,
+            url: `data:image/png;base64,${PNG_1X1}`,
+            proxy_url: '',
+            content_type: 'image/png',
+          },
+          {
+            id: '2',
+            filename: 'notes.txt',
+            size: 20,
+            url: `data:text/plain;base64,${Buffer.from('attached-text-body').toString('base64')}`,
+            proxy_url: '',
+            content_type: 'text/plain',
+          },
+          {
+            id: '3',
+            filename: 'archive.zip',
+            size: 6,
+            url: `data:application/zip;base64,${Buffer.from([0x50, 0x4b, 0x03, 0x04, 0, 0]).toString('base64')}`,
+            proxy_url: '',
+            content_type: 'application/zip',
+          },
+        ],
+      }),
   )
   await waitForFooter({ discord: twin.discord, threadId: thread.id })
   expect(await twin.discord.thread(thread.id).text()).toMatchInlineSnapshot(`
@@ -144,7 +161,14 @@ test('image and text attachments reach the model as files', async () => {
   // OpenCode drops binary files: the model gets their local paths from metadata, the stored text stays clean.
   expect(user?.type === 'user' && user.text).toBe('What is this image-marker')
   const discord = user?.type === 'user' ? user.metadata?.['discord'] : null
-  expect(JSON.stringify(discord).replaceAll(dataDir, '<data>').replace(/\/\d+\//g, '/<message>/').replace(/\d{6,}/g, 'ID')).toMatchInlineSnapshot(`"{"userId":"ID","username":"tommy","messageId":"ID","threadId":"ID","threadName":"What is this image-marker","attachments":[{"name":"dot.png","path":"<data>/attachments/<message>/0-dot.png","inline":true},{"name":"notes.txt","path":"<data>/attachments/<message>/1-notes.txt","inline":false},{"name":"archive.zip","path":"<data>/attachments/<message>/2-archive.zip","inline":false}]}"`)
+  expect(
+    JSON.stringify(discord)
+      .replaceAll(dataDir, '<data>')
+      .replace(/\/\d+\//g, '/<message>/')
+      .replace(/\d{6,}/g, 'ID'),
+  ).toMatchInlineSnapshot(
+    `"{"userId":"ID","username":"tommy","messageId":"ID","threadId":"ID","threadName":"What is this image-marker","attachments":[{"name":"dot.png","path":"<data>/attachments/<message>/0-dot.png","inline":true},{"name":"notes.txt","path":"<data>/attachments/<message>/1-notes.txt","inline":false},{"name":"archive.zip","path":"<data>/attachments/<message>/2-archive.zip","inline":false}]}"`,
+  )
 })
 
 test('voice in a channel starts a session with the transcription and the spoken agent', async () => {
@@ -152,7 +176,9 @@ test('voice in a channel starts a session with the transcription and the spoken 
     twin.discord
       .channel(twin.channelId)
       .user(TEST_USER_ID)
-      .sendVoiceMessage({ url: voiceUrl({ transcription: 'Plan the refactor voice-plan', route: 'steer', agent: 'plan' }) }),
+      .sendVoiceMessage({
+        url: voiceUrl({ transcription: 'Plan the refactor voice-plan', route: 'steer', agent: 'plan' }),
+      }),
   )
   await waitForFooter({ discord: twin.discord, threadId: thread.id })
   expect(thread.name).toBe('Plan the refactor voice-plan')
@@ -172,11 +198,19 @@ test('uploaded audio files with odd Discord media types are transcribed', async 
   const user = twin.discord.channel(twin.channelId).user(TEST_USER_ID)
   const before = gemini.requests.length
   const m4a = await newThread(() =>
-    user.sendVoiceMessage({ url: voiceUrl({ transcription: 'From m4a voice-steer', route: 'steer' }), contentType: 'video/mp4', filename: 'memo.m4a' }),
+    user.sendVoiceMessage({
+      url: voiceUrl({ transcription: 'From m4a voice-steer', route: 'steer' }),
+      contentType: 'video/mp4',
+      filename: 'memo.m4a',
+    }),
   )
   await waitForFooter({ discord: twin.discord, threadId: m4a.id })
   const mp3 = await newThread(() =>
-    user.sendVoiceMessage({ url: voiceUrl({ transcription: 'From mp3 voice-steer', route: 'steer' }), contentType: 'audio/mpeg3', filename: 'memo.mp3' }),
+    user.sendVoiceMessage({
+      url: voiceUrl({ transcription: 'From mp3 voice-steer', route: 'steer' }),
+      contentType: 'audio/mpeg3',
+      filename: 'memo.mp3',
+    }),
   )
   await waitForFooter({ discord: twin.discord, threadId: mp3.id })
   expect(await twin.discord.thread(m4a.id).text()).toMatchInlineSnapshot(`
@@ -211,7 +245,9 @@ test('voice in a busy thread: queue waits, btw forks, new-session starts a threa
   await user.sendVoiceMessage({ url: voiceUrl({ transcription: 'Afterwards voice-queue', route: 'queue' }) })
   await waitForBotMessageContaining({ discord: twin.discord, threadId: thread.id, text: 'position 1' })
 
-  const btw = await newThread(() => user.sendVoiceMessage({ url: voiceUrl({ transcription: 'Side voice-btw', route: 'btw' }) }))
+  const btw = await newThread(() =>
+    user.sendVoiceMessage({ url: voiceUrl({ transcription: 'Side voice-btw', route: 'btw' }) }),
+  )
   await waitForFooter({ discord: twin.discord, threadId: btw.id })
   const fresh = await newThread(() =>
     user.sendVoiceMessage({ url: voiceUrl({ transcription: 'Fresh start voice-new', route: 'new-session' }) }),

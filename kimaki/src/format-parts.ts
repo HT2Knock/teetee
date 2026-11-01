@@ -98,7 +98,9 @@ export function paginate(options: readonly SelectOption[], page: number): Select
   return [
     ...(current > 0 ? [{ label: `← Previous page (${current}/${pages})`, value: `${PAGE_PREFIX}${current - 1}` }] : []),
     ...options.slice(current * SELECT_PAGE_SIZE, (current + 1) * SELECT_PAGE_SIZE),
-    ...(current < pages - 1 ? [{ label: `Next page → (${current + 2}/${pages})`, value: `${PAGE_PREFIX}${current + 1}` }] : []),
+    ...(current < pages - 1
+      ? [{ label: `Next page → (${current + 2}/${pages})`, value: `${PAGE_PREFIX}${current + 1}` }]
+      : []),
   ]
 }
 
@@ -160,14 +162,32 @@ export function formatError(message: string): string {
 }
 
 // The provider error is the whole point: "retrying" alone says nothing.
-export function formatRetry({ attempt, delayMs, message }: { attempt: number; delayMs: number; message: string }): string {
+export function formatRetry({
+  attempt,
+  delayMs,
+  message,
+}: {
+  attempt: number
+  delayMs: number
+  message: string
+}): string {
   const seconds = Math.max(1, Math.ceil(delayMs / 1_000))
   return asSubtext(`⬦ retrying in ${seconds}s (attempt ${attempt}): ${inline(message, 200)}`)
 }
 
-export function formatCacheMiss({ read, expected, idleMs }: { read: number; expected: number; idleMs: number }): string {
+export function formatCacheMiss({
+  read,
+  expected,
+  idleMs,
+}: {
+  read: number
+  expected: number
+  idleMs: number
+}): string {
   const k = (tokens: number) => (tokens < 1_000 ? String(tokens) : `${Math.round(tokens / 1_000)}k`)
-  return asSubtext(`⬦ prompt cache miss: ${k(read)} of ${k(expected)} tokens cached, ${formatDuration(idleMs)} after the last request`)
+  return asSubtext(
+    `⬦ prompt cache miss: ${k(read)} of ${k(expected)} tokens cached, ${formatDuration(idleMs)} after the last request`,
+  )
 }
 
 // One line, no markdown control characters, so `_x_` and `*x*` stay intact.
@@ -245,45 +265,47 @@ type ToolLine = { glyph: '┣' | '◼︎'; text: string }
 
 // One formatter per tool with a dedicated line. Adding a tool means adding one
 // entry, not another branch in a ladder.
-const TOOL_LINES = new Map<string, (input: ToolInput) => ToolLine>(Object.entries({
-  shell: (input) => {
-    const detail = stringField(input, 'description') ?? stringField(input, 'command')
-    const background = input['background'] === true ? ' (background)' : ''
-    return { glyph: '┣', text: `${detail ? `shell _${inline(detail)}_` : 'shell'}${background}` }
-  },
-  edit: (input) => {
-    const { added, removed } = editStats({
-      oldString: stringField(input, 'oldString') ?? '',
-      newString: stringField(input, 'newString') ?? '',
-    })
-    return { glyph: '◼︎', text: `edit *${fileName(stringField(input, 'path') ?? '')}* (+${added}-${removed})` }
-  },
-  write: (input) => {
-    const content = typeof input['content'] === 'string' ? input['content'] : ''
-    const lines = content === '' ? 0 : content.split('\n').length
-    return { glyph: '◼︎', text: `write *${fileName(stringField(input, 'path') ?? '')}* (${lines} lines)` }
-  },
-  patch: (input) => {
-    const files = patchStats(stringField(input, 'patchText') ?? '')
-    const summary = files.map((file) => `*${fileName(file.file)}* (+${file.added}-${file.removed})`).join(', ')
-    return { glyph: '◼︎', text: `patch${summary ? ` ${summary}` : ''}` }
-  },
-  subagent: (input) => {
-    const background = input['background'] === true ? ' (background)' : ''
-    return {
-      glyph: '┣',
-      text: `${inline(stringField(input, 'agent') ?? 'subagent')} **${inline(stringField(input, 'description') ?? '')}**${background}`,
-    }
-  },
-  skill: (input) => {
-    const id = stringField(input, 'id')
-    return { glyph: '┣', text: id ? `skill _${inline(id)}_` : 'skill' }
-  },
-  execute: (input) => {
-    const description = stringField(input, 'description')
-    return { glyph: '┣', text: description ? `execute _${inline(description)}_` : 'execute' }
-  },
-}))
+const TOOL_LINES = new Map<string, (input: ToolInput) => ToolLine>(
+  Object.entries({
+    shell: (input) => {
+      const detail = stringField(input, 'description') ?? stringField(input, 'command')
+      const background = input['background'] === true ? ' (background)' : ''
+      return { glyph: '┣', text: `${detail ? `shell _${inline(detail)}_` : 'shell'}${background}` }
+    },
+    edit: (input) => {
+      const { added, removed } = editStats({
+        oldString: stringField(input, 'oldString') ?? '',
+        newString: stringField(input, 'newString') ?? '',
+      })
+      return { glyph: '◼︎', text: `edit *${fileName(stringField(input, 'path') ?? '')}* (+${added}-${removed})` }
+    },
+    write: (input) => {
+      const content = typeof input['content'] === 'string' ? input['content'] : ''
+      const lines = content === '' ? 0 : content.split('\n').length
+      return { glyph: '◼︎', text: `write *${fileName(stringField(input, 'path') ?? '')}* (${lines} lines)` }
+    },
+    patch: (input) => {
+      const files = patchStats(stringField(input, 'patchText') ?? '')
+      const summary = files.map((file) => `*${fileName(file.file)}* (+${file.added}-${file.removed})`).join(', ')
+      return { glyph: '◼︎', text: `patch${summary ? ` ${summary}` : ''}` }
+    },
+    subagent: (input) => {
+      const background = input['background'] === true ? ' (background)' : ''
+      return {
+        glyph: '┣',
+        text: `${inline(stringField(input, 'agent') ?? 'subagent')} **${inline(stringField(input, 'description') ?? '')}**${background}`,
+      }
+    },
+    skill: (input) => {
+      const id = stringField(input, 'id')
+      return { glyph: '┣', text: id ? `skill _${inline(id)}_` : 'skill' }
+    },
+    execute: (input) => {
+      const description = stringField(input, 'description')
+      return { glyph: '┣', text: description ? `execute _${inline(description)}_` : 'execute' }
+    },
+  }),
+)
 
 // The keys an MCP or plugin tool usually names its subject with.
 const DETAIL_KEYS = ['path', 'pattern', 'url', 'query', 'command', 'name', 'directory', 'title']
@@ -319,11 +341,13 @@ export function formatToolLine(call: ToolCall, { label }: { label?: string } = {
 // A row starts as `running` and changes status in place. A code error still
 // ends with session.tool.success, marked by `error: true`.
 const ExecuteMetadata = z.object({
-  toolCalls: z.array(z.object({
-    tool: z.string(),
-    status: z.enum(['running', 'completed', 'error']),
-    input: z.record(z.string(), z.json()).optional(),
-  })),
+  toolCalls: z.array(
+    z.object({
+      tool: z.string(),
+      status: z.enum(['running', 'completed', 'error']),
+      input: z.record(z.string(), z.json()).optional(),
+    }),
+  ),
   error: z.literal(true).optional(),
 })
 
@@ -380,7 +404,9 @@ export function formatShellFinished({
     state && state !== 'completed' ? inline(state) : null,
     exit !== null && exit !== 0 ? `exit ${exit}` : null,
   ].filter((note) => note !== null)
-  return asSubtext(`⬦ ${prefix}background shell finished${description ? `: _${inline(description)}_` : ''}${notes.length > 0 ? ` (${notes.join(', ')})` : ''}`)
+  return asSubtext(
+    `⬦ ${prefix}background shell finished${description ? `: _${inline(description)}_` : ''}${notes.length > 0 ? ` (${notes.join(', ')})` : ''}`,
+  )
 }
 
 const SHELL_OUTPUT_LIMIT = 1_800

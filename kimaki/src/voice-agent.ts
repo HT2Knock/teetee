@@ -31,7 +31,11 @@ export type AgentTool = {
   execute(args: unknown): unknown
 }
 
-class VoiceAgentError extends Data.TaggedError('VoiceAgentError')<{ operation: string; message: string; cause?: unknown }> {
+class VoiceAgentError extends Data.TaggedError('VoiceAgentError')<{
+  operation: string
+  message: string
+  cause?: unknown
+}> {
   constructor({ operation, cause }: { operation: string; cause?: unknown }) {
     super({ operation, cause, message: `Voice backend ${operation} failed` })
   }
@@ -60,7 +64,11 @@ type OutputItem = {
 
 type StreamEvent = { type?: string; item?: OutputItem; response?: { error?: { message?: string } }; message?: string }
 
-const userMessage = (text: string): InputItem => ({ type: 'message', role: 'user', content: [{ type: 'input_text', text }] })
+const userMessage = (text: string): InputItem => ({
+  type: 'message',
+  role: 'user',
+  content: [{ type: 'input_text', text }],
+})
 
 export function createVoiceAgent({
   auth,
@@ -82,7 +90,12 @@ export function createVoiceAgent({
   const cacheKey = crypto.randomUUID()
   const abort = new AbortController()
   const definitions = [
-    ...Object.entries(tools).map(([name, tool]) => ({ type: 'function', name, description: tool.description, parameters: tool.parameters })),
+    ...Object.entries(tools).map(([name, tool]) => ({
+      type: 'function',
+      name,
+      description: tool.description,
+      parameters: tool.parameters,
+    })),
     { type: 'web_search' },
   ]
   // Runs one at a time; a run waits for the ones before it.
@@ -135,10 +148,13 @@ export function createVoiceAgent({
     })().catch((cause) => new VoiceAgentError({ operation: 'stream', cause }))
     if (read instanceof Error) return read
     for (const item of items) {
-      if (item.type === 'web_search_call') onToolCall({ name: 'web_search', args: JSON.stringify({ query: item.action?.query ?? '' }) })
+      if (item.type === 'web_search_call')
+        onToolCall({ name: 'web_search', args: JSON.stringify({ query: item.action?.query ?? '' }) })
     }
     const calls = items.flatMap((item) =>
-      item.type === 'function_call' && item.call_id && item.name ? [{ call_id: item.call_id, name: item.name, arguments: item.arguments ?? '{}' }] : [],
+      item.type === 'function_call' && item.call_id && item.name
+        ? [{ call_id: item.call_id, name: item.name, arguments: item.arguments ?? '{}' }]
+        : [],
     )
     const text = items
       .flatMap((item) => (item.type === 'message' ? (item.content ?? []) : []))
@@ -171,7 +187,8 @@ export function createVoiceAgent({
     for (let step = 0; step < MAX_STEPS; step++) {
       const reply = await respond()
       if (reply instanceof Error) return reply
-      if (reply.text) history.push({ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: reply.text }] })
+      if (reply.text)
+        history.push({ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: reply.text }] })
       if (reply.calls.length === 0) return reply.text
       history.push(...reply.calls.map((call) => ({ type: 'function_call' as const, ...call })))
       history.push(...(await Promise.all(reply.calls.map(execute))))

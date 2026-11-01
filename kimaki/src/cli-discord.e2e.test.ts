@@ -4,7 +4,19 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 import type { BotHandle } from './main.ts'
-import { cliCommand, TEST_USER_ID, seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitForFooter, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
+import {
+  cliCommand,
+  TEST_USER_ID,
+  seedProjectChannel,
+  startOpencodeTestServer,
+  startTestBot,
+  startTwin,
+  tempDataDir,
+  waitForFooter,
+  warmUp,
+  type OpencodeTestServer,
+  type TestTwin,
+} from './test/harness.ts'
 import { send } from './input.ts'
 
 const exec = promisify(execFile)
@@ -14,7 +26,12 @@ let twin: TestTwin
 let bot: BotHandle
 beforeAll(async () => {
   ;[server, twin] = await Promise.all([startOpencodeTestServer(), startTwin()])
-  await seedProjectChannel({ dataDir, channelId: twin.channelId, guildId: twin.discord.guildId, directory: server.projectDirectory })
+  await seedProjectChannel({
+    dataDir,
+    channelId: twin.channelId,
+    guildId: twin.discord.guildId,
+    directory: server.projectDirectory,
+  })
   bot = await startTestBot({ dataDir, twin, server })
   await warmUp({ server })
 }, 60_000)
@@ -24,9 +41,13 @@ afterAll(async () => {
   fs.rmSync(dataDir, { recursive: true, force: true })
 })
 function cli(args: string[]) {
-  return exec(...cliCommand([...args, '--data-dir', dataDir]), { env: {
-    ...process.env, KIMAKI_LOCK_PORT: String(bot.lock.port), KIMAKI_DISCORD_REST_URL: twin.discord.restUrl,
-  } })
+  return exec(...cliCommand([...args, '--data-dir', dataDir]), {
+    env: {
+      ...process.env,
+      KIMAKI_LOCK_PORT: String(bot.lock.port),
+      KIMAKI_DISCORD_REST_URL: twin.discord.restUrl,
+    },
+  })
 }
 test('independent Discord CLI lists threads and users, uploads a file, and reads bot credentials', async () => {
   const started = await send(bot, { channelId: twin.channelId, prompt: 'Discord CLI flow' })
@@ -40,9 +61,19 @@ test('independent Discord CLI lists threads and users, uploads a file, and reads
   // Many files keep argument order, numbered, images and files mixed.
   fs.mkdirSync(path.join(server.root, 'other'), { recursive: true })
   for (const name of ['b.png', 'my shot.png', 'other/b.png']) fs.writeFileSync(path.join(server.root, name), 'png')
-  await cli(['upload-to-discord', ...['b.png', 'report.txt', 'my shot.png', 'other/b.png'].map((name) => path.join(server.root, name)), '--session', started.sessionId])
+  await cli([
+    'upload-to-discord',
+    ...['b.png', 'report.txt', 'my shot.png', 'other/b.png'].map((name) => path.join(server.root, name)),
+    '--session',
+    started.sessionId,
+  ])
   // The agent learns that nothing was posted.
-  const missing = await cli(['upload-to-discord', path.join(server.root, 'missing.png'), '--session', started.sessionId]).catch((error: { stderr: string }) => error)
+  const missing = await cli([
+    'upload-to-discord',
+    path.join(server.root, 'missing.png'),
+    '--session',
+    started.sessionId,
+  ]).catch((error: { stderr: string }) => error)
   expect(missing.stderr.replace(server.root, '<root>')).toMatchInlineSnapshot(`
     "File not found: <root>/missing.png
     "
@@ -74,6 +105,12 @@ test('independent Discord CLI lists threads and users, uploads a file, and reads
   expect(users.stdout).toContain(TEST_USER_ID)
   expect(token.stdout.trim()).toBe(twin.discord.botToken)
   // Self-hosted: the bot's own OAuth URL. Gateway: kimaki.dev with the client ID.
-  expect(install.stdout).toContain(twin.discord.botToken.includes(':') ? `clientId=${twin.discord.botToken.split(':')[0]}` : twin.discord.botUserId)
-  expect((await twin.discord.thread(started.threadId).getMessages()).some((message) => message.attachments.some((file) => file.filename === 'report.txt'))).toBe(true)
+  expect(install.stdout).toContain(
+    twin.discord.botToken.includes(':') ? `clientId=${twin.discord.botToken.split(':')[0]}` : twin.discord.botUserId,
+  )
+  expect(
+    (await twin.discord.thread(started.threadId).getMessages()).some((message) =>
+      message.attachments.some((file) => file.filename === 'report.txt'),
+    ),
+  ).toBe(true)
 })

@@ -28,7 +28,9 @@ import {
 const matchers: DeterministicMatcher[] = [
   ...scriptedTurn({
     marker: 'tools-marker',
-    steps: [{ id: 'call-shell-1', tool: 'shell', input: { command: 'echo hi', description: 'Say hi', hasSideEffect: true } }],
+    steps: [
+      { id: 'call-shell-1', tool: 'shell', input: { command: 'echo hi', description: 'Say hi', hasSideEffect: true } },
+    ],
     finalText: 'tools done',
   }),
 ]
@@ -70,7 +72,9 @@ async function newThread(channelId: string, content: string) {
   const { discord } = twin
   const before = new Set((await discord.channel(channelId).getThreads()).map((thread) => thread.id))
   await discord.channel(channelId).user(TEST_USER_ID).sendMessage({ content })
-  const thread = await discord.channel(channelId).waitForThread({ timeout: 8_000, predicate: (candidate) => !before.has(candidate.id) })
+  const thread = await discord
+    .channel(channelId)
+    .waitForThread({ timeout: 8_000, predicate: (candidate) => !before.has(candidate.id) })
   await waitForFooter({ discord, threadId: thread.id })
   return thread
 }
@@ -80,7 +84,10 @@ async function newThread(channelId: string, content: string) {
 async function pick({ channelId, prefix, value }: { channelId: string; prefix: string; value: string }) {
   const { discord } = twin
   const { message, select } = await waitForSelectMenu({ discord, channelId, prefix })
-  await discord.channel(channelId).user(TEST_USER_ID).selectMenu({ messageId: message.id, customId: select.custom_id, values: [value] })
+  await discord
+    .channel(channelId)
+    .user(TEST_USER_ID)
+    .selectMenu({ messageId: message.id, customId: select.custom_id, values: [value] })
   await waitFor({
     label: `select ${select.custom_id} handled`,
     check: async () => {
@@ -99,8 +106,11 @@ async function click({ channelId, prefix, label }: { channelId: string; prefix: 
     label: `buttons ${prefix}`,
     check: async () => {
       for (const message of [...(await discord.channel(channelId).getMessages())].reverse()) {
-        const buttons = (message.components ?? []).flatMap((row) => (row.type === ComponentType.ActionRow ? row.components : []))
-          .filter((item) => item.type === ComponentType.Button && 'custom_id' in item && item.custom_id.startsWith(prefix))
+        const buttons = (message.components ?? [])
+          .flatMap((row) => (row.type === ComponentType.ActionRow ? row.components : []))
+          .filter(
+            (item) => item.type === ComponentType.Button && 'custom_id' in item && item.custom_id.startsWith(prefix),
+          )
         if (buttons.length > 0) return { message, buttons }
       }
       return null
@@ -172,7 +182,8 @@ test('/model switches the session model from the next step, /model-variant its t
   const thread = await newThread(channelId, 'Model thread')
   const user = discord.thread(thread.id).user(TEST_USER_ID)
   await user.runSlashCommand({ name: 'model' })
-  expect(await pick({ channelId: thread.id, prefix: 'model:', value: 'deterministic-provider' })).toMatchInlineSnapshot(`
+  expect(await pick({ channelId: thread.id, prefix: 'model:', value: 'deterministic-provider' }))
+    .toMatchInlineSnapshot(`
     [
       "Deterministic Provider",
       "OpenCode Zen",
@@ -250,7 +261,8 @@ test('/model switches the session model from the next step, /model-variant its t
   `)
 
   await user.runSlashCommand({ name: 'model' })
-  expect(await click({ channelId: thread.id, prefix: 'model_reset:', label: 'Reset session model' })).toMatchInlineSnapshot(`
+  expect(await click({ channelId: thread.id, prefix: 'model_reset:', label: 'Reset session model' }))
+    .toMatchInlineSnapshot(`
     [
       "Reset session model",
     ]
@@ -295,7 +307,10 @@ test('/model with channel scope sets the model of new sessions', async () => {
     ok
     -# *project ⋅ main ⋅ Ns ⋅ deterministic-thinker ⋅ plan*"
   `)
-  const row = parseFirst<ChannelModelRow>('channel_models', await bot.db<ChannelModelRow[]>`SELECT * FROM channel_models WHERE channel_id = ${channelId} LIMIT 1`)
+  const row = parseFirst<ChannelModelRow>(
+    'channel_models',
+    await bot.db<ChannelModelRow[]>`SELECT * FROM channel_models WHERE channel_id = ${channelId} LIMIT 1`,
+  )
   expect({ model: row?.model_id, variant: row?.variant }).toMatchInlineSnapshot(`
     {
       "model": "deterministic-provider/deterministic-thinker",
@@ -313,7 +328,12 @@ test('/model with channel scope sets the model of new sessions', async () => {
     "Channel model removed. New sessions in this channel will use:
     \`deterministic-provider/deterministic-v2\`"
   `)
-  expect(parseFirst<ChannelModelRow>('channel_models', await bot.db<ChannelModelRow[]>`SELECT * FROM channel_models WHERE channel_id = ${channelId} LIMIT 1`)).toBeUndefined()
+  expect(
+    parseFirst<ChannelModelRow>(
+      'channel_models',
+      await bot.db<ChannelModelRow[]>`SELECT * FROM channel_models WHERE channel_id = ${channelId} LIMIT 1`,
+    ),
+  ).toBeUndefined()
 })
 
 test('/verbosity applies to running sessions of the channel at once', async () => {
@@ -321,12 +341,20 @@ test('/verbosity applies to running sessions of the channel at once', async () =
   const thread = await newThread(channelId, 'Show tools-marker')
   await discord.channel(channelId).user(TEST_USER_ID).runSlashCommand({ name: 'verbosity' })
   const { message } = await waitForSelectMenu({ discord, channelId, prefix: 'verbosity:' })
-  const previous = parseFirst<ChannelVerbosityRow>('channel_verbosity', await bot.db<ChannelVerbosityRow[]>`SELECT * FROM channel_verbosity WHERE channel_id = ${twin.quietChannelId} LIMIT 1`)
-  await discord.channel(channelId).user(TEST_USER_ID).selectMenu({
-    messageId: message.id,
-    customId: `verbosity:${twin.quietChannelId}`,
-    values: ['text'],
-  })
+  const previous = parseFirst<ChannelVerbosityRow>(
+    'channel_verbosity',
+    await bot.db<
+      ChannelVerbosityRow[]
+    >`SELECT * FROM channel_verbosity WHERE channel_id = ${twin.quietChannelId} LIMIT 1`,
+  )
+  await discord
+    .channel(channelId)
+    .user(TEST_USER_ID)
+    .selectMenu({
+      messageId: message.id,
+      customId: `verbosity:${twin.quietChannelId}`,
+      values: ['text'],
+    })
   await waitFor({
     label: 'cross-channel verbosity selection rejected',
     check: async () => (await discord.channel(channelId).text()).includes('Run /verbosity in the target channel'),
@@ -365,7 +393,14 @@ test('/verbosity applies to running sessions of the channel at once', async () =
     Applies immediately, including active sessions.
     Run /verbosity in the target channel"
   `)
-  expect(parseFirst<ChannelVerbosityRow>('channel_verbosity', await bot.db<ChannelVerbosityRow[]>`SELECT * FROM channel_verbosity WHERE channel_id = ${twin.quietChannelId} LIMIT 1`)).toEqual(previous)
+  expect(
+    parseFirst<ChannelVerbosityRow>(
+      'channel_verbosity',
+      await bot.db<
+        ChannelVerbosityRow[]
+      >`SELECT * FROM channel_verbosity WHERE channel_id = ${twin.quietChannelId} LIMIT 1`,
+    ),
+  ).toEqual(previous)
 })
 
 test('/<agent>-agent variant: sets the thinking level with the agent, per session or channel', async () => {
@@ -373,8 +408,13 @@ test('/<agent>-agent variant: sets the thinking level with the agent, per sessio
   const channelId = twin.channelId
   const thread = await newThread(channelId, 'Variant thread')
   const user = discord.thread(thread.id).user(TEST_USER_ID)
-  expect(await user.autocomplete({ name: 'plan-agent', options: [{ name: 'variant', type: 3, value: 'de' }], focused: 'variant' }))
-    .toMatchInlineSnapshot(`
+  expect(
+    await user.autocomplete({
+      name: 'plan-agent',
+      options: [{ name: 'variant', type: 3, value: 'de' }],
+      focused: 'variant',
+    }),
+  ).toMatchInlineSnapshot(`
       [
         {
           "name": "deep (deterministic-provider/deterministic-v2)",
@@ -401,9 +441,15 @@ test('/<agent>-agent variant: sets the thinking level with the agent, per sessio
     }
   `)
 
-  const { id } = await user.runSlashCommand({ name: 'build-agent', options: [{ name: 'variant', type: 3, value: 'nope' }] })
+  const { id } = await user.runSlashCommand({
+    name: 'build-agent',
+    options: [{ name: 'variant', type: 3, value: 'nope' }],
+  })
   await discord.thread(thread.id).waitForInteractionAck({ interactionId: id })
-  await waitFor({ label: 'variant error', check: async () => (await discord.thread(thread.id).text()).includes('no thinking level') })
+  await waitFor({
+    label: 'variant error',
+    check: async () => (await discord.thread(thread.id).text()).includes('no thinking level'),
+  })
   expect(await discord.thread(thread.id).text()).toMatchInlineSnapshot(`
     "--- from: user (tommy)
     Variant thread
@@ -418,16 +464,20 @@ test('/<agent>-agent variant: sets the thinking level with the agent, per sessio
   `)
 
   // Channel without a prompt: agent and thinking level for new sessions.
-  const ack = await discord.channel(channelId).user(TEST_USER_ID).runSlashCommand({
-    name: 'build-agent',
-    options: [{ name: 'variant', type: 3, value: 'fast' }],
-  })
+  const ack = await discord
+    .channel(channelId)
+    .user(TEST_USER_ID)
+    .runSlashCommand({
+      name: 'build-agent',
+      options: [{ name: 'variant', type: 3, value: 'fast' }],
+    })
   // The ack is the deferred reply; the channel default lands with the edit that
   // follows it, so wait for that text before starting a thread.
   await discord.channel(channelId).waitForInteractionAck({ interactionId: ack.id })
   await waitFor({
     label: 'channel agent saved',
-    check: async () => (await discord.channel(channelId).text()).includes('Switched to **build** agent for this channel'),
+    check: async () =>
+      (await discord.channel(channelId).text()).includes('Switched to **build** agent for this channel'),
   })
   const fresh = await newThread(channelId, 'Uses the channel variant')
   // A new thread binds its session a moment later; the model is read from it.
@@ -472,16 +522,28 @@ test('agent selection replaces a stale model and uses the agent model for varian
     Model: \`deterministic-provider/deterministic-thinker (high)\`
     The agent changes from the next step."
   `)
-  expect((await sessionModel(thread.id)).model).toEqual({ providerID: 'deterministic-provider', id: 'deterministic-thinker', variant: 'high' })
+  expect((await sessionModel(thread.id)).model).toEqual({
+    providerID: 'deterministic-provider',
+    id: 'deterministic-thinker',
+    variant: 'high',
+  })
 
   await user.runSlashCommand({ name: 'build-agent' })
   await waitFor({ label: 'build agent selected', check: async () => (await sessionModel(thread.id)).agent === 'build' })
-  expect(await user.autocomplete({ name: 'thinker-agent', options: [{ name: 'variant', type: 3, value: 'lo' }], focused: 'variant' }))
-    .toEqual([{ name: 'low (deterministic-provider/deterministic-thinker)', value: 'low' }])
-  await user.runSlashCommand({ name: 'thinker-agent', options: [
-    { name: 'prompt', type: 3, value: 'Use the agent model' },
-    { name: 'variant', type: 3, value: 'low' },
-  ] })
+  expect(
+    await user.autocomplete({
+      name: 'thinker-agent',
+      options: [{ name: 'variant', type: 3, value: 'lo' }],
+      focused: 'variant',
+    }),
+  ).toEqual([{ name: 'low (deterministic-provider/deterministic-thinker)', value: 'low' }])
+  await user.runSlashCommand({
+    name: 'thinker-agent',
+    options: [
+      { name: 'prompt', type: 3, value: 'Use the agent model' },
+      { name: 'variant', type: 3, value: 'low' },
+    ],
+  })
   await waitForFooter({ discord, threadId: thread.id, count: 2 })
   expect(await discord.thread(thread.id).text()).toMatchInlineSnapshot(`
     "--- from: user (tommy)
@@ -499,10 +561,17 @@ test('agent selection replaces a stale model and uses the agent model for varian
     ok
     -# *project ⋅ main ⋅ Ns ⋅ deterministic-thinker ⋅ thinker*"
   `)
-  expect((await sessionModel(thread.id)).model).toEqual({ providerID: 'deterministic-provider', id: 'deterministic-thinker', variant: 'low' })
+  expect((await sessionModel(thread.id)).model).toEqual({
+    providerID: 'deterministic-provider',
+    id: 'deterministic-thinker',
+    variant: 'low',
+  })
 
   await user.runSlashCommand({ name: 'thinker-agent' })
-  await waitFor({ label: 'agent default variant restored', check: async () => (await sessionModel(thread.id)).model?.variant === 'high' })
+  await waitFor({
+    label: 'agent default variant restored',
+    check: async () => (await sessionModel(thread.id)).model?.variant === 'high',
+  })
   expect(await discord.thread(thread.id).text()).toMatchInlineSnapshot(`
     "--- from: user (tommy)
     Agent model thread
@@ -524,7 +593,14 @@ test('agent selection replaces a stale model and uses the agent model for varian
   `)
 
   await discord.channel(channelId).user(TEST_USER_ID).runSlashCommand({ name: 'thinker-agent' })
-  await waitFor({ label: 'channel agent saved', check: async () => parseFirst<ChannelAgentRow>('channel_agents', await bot.db<ChannelAgentRow[]>`SELECT * FROM channel_agents WHERE channel_id = ${channelId} LIMIT 1`)?.agent_name === 'thinker' })
+  await waitFor({
+    label: 'channel agent saved',
+    check: async () =>
+      parseFirst<ChannelAgentRow>(
+        'channel_agents',
+        await bot.db<ChannelAgentRow[]>`SELECT * FROM channel_agents WHERE channel_id = ${channelId} LIMIT 1`,
+      )?.agent_name === 'thinker',
+  })
   const fresh = await newThread(channelId, 'Uses the agent model default')
   expect(await discord.thread(fresh.id).text()).toMatchInlineSnapshot(`
     "--- from: user (tommy)
@@ -534,10 +610,24 @@ test('agent selection replaces a stale model and uses the agent model for varian
     ok
     -# *project ⋅ main ⋅ Ns ⋅ deterministic-thinker ⋅ thinker*"
   `)
-  expect((await sessionModel(fresh.id)).model).toEqual({ providerID: 'deterministic-provider', id: 'deterministic-thinker', variant: 'high' })
+  expect((await sessionModel(fresh.id)).model).toEqual({
+    providerID: 'deterministic-provider',
+    id: 'deterministic-thinker',
+    variant: 'high',
+  })
 
-  await discord.channel(channelId).user(TEST_USER_ID).runSlashCommand({ name: 'thinker-agent', options: [{ name: 'variant', type: 3, value: 'low' }] })
-  await waitFor({ label: 'channel variant saved', check: async () => parseFirst<ChannelModelRow>('channel_models', await bot.db<ChannelModelRow[]>`SELECT * FROM channel_models WHERE channel_id = ${channelId} LIMIT 1`)?.variant === 'low' })
+  await discord
+    .channel(channelId)
+    .user(TEST_USER_ID)
+    .runSlashCommand({ name: 'thinker-agent', options: [{ name: 'variant', type: 3, value: 'low' }] })
+  await waitFor({
+    label: 'channel variant saved',
+    check: async () =>
+      parseFirst<ChannelModelRow>(
+        'channel_models',
+        await bot.db<ChannelModelRow[]>`SELECT * FROM channel_models WHERE channel_id = ${channelId} LIMIT 1`,
+      )?.variant === 'low',
+  })
   const low = await newThread(channelId, 'Uses the channel thinking level')
   expect(await discord.thread(low.id).text()).toMatchInlineSnapshot(`
     "--- from: user (tommy)
@@ -547,7 +637,11 @@ test('agent selection replaces a stale model and uses the agent model for varian
     ok
     -# *project ⋅ main ⋅ Ns ⋅ deterministic-thinker ⋅ thinker*"
   `)
-  expect((await sessionModel(low.id)).model).toEqual({ providerID: 'deterministic-provider', id: 'deterministic-thinker', variant: 'low' })
+  expect((await sessionModel(low.id)).model).toEqual({
+    providerID: 'deterministic-provider',
+    id: 'deterministic-thinker',
+    variant: 'low',
+  })
 })
 
 test('/model with all channels scope sets the model of channels without their own', async () => {

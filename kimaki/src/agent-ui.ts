@@ -4,7 +4,14 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import { FileUploadBuilder, LabelBuilder, ModalBuilder, MessageFlags, type ButtonInteraction, type ModalSubmitInteraction } from 'discord.js'
+import {
+  FileUploadBuilder,
+  LabelBuilder,
+  ModalBuilder,
+  MessageFlags,
+  type ButtonInteraction,
+  type ModalSubmitInteraction,
+} from 'discord.js'
 import { sessionDirectory, type Bot } from './bot.ts'
 import { ConfigError, DiscordError } from './errors.ts'
 import type { InteractionRoutes } from './interaction-context.ts'
@@ -15,8 +22,10 @@ export function parseButton(value: string): ConfigError | AgentButton {
   const match = value.match(/:(white|blue|green|red)$/)
   const color = match?.[1] ?? 'white'
   const label = match ? value.slice(0, -match[0].length) : value
-  if (!label.trim() || label.length > 80) return new ConfigError({ reason: 'Button labels must have 1 to 80 characters' })
-  if (color !== 'white' && color !== 'blue' && color !== 'green' && color !== 'red') return new ConfigError({ reason: 'Unknown button color' })
+  if (!label.trim() || label.length > 80)
+    return new ConfigError({ reason: 'Button labels must have 1 to 80 characters' })
+  if (color !== 'white' && color !== 'blue' && color !== 'green' && color !== 'red')
+    return new ConfigError({ reason: 'Unknown button color' })
   return { label, color }
 }
 
@@ -112,7 +121,8 @@ export function createAgentUi(bot: Pick<Bot, 'store' | 'eventLoop' | 'opencode'>
     if (!threadId) return new ConfigError({ reason: 'This session has no local Discord thread' })
     const prompt: AgentPrompt = { id: crypto.randomBytes(8).toString('hex'), sessionId, ...content }
     if (fromShell) {
-      if (!toolCall) return new ConfigError({ reason: 'The Kimaki plugin must provide KIMAKI_TOOL_CALL for agent UI commands' })
+      if (!toolCall)
+        return new ConfigError({ reason: 'The Kimaki plugin must provide KIMAKI_TOOL_CALL for agent UI commands' })
       const waited = await waitForShellCall(bot, { toolCall, signal })
       if (waited instanceof Error) return waited
     }
@@ -147,7 +157,8 @@ export function createAgentUi(bot: Pick<Bot, 'store' | 'eventLoop' | 'opencode'>
     if (!active()) return interaction.editReply({ content: 'Upload cancelled' })
     if (directory instanceof Error) return interaction.editReply({ content: directory.message })
     const files = [...interaction.fields.getUploadedFiles('files', true).values()]
-    if (files.length < 1 || files.length > (prompt.maxFiles ?? 5)) return interaction.editReply({ content: 'Too many files' })
+    if (files.length < 1 || files.length > (prompt.maxFiles ?? 5))
+      return interaction.editReply({ content: 'Too many files' })
     const output = path.join(directory, 'uploads', id)
     const created = await fs.promises
       .mkdir(output, { recursive: true })
@@ -156,9 +167,12 @@ export function createAgentUi(bot: Pick<Bot, 'store' | 'eventLoop' | 'opencode'>
     const paths: string[] = []
     for (const [index, file] of files.entries()) {
       const signal = AbortSignal.any([pending.controller.signal, AbortSignal.timeout(30000)])
-      const response = await fetch(file.url, { signal }).catch((cause) => new DiscordError({ operation: 'download upload', cause }))
+      const response = await fetch(file.url, { signal }).catch(
+        (cause) => new DiscordError({ operation: 'download upload', cause }),
+      )
       if (!active()) return interaction.editReply({ content: 'Upload cancelled' })
-      if (response instanceof Error || !response.ok) return interaction.editReply({ content: 'Upload download failed. Try again.' })
+      if (response instanceof Error || !response.ok)
+        return interaction.editReply({ content: 'Upload download failed. Try again.' })
       const bytes = await response.arrayBuffer().catch((cause) => new DiscordError({ operation: 'read upload', cause }))
       if (!active()) return interaction.editReply({ content: 'Upload cancelled' })
       if (bytes instanceof Error) return interaction.editReply({ content: bytes.message })
@@ -195,7 +209,11 @@ async function clickAgentButton(bot: Bot, interaction: ButtonInteraction) {
   const prompt = shownPrompt(bot, { id, threadId: interaction.channelId })
   if (!prompt) return interaction.reply({ content: 'This request has expired', flags: MessageFlags.Ephemeral })
   if (!prompt.buttons) {
-    const files = new FileUploadBuilder().setCustomId('files').setMinValues(1).setMaxValues(prompt.maxFiles ?? 5).setRequired(true)
+    const files = new FileUploadBuilder()
+      .setCustomId('files')
+      .setMinValues(1)
+      .setMaxValues(prompt.maxFiles ?? 5)
+      .setRequired(true)
     const modal = new ModalBuilder()
       .setCustomId(`file_upload_modal:${id}`)
       .setTitle('Upload files')
@@ -205,8 +223,16 @@ async function clickAgentButton(bot: Bot, interaction: ButtonInteraction) {
   await interaction.deferUpdate()
   const item = prompt.buttons[Number(index)]
   if (!item) return
-  bot.eventLoop.dispatch(interaction.channelId, { type: 'kimaki.agent-ui-dismiss', id, result: `clicked "${item.label}"` })
-  const result = await send(bot, { threadId: interaction.channelId, prompt: `User clicked: ${item.label}`, user: [interaction.user.id] })
+  bot.eventLoop.dispatch(interaction.channelId, {
+    type: 'kimaki.agent-ui-dismiss',
+    id,
+    result: `clicked "${item.label}"`,
+  })
+  const result = await send(bot, {
+    threadId: interaction.channelId,
+    prompt: `User clicked: ${item.label}`,
+    user: [interaction.user.id],
+  })
   if (result instanceof Error) await interaction.followUp({ content: result.message, flags: MessageFlags.Ephemeral })
 }
 

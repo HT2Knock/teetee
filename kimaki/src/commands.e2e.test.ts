@@ -53,11 +53,20 @@ beforeAll(async () => {
         hello: { template: 'hello-template $ARGUMENTS', description: 'Say hello' },
         later: { template: 'queued-template $ARGUMENTS', description: 'Runs later' },
       },
-      mcp: { servers: { fake: { type: 'local', command: entryArgv(path.join(import.meta.dirname, 'test', 'fake-mcp-server.ts')) } } },
+      mcp: {
+        servers: {
+          fake: { type: 'local', command: entryArgv(path.join(import.meta.dirname, 'test', 'fake-mcp-server.ts')) },
+        },
+      },
     }),
     startTwin(),
   ])
-  await seedProjectChannel({ dataDir, channelId: twin.channelId, guildId: twin.discord.guildId, directory: server.projectDirectory })
+  await seedProjectChannel({
+    dataDir,
+    channelId: twin.channelId,
+    guildId: twin.discord.guildId,
+    directory: server.projectDirectory,
+  })
   await warmUp({ server })
   bot = await startTestBot({ dataDir, twin, server })
 })
@@ -115,16 +124,32 @@ test('the bot registers exactly the static and catalog commands in the guild', a
 
 test('/skill and /command run catalog entries through project autocomplete', async () => {
   const { discord, channelId } = twin
-  const thread = await newThread(() => discord.channel(channelId).user(TEST_USER_ID).sendMessage({ content: 'Catalog picker thread' }))
+  const thread = await newThread(() =>
+    discord.channel(channelId).user(TEST_USER_ID).sendMessage({ content: 'Catalog picker thread' }),
+  )
   await waitForFooter({ discord, threadId: thread.id })
   const user = discord.thread(thread.id).user(TEST_USER_ID)
-  expect(await user.autocomplete({ name: 'skill', options: [{ name: 'name', type: 3, value: 'openc' }], focused: 'name' }))
-    .toEqual([expect.objectContaining({ value: 'opencode' })])
-  await user.runSlashCommand({ name: 'skill', options: [{ name: 'name', type: 3, value: 'opencode' }, { name: 'arguments', type: 3, value: 'explain skill-marker' }] })
+  expect(
+    await user.autocomplete({ name: 'skill', options: [{ name: 'name', type: 3, value: 'openc' }], focused: 'name' }),
+  ).toEqual([expect.objectContaining({ value: 'opencode' })])
+  await user.runSlashCommand({
+    name: 'skill',
+    options: [
+      { name: 'name', type: 3, value: 'opencode' },
+      { name: 'arguments', type: 3, value: 'explain skill-marker' },
+    ],
+  })
   await waitForFooter({ discord, threadId: thread.id, count: 2 })
-  expect(await user.autocomplete({ name: 'command', options: [{ name: 'name', type: 3, value: 'hel' }], focused: 'name' }))
-    .toEqual([{ name: '/hello - Say hello', value: 'hello' }])
-  await user.runSlashCommand({ name: 'command', options: [{ name: 'name', type: 3, value: 'hello' }, { name: 'arguments', type: 3, value: 'world' }] })
+  expect(
+    await user.autocomplete({ name: 'command', options: [{ name: 'name', type: 3, value: 'hel' }], focused: 'name' }),
+  ).toEqual([{ name: '/hello - Say hello', value: 'hello' }])
+  await user.runSlashCommand({
+    name: 'command',
+    options: [
+      { name: 'name', type: 3, value: 'hello' },
+      { name: 'arguments', type: 3, value: 'world' },
+    ],
+  })
   await waitForFooter({ discord, threadId: thread.id, count: 3 })
   expect(await discord.thread(thread.id).text()).toMatchInlineSnapshot(`
     "--- from: user (tommy)
@@ -157,12 +182,19 @@ test('/<agent>-agent sets the channel agent, or starts a session with a prompt',
   const { discord, channelId } = twin
   const user = discord.channel(channelId).user(TEST_USER_ID)
   await user.runSlashCommand({ name: 'plan-agent' })
-  await waitForBotMessageContaining({ discord, threadId: channelId, text: 'Switched to **plan** agent for this channel' })
+  await waitForBotMessageContaining({
+    discord,
+    threadId: channelId,
+    text: 'Switched to **plan** agent for this channel',
+  })
   const planned = await newThread(() => user.sendMessage({ content: 'Plan this plan-marker' }))
   await waitForFooter({ discord, threadId: planned.id })
 
   const built = await newThread(() =>
-    user.runSlashCommand({ name: 'build-agent', options: [{ name: 'prompt', type: 3, value: 'Build it build-marker' }] }),
+    user.runSlashCommand({
+      name: 'build-agent',
+      options: [{ name: 'prompt', type: 3, value: 'Build it build-marker' }],
+    }),
   )
   await waitForFooter({ discord, threadId: built.id })
   expect(hideIds(await discord.channel(channelId).text())).toMatchInlineSnapshot(`
@@ -195,12 +227,17 @@ test('/<agent>-agent sets the channel agent, or starts a session with a prompt',
 
 test('/<cmd>-cmd, /<skill>-skill and a `/server:prompt` message run in the thread session', async () => {
   const { discord, channelId } = twin
-  const thread = await newThread(() => discord.channel(channelId).user(TEST_USER_ID).sendMessage({ content: 'Commands thread' }))
+  const thread = await newThread(() =>
+    discord.channel(channelId).user(TEST_USER_ID).sendMessage({ content: 'Commands thread' }),
+  )
   await waitForFooter({ discord, threadId: thread.id })
   const user = discord.thread(thread.id).user(TEST_USER_ID)
   await user.runSlashCommand({ name: 'hello-cmd', options: [{ name: 'arguments', type: 3, value: 'world' }] })
   await waitForFooter({ discord, threadId: thread.id, count: 2 })
-  await user.runSlashCommand({ name: 'opencode-skill', options: [{ name: 'arguments', type: 3, value: 'explain skill-marker' }] })
+  await user.runSlashCommand({
+    name: 'opencode-skill',
+    options: [{ name: 'arguments', type: 3, value: 'explain skill-marker' }],
+  })
   await waitForFooter({ discord, threadId: thread.id, count: 3 })
   await user.sendMessage({ content: '/fake:greet World' })
   await waitForFooter({ discord, threadId: thread.id, count: 4 })
@@ -227,7 +264,11 @@ test('/<cmd>-cmd, /<skill>-skill and a `/server:prompt` message run in the threa
   const sessionId = bot.store.getState().roots[thread.id]!
   const messages = await (await server.client()).message.list({ sessionID: sessionId, type: 'user', order: 'asc' })
   expect(
-    messages.data.flatMap((message) => (message.type === 'user' ? [{ text: message.text.split('\n')[0], skills: message.skills?.map((skill) => skill.id) }] : [])),
+    messages.data.flatMap((message) =>
+      message.type === 'user'
+        ? [{ text: message.text.split('\n')[0], skills: message.skills?.map((skill) => skill.id) }]
+        : [],
+    ),
   ).toMatchInlineSnapshot(`
     [
       {
@@ -254,11 +295,18 @@ test('/<cmd>-cmd, /<skill>-skill and a `/server:prompt` message run in the threa
 
 test('/queue-command queues an OpenCode command after the current run', async () => {
   const { discord, channelId } = twin
-  const thread = await newThread(() => discord.channel(channelId).user(TEST_USER_ID).sendMessage({ content: 'Long run slow-marker' }))
+  const thread = await newThread(() =>
+    discord.channel(channelId).user(TEST_USER_ID).sendMessage({ content: 'Long run slow-marker' }),
+  )
   await waitForBotMessageContaining({ discord, threadId: thread.id, text: '*using ' })
   const user = discord.thread(thread.id).user(TEST_USER_ID)
-  expect(await user.autocomplete({ name: 'queue-command', options: [{ name: 'command', type: 3, value: 'lat' }], focused: 'command' }))
-    .toMatchInlineSnapshot(`
+  expect(
+    await user.autocomplete({
+      name: 'queue-command',
+      options: [{ name: 'command', type: 3, value: 'lat' }],
+      focused: 'command',
+    }),
+  ).toMatchInlineSnapshot(`
       [
         {
           "name": "/later - Runs later",

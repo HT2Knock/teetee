@@ -113,7 +113,8 @@ function importLegacyTables({ client }: { client: Database }): void {
     // Columns an older V1 file lacks get the kimaki default.
     const columns = columnsOf({ client, schema: 'main', table }).filter((column) => legacyColumns.includes(column.name))
     const foreignKeys = foreignKeysOf({ client, table }).filter((key) => legacyColumns.includes(key.column))
-    const existsIn = (key: (typeof foreignKeys)[number]) => `"${key.column}" IN (SELECT "${key.parentColumn}" FROM main."${key.parent}")`
+    const existsIn = (key: (typeof foreignKeys)[number]) =>
+      `"${key.column}" IN (SELECT "${key.parentColumn}" FROM main."${key.parent}")`
     const expressions = columns.map((column) => {
       const custom = IMPORT_EXPRESSIONS[table]?.[column.name]
       if (custom) return custom
@@ -128,7 +129,9 @@ function importLegacyTables({ client }: { client: Database }): void {
     )
     const total = client.query<{ count: number }, []>(`SELECT count(*) AS count FROM legacy."${table}"`).get()
     const skipped = Number(total?.count ?? 0) - inserted.changes
-    logger.log(`import ${table}: ${inserted.changes} rows${skipped > 0 ? `, ${skipped} skipped (missing parent row)` : ''}`)
+    logger.log(
+      `import ${table}: ${inserted.changes} rows${skipped > 0 ? `, ${skipped} skipped (missing parent row)` : ''}`,
+    )
   }
 }
 
@@ -141,7 +144,8 @@ function readDbVersion({ file }: { file: string }): DbError | number {
       return Number(row?.user_version ?? 0)
     },
     // Not an SQLite file at all: unmarked too, so it is set aside like any stray file.
-    (e) => (Reflect.get(e, 'code') === 'SQLITE_NOTADB' ? 0 : new DbError({ operation: `read version of ${file}`, cause: e })),
+    (e) =>
+      Reflect.get(e, 'code') === 'SQLITE_NOTADB' ? 0 : new DbError({ operation: `read version of ${file}`, cause: e }),
   )
 }
 
@@ -212,7 +216,10 @@ export async function migrateDb({ dataDir }: { dataDir: string }): Promise<DbErr
   const file = prepareDbFile({ dataDir })
   if (file instanceof Error) return file
   const client = new Database(file)
-  const migrated = attempt(() => migrateSchema({ client }), (e) => new DbError({ operation: 'migrate schema', cause: e }))
+  const migrated = attempt(
+    () => migrateSchema({ client }),
+    (e) => new DbError({ operation: 'migrate schema', cause: e }),
+  )
   client.close()
   if (migrated instanceof Error) return migrated
   return file

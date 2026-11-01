@@ -47,7 +47,10 @@ function describe(request: PendingPermission): string {
     request.action === 'external_directory' ? 'The agent is accessing files outside the project.' : null,
     request.resources.length > 0 ? `**Pattern:** ${request.resources.map(code).join(', ')}` : null,
   ]
-  return lines.filter((line) => line !== null).join('\n').slice(0, 1_900)
+  return lines
+    .filter((line) => line !== null)
+    .join('\n')
+    .slice(0, 1_900)
 }
 
 function requestMessage({ requestID, request }: { requestID: string; request: PendingPermission }): UiMessage {
@@ -72,11 +75,27 @@ export const STATUS: Record<PermissionDecision, string> = {
 
 type Slice = { draft: Draft<ThreadView>; emit: Emit }
 
-export function showPermission({ draft, emit, request, label }: Slice & { request: PermissionRequest; label: string | null }) {
+export function showPermission({
+  draft,
+  emit,
+  request,
+  label,
+}: Slice & { request: PermissionRequest; label: string | null }) {
   if (draft.permissions[request.id]) return
-  const pending: PendingPermission = { sessionId: request.sessionID, action: request.action, resources: [...request.resources], label }
+  const pending: PendingPermission = {
+    sessionId: request.sessionID,
+    action: request.action,
+    resources: [...request.resources],
+    label,
+  }
   draft.permissions[request.id] = castDraft(pending)
-  emit({ type: 'show', key: uiKey(request.id), messages: [requestMessage({ requestID: request.id, request: pending })], replyTo: null, notify: true })
+  emit({
+    type: 'show',
+    key: uiKey(request.id),
+    messages: [requestMessage({ requestID: request.id, request: pending })],
+    replyTo: null,
+    notify: true,
+  })
 }
 
 export function closePermission({ draft, emit, requestID, status }: Slice & { requestID: string; status: string }) {
@@ -88,10 +107,13 @@ export function closePermission({ draft, emit, requestID, status }: Slice & { re
 }
 
 // After a (re)connect: pending requests of one session as OpenCode has them.
-export function hydratePermissions(slice: Slice & { sessionId: string; requests: readonly PermissionRequest[]; label: string | null }) {
+export function hydratePermissions(
+  slice: Slice & { sessionId: string; requests: readonly PermissionRequest[]; label: string | null },
+) {
   const pending = new Set(slice.requests.map((request) => request.id))
   for (const [requestID, request] of Object.entries(slice.draft.permissions)) {
-    if (request.sessionId === slice.sessionId && !pending.has(requestID)) closePermission({ ...slice, requestID, status: '_no longer pending_' })
+    if (request.sessionId === slice.sessionId && !pending.has(requestID))
+      closePermission({ ...slice, requestID, status: '_no longer pending_' })
   }
   for (const request of slice.requests) showPermission({ ...slice, request })
 }
