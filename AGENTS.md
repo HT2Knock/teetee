@@ -12,7 +12,7 @@ after changes to message handling, queueing or the reducer run the full test sui
 
 each kimaki e2e test file starts its own OpenCode server (~400 MB). `scripts/run-tests.ts` caps parallel files at a third of the CPUs (`bun test --parallel`); override with `KIMAKI_TEST_WORKERS`. other agents may run suites at the same time, so run single files while iterating and the full suite once at the end. timeouts in a full run on a loaded machine may be load-related: rerun the failing file alone before debugging.
 
-kimaki CLI startup must stay light (~0.06s, ~70 MB): agents and tests call `kimaki` many times. `kimaki/src/cli/*.ts` must not import SQLite (`db.ts`, `schema.ts`, `credentials.ts`, `project.ts`) or `discord.js` at top level; `await import()` them inside the actions that need them. use `discord-api-types/v10` for enums like `ChannelType`.
+kimaki CLI startup must stay light (~0.06s, ~70 MB): agents and tests call `kimaki` many times. `kimaki/src/adapters/cli/*.ts` must not import SQLite (`db.ts`, `schema.ts`, `credentials.ts`, `project.ts`) or `discord.js` at top level; `await import()` them inside the actions that need them. the subcommands are RPC clients: only `adapters/cli/start.ts` (the bot host) opens `kimaki.db`. use `discord-api-types/v10` for enums like `ChannelType`.
 
 kimaki runs on bun only. anything that spawns a kimaki entrypoint goes through `src/runtime.ts` (`entryArgv`, `evalArgv`, `runtimeExecutable`): bun runs typescript directly, so there is no loader to add. never write `process.execPath` by hand in a spawn. e2e tests use `cliCommand()` from `src/test/harness.ts`, and `kimaki status` reports the runtime. `bun run test` inside `kimaki` runs the suite with `bun test`; `bunfig.toml` preloads the test env and excludes `dist/`.
 
@@ -39,7 +39,7 @@ kimaki bot, in order of the data flow:
 
 ```
 Discord message ──▶ ingress.ts ──▶ input.ts ──▶ prompt.ts / sessions.ts ──▶ OpenCode (session.prompt, create, interrupt)
-OpenCode events ──▶ opencode-server.ts ──▶ event-loop.ts ──▶ thread-reducer.ts (pure) ──▶ effects.ts ──▶ Discord
+OpenCode events ──▶ adapters/opencode ──▶ event-loop.ts ──▶ thread-reducer.ts (pure) ──▶ effects.ts ──▶ Discord
 ```
 
 - `main.ts`: wiring. lock port, then SQLite migration, then OpenCode and Discord login in parallel.
@@ -47,11 +47,11 @@ OpenCode events ──▶ opencode-server.ts ──▶ event-loop.ts ──▶ t
 - `ingress.ts`: Discord messages and attachments. `slash-commands.ts` + `commands/*`: slash commands and components.
 - `input.ts`: the input layer. `dispatch` routes a Discord message and `send` runs `kimaki send`; `startSession` creates the thread and session. It imports prompt.ts and sessions.ts, never the other way round.
 - `session-context.ts`: project, thread and instruction facts of a session plus the agent/model switches. No input is sent from here, which is what keeps the graph acyclic.
-- `opencode-server.ts`: finds the OpenCode service, owns the event subscription, installs the plugin shim.
+- `adapters/opencode/`: finds the OpenCode service, owns the event subscription, installs the plugin shim and writes the MCP state file.
 - `event-loop.ts`: routes events to threads, hydrates after a (re)connect. `thread-reducer.ts`: pure fold of events into a thread view plus effects.
 - `effects.ts`: the only Discord writer for session output. `format-parts.ts`, `markdown/`: formatting.
-- `lock-server.ts`, `lock-routes.ts`: single-instance lock and the local HTTP API used by CLI subcommands.
-- `cli.ts`, `cli/*.ts`: goke CLI. `plugin/`: code that runs inside the OpenCode process.
+- `adapters/http/rpc.ts`, `routes.ts`, `mcp.ts`: single-instance lock, the local RPC used by CLI subcommands, and `/mcp` for agents.
+- `cli.ts`, `adapters/cli/*.ts`: goke CLI. `plugin/`: code that runs inside the OpenCode process.
 - `system-prompt.ts` holds the session instruction entry (the whole agent-facing CLI reference). Only two parts are opt-out skills: `kimaki-debug` and `kimaki-thread-ops` (`skills/<id>/SKILL.md`, `builtin-skills.ts`), registered by the `kimaki` plugin through `ctx.skill.transform` and hidden from Discord slash commands. `kimaki --disable-skills all|id,id` denies them per session with `skill:<id>` permission rules (`disabledSkillRules`).
 - `autostart.ts`: the bot writes `<dataDir>/autostart.command`; the plugin opens it in the default terminal when OpenCode starts and no bot answers on the lock port.
 ## opencode SDK
@@ -65,7 +65,7 @@ kimaki runs on native OpenCode V2. import the client from `@opencode/client` and
 
 in the bot, call OpenCode through `oc(bot, 'operation.name', (client) => ...)`, which turns rejections into `OpenCodeError` values.
 
-Kimaki uses the user's shared OpenCode service, not a bot-owned server. `opencode-server.ts` discovers it or starts it through `Service.ensure()` when none is running (`findOpencodeBinary`: `OPENCODE_PATH` if set, else `opencode`, `~/.opencode/bin/opencode`, then the rare `opencode2` alias; first supported binary wins; minimum version `MIN_OPENCODE_VERSION`). OpenCode is not bundled. before Discord onboarding `ensureOpencode()` in `onboarding.ts` checks it: an OpenCode 1 or an old V2 is an error with install instructions and is never replaced; no OpenCode at all is installed with `curl -fsSL https://opencode.ai/v2/install | bash` (asks first in a terminal). it never pins a version, because that would replace the running server and kill the user's TUI sessions.
+Kimaki uses the user's shared OpenCode service, not a bot-owned server. `adapters/opencode/` discovers it or starts it through `Service.ensure()` when none is running (`findOpencodeBinary`: `OPENCODE_PATH` if set, else `opencode`, `~/.opencode/bin/opencode`, then the rare `opencode2` alias; first supported binary wins; minimum version `MIN_OPENCODE_VERSION`). OpenCode is not bundled. before Discord onboarding `ensureOpencode()` in `onboarding.ts` checks it: an OpenCode 1 or an old V2 is an error with install instructions and is never replaced; no OpenCode at all is installed with `curl -fsSL https://opencode.ai/v2/install | bash` (asks first in a terminal). it never pins a version, because that would replace the running server and kill the user's TUI sessions.
 
 if I ask you questions about opencode you can opensrc it from anomalyco/opencode (not opencode-ai/opencode, which is an unrelated repo).
 
@@ -88,7 +88,7 @@ ONLY restart the discord bot if the user explicitly asks for it. run `kimaki res
 
 ## running parallel kimaki processes
 
-the bot holds a single-instance lock on `KIMAKI_LOCK_PORT` (default 29988). a second bot on the same port **stops the running one** (V1 or V2: SIGTERM to its wrapper from `/health`, SIGKILL after 20s) and takes the port, before migration and onboarding (`evictRunningBot` in `lock-server.ts`). to run another bot next to the main one (for example a test install), use a free port and a separate data dir:
+the bot holds a single-instance lock on `KIMAKI_LOCK_PORT` (default 29988). a second bot on the same port **stops the running one** (V1 or V2: SIGTERM to its wrapper from `/health`, SIGKILL after 20s) and takes the port, before migration and onboarding (`evictRunningBot` in `adapters/http/rpc.ts`). to run another bot next to the main one (for example a test install), use a free port and a separate data dir:
 
 ```bash
 KIMAKI_LOCK_PORT=31001 kimaki --data-dir ~/.kimaki-test
@@ -143,7 +143,7 @@ thread events (root, subagents and `kimaki.*` internal events) are recorded in `
 
 ## opencode plugin
 
-`kimaki/src/plugin/` runs inside the **OpenCode server process**, not the bot. on start the bot writes a shim per plugin into `<opencode config dir>/plugins/<name>/index.js` that re-exports `dist/plugin/` of the running Kimaki install (`installPluginShim` in `opencode-server.ts`), also when the bot runs from `src`: OpenCode watches plugin files and reloads on change, so a `src` target would load half-edited code on every save. run `bun run build` to ship plugin changes. no opencode.json edit. writing the shim only when its content changes matters: any change in that folder reloads every location and cancels pending forms.
+`kimaki/src/plugin/` runs inside the **OpenCode server process**, not the bot. on start the bot writes a shim per plugin into `<opencode config dir>/plugins/<name>/index.js` that re-exports `dist/plugin/` of the running Kimaki install (`installPluginShim` in `adapters/opencode/`), also when the bot runs from `src`: OpenCode watches plugin files and reloads on change, so a `src` target would load half-edited code on every save. run `bun run build` to ship plugin changes. no opencode.json edit. writing the shim only when its content changes matters: any change in that folder reloads every location and cancels pending forms.
 
 - `plugin/index.ts` (`kimaki`): git branch reminder, `<discord-user>` turn context rendered from `metadata.discord` into the model request only (stored prompt text stays clean for the TUI), extra `description` / `hasSideEffect` tool inputs, shell env, file edit log.
 
@@ -153,7 +153,7 @@ each module has one `export default Plugin.define(...)`. keep utilities in separ
 
 **the `kimaki` plugin must only act on Kimaki sessions.** OpenCode loads it for every session, including the user's own TUI sessions. every hook must first check the session's `metadata.kimaki` marker (or the parent chain for subagents, see `marker()` in `plugin/index.ts`) and return without changes when it is missing. the only exceptions: the built-in skills and the stable `OpenCode session ID: ses_...` system line, which reach every session on purpose. the bot writes the marker at `session.create` and when it adopts a V1 session. never add a hook that changes prompts, tools, shell commands or files for unmarked sessions.
 
-the plugin gets bot state from the marker, not from env vars: `dataDir` and `lockPort`. its `execute.before` hook prefixes each shell command with `PATH=<dataDir>/bin:$PATH`, `KIMAKI_DATA_DIR`, `KIMAKI_LOCK_PORT` and `KIMAKI_TOOL_CALL`, so agents call the `<dataDir>/bin/kimaki` shim (`installShim` in `lock-server.ts`) and reach the right bot.
+the plugin gets bot state from the marker, not from env vars: `dataDir` and `lockPort`. its `execute.before` hook prefixes each shell command with `PATH=<dataDir>/bin:$PATH`, `KIMAKI_DATA_DIR`, `KIMAKI_LOCK_PORT` and `KIMAKI_TOOL_CALL`, so agents call the `<dataDir>/bin/kimaki` shim (`installShim` in `adapters/http/rpc.ts`) and reach the right bot.
 
 the plugin never gets the bot token. `kimaki user list` reads `KIMAKI_BOT_TOKEN` or saved credentials and calls Discord REST directly. `kimaki send` with no local bot (CI) posts a remote-send envelope with that token; the bot that owns the channel runs it (`remote-send.ts`). `kimaki session archive`, `kimaki buttons`, `kimaki upload-request` and `kimaki sleep` call the bot through the lock port.
 

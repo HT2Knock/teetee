@@ -16,6 +16,7 @@ import { createEffectsRunner } from './effects.ts'
 import { createEventLoop } from './event-loop.ts'
 import { registerIngress } from './ingress.ts'
 import { handleMcp, type McpRequest } from './adapters/http/mcp.ts'
+import { removeMcpState, writeMcpState } from './adapters/opencode/mcp-state.ts'
 import { runLockRoute } from './adapters/http/routes.ts'
 import { installShim, type LockServer } from './adapters/http/rpc.ts'
 import { createLogger } from './logger.ts'
@@ -127,6 +128,9 @@ type BuildInput = {
   clock: ClockShape
   store: BotStore
   cleanup: Cleanup
+  // Resolves the MCP handler that waits for the bot: the plugin may connect
+  // while the bot is still starting.
+  onBot: (bot: Bot) => void
 }
 
 // Everything after the Layer is in place. Errors stay values: the program
@@ -139,7 +143,7 @@ const buildBot = (input: BuildInput) =>
     return yield* runBot(input).pipe(Effect.provide(Database.layer(opened)))
   })
 
-const runBot = ({ options, settings, clock, store, cleanup }: BuildInput) =>
+const runBot = ({ options, settings, clock, store, cleanup, onBot }: BuildInput) =>
   Effect.gen(function* () {
     const lock = options.lock
     const database = yield* Database
@@ -209,8 +213,6 @@ const runBot = ({ options, settings, clock, store, cleanup }: BuildInput) =>
       clock,
       dataDir: settings.dataDir,
       lockPort: settings.lockPort,
-      controlToken: settings.controlToken,
-      notifyToken: settings.notifyToken,
       restUrl: settings.restUrl,
       supervised: settings.supervised,
       token: options.token,
@@ -220,6 +222,7 @@ const runBot = ({ options, settings, clock, store, cleanup }: BuildInput) =>
       disabledSkills: settings.disabledSkills,
       features: { withSleepLock: createSleepLock(), waitForPlugin: createPluginWait({ opencode }), agentUi },
     }
+    onBot(bot)
     const scheduler = createScheduler({
       bot,
       intervalMs: options.schedulerIntervalMs === undefined ? 5_000 : options.schedulerIntervalMs,
@@ -229,13 +232,7 @@ const runBot = ({ options, settings, clock, store, cleanup }: BuildInput) =>
     lock.handle((route, input, signal) =>
       runLockRoute(bot, { route: route.replace(/^\/(?:rpc|kimaki)\//, ''), input, signal }),
     )
-    lock.mcp(({ scope, body, signal }) => {
-      const request = body as Partial<McpRequest> | null
-      if (!request || typeof request !== 'object' || typeof request.method !== 'string') {
-        return Promise.resolve({ status: 400, body: { error: 'Expected a JSON-RPC request with a method' } })
-      }
-      return handleMcp({ bot, scope, request: request as McpRequest, signal })
-    })
+
     // Before login: gateway-proxy replays missed messages right after READY.
     registerIngress(bot)
 
@@ -287,11 +284,31 @@ export async function startBot(options: StartBotOptions): Promise<Error | BotHan
   // failure disposes it before returning; a started bot moves it into stop().
   const cleanup = new Cleanup()
   cleanup.defer(() => options.lock.close())
+  // Before the plugin shim: a plugin that loads while this file is missing has
+  // no MCP server until the next OpenCode reload.
+  const state = await writeMcpState({
+    configDir: options.opencodeConfigDir,
+    port: options.lock.port,
+    token: options.lock.tokens.control,
+  })
+  if (state instanceof Error) return state
+  cleanup.defer(() => removeMcpState({ configDir: options.opencodeConfigDir }))
+  // The plugin can connect before the bot exists. Hold the request until the
+  // bot is ready instead of answering 503 and failing the MCP connection.
+  const botReady = Promise.withResolvers<Bot>()
+  options.lock.mcp(async ({ scope, body, signal }) => {
+    const bot = await botReady.promise
+    const request = body as Partial<McpRequest> | null
+    if (!request || typeof request !== 'object' || typeof request.method !== 'string') {
+      return { status: 400, body: { error: 'Expected a JSON-RPC request with a method' } }
+    }
+    return handleMcp({ bot, scope, request: request as McpRequest, signal })
+  })
   const program = Effect.gen(function* () {
     const settings = yield* Settings
     const clock = yield* Clock
     const store = yield* ThreadRegistry
-    return yield* buildBot({ options, settings, clock, store, cleanup })
+    return yield* buildBot({ options, settings, clock, store, cleanup, onBot: botReady.resolve })
   }).pipe(
     // A thrown error is a defect and skips the value check below.
     Effect.onError(() => Effect.promise(() => cleanup.dispose())),
