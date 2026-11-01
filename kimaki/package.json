@@ -3,7 +3,6 @@
   "version": "1.2.0",
   "description": "A collaborative agent orchestrator for OpenCode, inside Discord",
   "repository": "https://github.com/remorses/kimaki",
-  "type": "module",
   "bin": {
     "kimaki": "./dist/cli.js"
   },
@@ -13,8 +12,10 @@
     "src",
     "skills"
   ],
+  "type": "module",
   "scripts": {
-    "build": "tsc && bun scripts/bundle.ts",
+    "build": "bun check && tsc --noCheck && bun scripts/bundle.ts",
+    "check": "bun check",
     "test": "bun scripts/run-tests.ts"
   },
   "dependencies": {

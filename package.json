@@ -1,6 +1,9 @@
 {
   "name": "kimaki-bot",
   "private": true,
+  "license": "",
+  "author": "remorses <beats.by.morse@gmail.com>",
+  "repository": "https://github.com/HT2Knock/teetee",
   "workspaces": [
     "./kimaki",
     "./discord-digital-twin",
@@ -8,15 +11,23 @@
   ],
   "scripts": {
     "build": "bun run --filter kimaki build",
+    "check": "bun run --filter kimaki check && bun run --filter discord-digital-twin typecheck && bun run --filter opencode-deterministic-provider typecheck",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
+    "fmt": "oxfmt .",
+    "fmt:check": "oxfmt --check .",
+    "fallow": "fallow dead-code && fallow architecture",
+    "fallow:health": "fallow health --hotspots --targets",
+    "verify": "bun run check && bun run lint && bun run fmt:check && bun run fallow && bun run build",
     "test": "bun run --filter kimaki test"
   },
+  "dependencies": {},
   "devDependencies": {
+    "fallow": "3.38.1",
+    "oxfmt": "0.75.0",
+    "oxlint": "1.90.0",
     "typescript": "^5.9.2"
   },
-  "repository": "https://github.com/HT2Knock/teetee",
-  "author": "remorses <beats.by.morse@gmail.com>",
-  "license": "",
-  "dependencies": {},
   "trustedDependencies": [
     "@discordjs/opus",
     "@opencode/cli"
