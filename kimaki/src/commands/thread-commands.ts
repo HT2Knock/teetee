@@ -176,12 +176,14 @@ async function clearQueueCommand(bot: Bot, interaction: ChatInputCommandInteract
 async function btwCommand(bot: Bot, interaction: ChatInputCommandInteraction, { thread }: SessionTarget) {
   const text = interaction.options.getString('prompt', true).trim()
   await interaction.deferReply()
-  const result = await forkBtw(bot, {
-    sourceThread: thread,
-    text,
-    author: authorOf(interaction),
-    messageId: interaction.id,
-  })
+  const result = await runResult(
+    forkBtw(bot, {
+      sourceThread: thread,
+      text,
+      author: authorOf(interaction),
+      messageId: interaction.id,
+    }),
+  )
   if (result instanceof Error) return replyError(interaction, result)
   await interaction.editReply({ content: `Session forked! Continue in <#${result.threadId}>` })
 }

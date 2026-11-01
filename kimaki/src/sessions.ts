@@ -3,12 +3,13 @@
 // /fork-subagent, btw forks, the session marker and the instructions entry.
 
 import type { SessionMetadata } from '@opencode/client'
+import { Effect } from 'effect'
 
 import type { TextChannel, ThreadChannel } from './adapters/discord/index.ts'
 import type { OpenCodeClient } from './adapters/opencode/index.ts'
 import {
   cliContext,
-  oc,
+  ocEffect,
   projectOf,
   readMarker,
   rootSession,
@@ -19,8 +20,8 @@ import {
   type PromptFile,
 } from './bot.ts'
 import { disabledSkillRules } from './builtin-skills.ts'
-import { runResult } from './effect-bridge.ts'
-import { ConfigError, DbError, DiscordError, type OpenCodeError, type OpenCodeUnavailableError } from './errors.ts'
+import { fromResult } from './effect-bridge.ts'
+import { ConfigError, type DbError, DiscordError, type OpenCodeError, type OpenCodeUnavailableError } from './errors.ts'
 import { SILENT_MESSAGE_FLAGS } from './format-parts.ts'
 import { createLogger } from './logger.ts'
 import { prompt } from './prompt.ts'
@@ -32,6 +33,18 @@ import { createWorktree, resolveWorkingDirectory } from './worktrees.ts'
 const logger = createLogger('SESSIONS')
 
 type PermissionRules = NonNullable<NonNullable<Parameters<OpenCodeClient['session']['create']>[0]>['permissions']>
+
+// A session this module can bind to a new thread: a resumed one or a fresh fork.
+type AdoptableSession = {
+  id: string
+  metadata?: SessionMetadata
+  permissions?: PermissionRules
+  location: { directory: string }
+}
+
+function discord<A>(operation: string, run: () => Promise<A>): Effect.Effect<A, DiscordError> {
+  return Effect.tryPromise({ try: run, catch: (cause) => new DiscordError({ operation, cause }) })
+}
 
 function btwPrompt({
   text,
@@ -62,55 +75,32 @@ function btwPrompt({
 
 // --- Sessions that get a new thread: /resume, /fork, /fork-subagent, btw.
 
-// Binds an existing session to a new thread. Order matters:
-//
-//   thread + intro ─▶ metadata + instructions (new IDs) ─▶ history
-//     ─▶ one DB batch: old bindings out, new one in ─▶ routing + replay (same tick)
-//     ─▶ hydrate what it runs and waits on now
-//
-// Nothing routes to the thread before the replay, so live output follows
-// it. A failure before the binding deletes the new thread (and calls
-// `discard`), leaving any old binding untouched.
-async function adoptSession(
-  bot: Bot,
-  {
-    channel,
-    session,
-    threadName,
-    intro,
-    note,
-    author,
-    parentSessionId = null,
-    scheduledTask = null,
-    discard,
-  }: {
-    channel: TextChannel
-    session: { id: string; metadata?: SessionMetadata; permissions?: PermissionRules; location: { directory: string } }
-    threadName: string
-    intro: string
-    note: string
-    author: Author
-    // Explicit `kimaki send --parent-session` of a resumed session; never a fork's OpenCode parent.
-    parentSessionId?: string | null
-    // A resumed task session keeps its task; a fork is a new user session.
-    scheduledTask?: ScheduledRun | null
-    // Cleanup of a session created only for this thread (a fork).
-    discard?: () => Promise<void>
-  },
-): Promise<
-  OpenCodeUnavailableError | OpenCodeError | DiscordError | DbError | { threadId: string; sessionId: string }
-> {
-  const sessionId = session.id
-  const thread = await channel.threads
-    .create({ name: threadName.replace(/\s+/g, ' ').slice(0, 100), autoArchiveDuration: 1440 })
-    .catch((cause) => new DiscordError({ operation: 'create thread', cause }))
-  if (thread instanceof Error) return thread
-
-  const prepared = await (async () => {
-    const posted = await thread
-      .send({ content: intro.slice(0, 2_000), allowedMentions: { parse: [] }, flags: SILENT_MESSAGE_FLAGS })
-      .catch((cause) => new DiscordError({ operation: 'send intro', cause }))
-    if (posted instanceof Error) return posted
+// Everything a thread needs before the DB batch: intro, marker, instructions,
+// history. The caller deletes the thread when this fails.
+function prepareAdoption({
+  bot,
+  thread,
+  channel,
+  session,
+  intro,
+  author,
+  parentSessionId,
+  scheduledTask,
+}: {
+  bot: Bot
+  thread: ThreadChannel
+  channel: TextChannel
+  session: AdoptableSession
+  intro: string
+  author: Author
+  parentSessionId: string | null
+  scheduledTask: ScheduledRun | null
+}) {
+  return Effect.gen(function* () {
+    const sessionId = session.id
+    yield* discord('send intro', () =>
+      thread.send({ content: intro.slice(0, 2_000), allowedMentions: { parse: [] }, flags: SILENT_MESSAGE_FLAGS }),
+    )
     // Merge: other metadata stays. Task fields stay only for a resumed task session.
     const { task: _task, taskId: _taskId, ...rest } = readMarker(session.metadata)?.fields ?? {}
     const marker = scheduledTask ? { ...rest, taskId: scheduledTask.id, task: scheduledTask } : rest
@@ -126,134 +116,198 @@ async function adoptSession(
     const permissions = rules.some((rule) => rule.action === 'question')
       ? rules
       : [NO_QUESTION_TOOL, ...disabledSkillRules(bot.disabledSkills), ...rules]
-    const marked = await oc(bot, 'session.update', (client) =>
+    yield* ocEffect(bot, 'session.update', (client) =>
       client.session.update({ sessionID: sessionId, metadata: { ...session.metadata, kimaki }, permissions }),
     )
-    if (marked instanceof Error) return marked
-    const instructions = await runResult(
-      putInstructions(bot, {
-        sessionId,
-        thread,
-        channel,
-        directory: session.location.directory,
-        userId: author.id,
-        parentSessionId,
-        scheduledTask,
-      }),
-    )
-    if (instructions instanceof Error) return instructions
-    const messages = await oc(bot, 'message.list', (client) =>
+    yield* putInstructions(bot, {
+      sessionId,
+      thread,
+      channel,
+      directory: session.location.directory,
+      userId: author.id,
+      parentSessionId,
+      scheduledTask,
+    })
+    const messages = yield* ocEffect(bot, 'message.list', (client) =>
       client.message.list({ sessionID: sessionId, order: 'desc', limit: 100 }),
     )
-    if (messages instanceof Error) return messages
     // One thread per session: older threads of this session stop following it.
-    const moved = await (async () => {
-      try {
-        return await bot.db.begin(async (tx) => {
-          const deleted = await tx<
-            { thread_id: string }[]
-          >`DELETE FROM thread_sessions WHERE session_id = ${sessionId} RETURNING thread_id`
-          await tx`INSERT INTO thread_sessions (thread_id, session_id, source) VALUES (${thread.id}, ${sessionId}, ${'kimaki'})`
+    const previous = yield* bot.query('move thread_sessions', (sql) =>
+      sql.withTransaction(
+        Effect.gen(function* () {
+          const deleted = yield* sql<{
+            thread_id: string
+          }>`DELETE FROM thread_sessions WHERE session_id = ${sessionId} RETURNING thread_id`
+          yield* sql`INSERT INTO thread_sessions (thread_id, session_id, source) VALUES (${thread.id}, ${sessionId}, ${'kimaki'})`
           return deleted
-        })
-      } catch (cause) {
-        return new DbError({ operation: 'move thread_sessions', cause })
-      }
-    })()
-    if (moved instanceof Error) return moved
-    return { history: [...messages.data].reverse(), previous: moved.map((row) => row.thread_id) }
-  })()
-  if (prepared instanceof Error) {
-    await thread.delete('session adoption failed').catch(() => undefined)
-    await discard?.()
-    return prepared
-  }
-
-  for (const previousThread of prepared.previous) bot.eventLoop.unbind(previousThread)
-  await bot.eventLoop.bind({
-    threadId: thread.id,
-    sessionId,
-    channelId: channel.id,
-    directory: session.location.directory,
-    isNew: false,
-    first: [{ type: 'kimaki.replay', messages: prepared.history, note }],
+        }),
+      ),
+    )
+    return { history: [...messages.data].reverse(), previous: previous.map((row) => row.thread_id) }
   })
-  logger.log(`session ${sessionId} bound to thread ${thread.id}`)
-  await thread.members.add(author.id).catch((e: Error) => logger.warn(`add member`, e))
-  const hydrated = await bot.eventLoop.syncThread(thread.id)
-  if (hydrated instanceof Error) logger.warn(`hydrate ${thread.id}`, hydrated)
-  return { threadId: thread.id, sessionId }
+}
+
+// The caller deletes the thread and the fork when anything before the binding fails.
+function discardThread({ thread, discard }: { thread: ThreadChannel; discard?: () => Effect.Effect<void> }) {
+  return Effect.gen(function* () {
+    yield* Effect.promise(() => thread.delete('session adoption failed').catch(() => undefined))
+    if (discard) yield* discard()
+  })
+}
+
+// Binds an existing session to a new thread. Order matters:
+//
+//   thread + intro ─▶ metadata + instructions (new IDs) ─▶ history
+//     ─▶ one DB batch: old bindings out, new one in ─▶ routing + replay (same tick)
+//     ─▶ hydrate what it runs and waits on now
+//
+// Nothing routes to the thread before the replay, so live output follows
+// it. A failure before the binding deletes the new thread (and calls
+// `discard`), leaving any old binding untouched.
+function adoptSession(
+  bot: Bot,
+  {
+    channel,
+    session,
+    threadName,
+    intro,
+    note,
+    author,
+    parentSessionId = null,
+    scheduledTask = null,
+    discard,
+  }: {
+    channel: TextChannel
+    session: AdoptableSession
+    threadName: string
+    intro: string
+    note: string
+    author: Author
+    // Explicit `kimaki send --parent-session` of a resumed session; never a fork's OpenCode parent.
+    parentSessionId?: string | null
+    // A resumed task session keeps its task; a fork is a new user session.
+    scheduledTask?: ScheduledRun | null
+    // Cleanup of a session created only for this thread (a fork).
+    discard?: () => Effect.Effect<void>
+  },
+): Effect.Effect<
+  { threadId: string; sessionId: string },
+  OpenCodeUnavailableError | OpenCodeError | DiscordError | DbError
+> {
+  return Effect.gen(function* () {
+    const sessionId = session.id
+    const thread = yield* discord<ThreadChannel>('create thread', () =>
+      channel.threads.create({ name: threadName.replace(/\s+/g, ' ').slice(0, 100), autoArchiveDuration: 1440 }),
+    )
+    const prepared = yield* prepareAdoption({
+      bot,
+      thread,
+      channel,
+      session,
+      intro,
+      author,
+      parentSessionId,
+      scheduledTask,
+    }).pipe(Effect.tapError(() => discardThread({ thread, discard })))
+
+    for (const previousThread of prepared.previous) bot.eventLoop.unbind(previousThread)
+    yield* Effect.promise(() =>
+      bot.eventLoop.bind({
+        threadId: thread.id,
+        sessionId,
+        channelId: channel.id,
+        directory: session.location.directory,
+        isNew: false,
+        first: [{ type: 'kimaki.replay', messages: prepared.history, note }],
+      }),
+    )
+    logger.log(`session ${sessionId} bound to thread ${thread.id}`)
+    yield* Effect.promise(() => thread.members.add(author.id).catch((e: Error) => logger.warn(`add member`, e)))
+    yield* fromResult(() => bot.eventLoop.syncThread(thread.id)).pipe(
+      Effect.match({
+        onFailure: (error) => logger.warn(`hydrate ${thread.id}`, error),
+        onSuccess: () => null,
+      }),
+    )
+    return { threadId: thread.id, sessionId }
+  })
 }
 
 // The project channel whose directory holds this session.
-export async function channelForSession(bot: Bot, sessionId: string) {
-  const directory = await runResult(sessionDirectory(bot, sessionId))
-  if (directory instanceof Error) return directory
-  return channelForDirectory(bot, directory)
+export function channelForSession(bot: Bot, sessionId: string) {
+  return Effect.gen(function* () {
+    const directory = yield* sessionDirectory(bot, sessionId)
+    return yield* channelForDirectory(bot, directory)
+  })
 }
 
-export async function channelForDirectory(bot: Bot, directory: string) {
-  const rows = await bot.db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories`.catch(
-    (cause) => new DbError({ operation: 'read channel_directories', cause }),
-  )
-  if (rows instanceof Error) return rows
-  const projects = parseRows<ChannelDirectoryRow>('channel_directories', rows)
-  projects.sort((a, b) => b.directory.length - a.directory.length)
-  // Stored directories may be symlink aliases of the real path.
-  const matches = await Promise.all(
-    projects.map(
-      async (row) =>
-        !((await resolveWorkingDirectory({ projectDirectory: row.directory, candidate: directory })) instanceof Error),
-    ),
-  )
-  const project = projects.find((_, index) => matches[index])
-  if (!project) return new ConfigError({ reason: `No project channel for ${directory}. Pass --channel.` })
-  return project.channel_id
+export function channelForDirectory(bot: Bot, directory: string): Effect.Effect<string, ConfigError | DbError> {
+  return Effect.gen(function* () {
+    const rows = yield* bot.query(
+      'read channel_directories',
+      (sql) => sql<ChannelDirectoryRow>`SELECT * FROM channel_directories`,
+    )
+    const projects = parseRows<ChannelDirectoryRow>('channel_directories', rows)
+    projects.sort((a, b) => b.directory.length - a.directory.length)
+    // Stored directories may be symlink aliases of the real path.
+    const matches = yield* Effect.forEach(
+      projects,
+      (row) =>
+        fromResult(() => resolveWorkingDirectory({ projectDirectory: row.directory, candidate: directory })).pipe(
+          Effect.match({ onFailure: () => false, onSuccess: () => true }),
+        ),
+      { concurrency: 'unbounded' },
+    )
+    const project = projects.find((_, index) => matches[index])
+    if (!project) {
+      return yield* Effect.fail(new ConfigError({ reason: `No project channel for ${directory}. Pass --channel.` }))
+    }
+    return project.channel_id
+  })
 }
 
 // Binds an existing session of the channel's project to a new thread.
-export async function resume(
+export function resume(
   bot: Bot,
   { channelId, sessionId, author }: { channelId: string; sessionId: string; author: Author },
 ) {
-  const [channel, project] = await Promise.all([
-    runResult(textChannel(bot, channelId)),
-    runResult(projectOf(bot, channelId)),
-  ])
-  if (channel instanceof Error) return channel
-  if (project instanceof Error) return project
-  if (!project) return new ConfigError({ reason: 'This channel is not configured with a project directory' })
-  const info = await oc(bot, 'session.get', (client) => client.session.get({ sessionID: sessionId }))
-  if (info instanceof Error) return info
-  if (
-    (await resolveWorkingDirectory({
-      projectDirectory: project.directory,
-      candidate: info.location.directory,
-    })) instanceof Error
-  ) {
-    return new ConfigError({
-      reason: `This session belongs to a different project or worktree: \`${info.location.directory}\`. Run \`/resume\` in the channel for that directory.`,
+  return Effect.gen(function* () {
+    const [channel, project] = yield* Effect.all([textChannel(bot, channelId), projectOf(bot, channelId)], {
+      concurrency: 'unbounded',
     })
-  }
-  const title = info.title ?? 'Untitled'
-  const marker = readMarker(info.metadata)
-  const adopted = await adoptSession(bot, {
-    channel,
-    session: info,
-    parentSessionId: marker?.parentSessionId ?? null,
-    scheduledTask: marker?.task ?? null,
-    threadName: `Resume: ${title}`,
-    intro: `**Resumed session:** ${title}\n**Created:** <t:${Math.floor(info.time.created / 1_000)}:f>`,
-    note: '**Session resumed!** You can now continue the conversation by sending messages in this thread.',
-    author,
+    if (!project) {
+      return yield* Effect.fail(new ConfigError({ reason: 'This channel is not configured with a project directory' }))
+    }
+    const info = yield* ocEffect(bot, 'session.get', (client) => client.session.get({ sessionID: sessionId }))
+    const allowed = yield* fromResult(() =>
+      resolveWorkingDirectory({ projectDirectory: project.directory, candidate: info.location.directory }),
+    ).pipe(Effect.match({ onFailure: () => false, onSuccess: () => true }))
+    if (!allowed) {
+      return yield* Effect.fail(
+        new ConfigError({
+          reason: `This session belongs to a different project or worktree: \`${info.location.directory}\`. Run \`/resume\` in the channel for that directory.`,
+        }),
+      )
+    }
+    const title = info.title ?? 'Untitled'
+    const marker = readMarker(info.metadata)
+    const adopted = yield* adoptSession(bot, {
+      channel,
+      session: info,
+      parentSessionId: marker?.parentSessionId ?? null,
+      scheduledTask: marker?.task ?? null,
+      threadName: `Resume: ${title}`,
+      intro: `**Resumed session:** ${title}\n**Created:** <t:${Math.floor(info.time.created / 1_000)}:f>`,
+      note: '**Session resumed!** You can now continue the conversation by sending messages in this thread.',
+      author,
+    })
+    return { ...adopted, title }
   })
-  if (adopted instanceof Error) return adopted
-  return { ...adopted, title }
 }
 
 // Forks the thread's session (or one of its subagent sessions) into a new
 // thread. `before`: a user message ID; the fork ends right before it.
-export async function fork(
+export function fork(
   bot: Bot,
   {
     sourceThread,
@@ -276,81 +330,77 @@ export async function fork(
     worktree?: { name: string; baseBranch?: string }
   },
 ) {
-  const root = rootSession(bot, sourceThread.id)
-  if (root instanceof Error) return root
-  if (sessionId !== root) {
-    const info = await oc(bot, 'session.get', (client) => client.session.get({ sessionID: sessionId }))
-    if (info instanceof Error) return info
-    if (info.parentID !== root) {
-      return new ConfigError({
-        reason:
-          "This session is not the thread's root or a direct subagent. Run /fork or /fork-subagent in the session's own thread.",
-      })
+  return Effect.gen(function* () {
+    const root = rootSession(bot, sourceThread.id)
+    if (typeof root !== 'string') return yield* Effect.fail(root)
+    if (sessionId !== root) {
+      const info = yield* ocEffect(bot, 'session.get', (client) => client.session.get({ sessionID: sessionId }))
+      if (info.parentID !== root) {
+        return yield* Effect.fail(
+          new ConfigError({
+            reason:
+              "This session is not the thread's root or a direct subagent. Run /fork or /fork-subagent in the session's own thread.",
+          }),
+        )
+      }
     }
-  }
-  const project = await runResult(threadProject(bot, sourceThread))
-  if (project instanceof Error) return project
-  const channel = await runResult(textChannel(bot, project.channelId))
-  if (channel instanceof Error) return channel
-  const forked = await oc(bot, 'session.fork', (client) =>
-    client.session.fork({ sessionID: sessionId, ...(before && { before }) }),
-  )
-  if (forked instanceof Error) return forked
-  const discard = async () => {
-    const removed = await oc(bot, 'session.remove', (client) => client.session.remove({ sessionID: forked.id }))
-    if (removed instanceof Error) logger.warn(`discard fork ${forked.id}`, removed)
-  }
-  const relocated = await (async () => {
-    if (!worktree) return forked
-    const checkout = await createWorktree({
-      projectDirectory: project.projectDirectory,
-      dataDir: bot.dataDir,
-      name: worktree.name,
-      baseBranch: worktree.baseBranch,
+    const project = yield* threadProject(bot, sourceThread)
+    const channel = yield* textChannel(bot, project.channelId)
+    const forked = yield* ocEffect(bot, 'session.fork', (client) =>
+      client.session.fork({ sessionID: sessionId, ...(before && { before }) }),
+    )
+    const discard = () =>
+      ocEffect(bot, 'session.remove', (client) => client.session.remove({ sessionID: forked.id })).pipe(
+        Effect.match({
+          onFailure: (error) => logger.warn(`discard fork ${forked.id}`, error),
+          onSuccess: () => null,
+        }),
+      )
+    const relocated = yield* Effect.gen(function* () {
+      if (!worktree) return forked
+      const checkout = yield* fromResult(() =>
+        createWorktree({
+          projectDirectory: project.projectDirectory,
+          dataDir: bot.dataDir,
+          name: worktree.name,
+          baseBranch: worktree.baseBranch,
+        }),
+      )
+      yield* bot.features.waitForPlugin(checkout.directory)
+      yield* ocEffect(bot, 'move worktree fork', (client) =>
+        client.session.move({ sessionID: forked.id, directory: checkout.directory }),
+      )
+      yield* ocEffect(bot, 'wait for worktree fork move', (client) => client.session.wait({ sessionID: forked.id }))
+      const info = yield* ocEffect(bot, 'confirm worktree fork directory', (client) =>
+        client.session.get({ sessionID: forked.id }),
+      )
+      if (info.location.directory !== checkout.directory) {
+        return yield* Effect.fail(
+          new ConfigError({ reason: `Session did not move to ${checkout.directory}. No new thread was bound.` }),
+        )
+      }
+      return info
+    }).pipe(Effect.tapError(() => discard()))
+    const intro = subagent
+      ? `**Forked subagent session created!**\nAgent: \`${subagent.agent}\`\nTask: ${subagent.description || 'No description'}\nFrom: \`${sessionId}\`\nNew session: \`${forked.id}\``
+      : `**Forked session created!**\nFrom: <#${sourceThread.id}> (\`${sessionId}\`)\nNew session: \`${forked.id}\``
+    return yield* adoptSession(bot, {
+      channel,
+      session: relocated,
+      discard,
+      // OpenCode titles forks "<title> (fork #1)".
+      threadName: name ?? (forked.title || `Fork: ${subagent?.description || sourceThread.name}`),
+      intro,
+      note: 'You can now continue the conversation from this point.',
+      author,
     })
-    if (checkout instanceof Error) return checkout
-    const plugin = await runResult(bot.features.waitForPlugin(checkout.directory))
-    if (plugin instanceof Error) return plugin
-    const moved = await oc(bot, 'move worktree fork', (client) =>
-      client.session.move({ sessionID: forked.id, directory: checkout.directory }),
-    )
-    if (moved instanceof Error) return moved
-    const waited = await oc(bot, 'wait for worktree fork move', (client) =>
-      client.session.wait({ sessionID: forked.id }),
-    )
-    if (waited instanceof Error) return waited
-    const info = await oc(bot, 'confirm worktree fork directory', (client) =>
-      client.session.get({ sessionID: forked.id }),
-    )
-    if (info instanceof Error) return info
-    if (info.location.directory !== checkout.directory) {
-      return new ConfigError({ reason: `Session did not move to ${checkout.directory}. No new thread was bound.` })
-    }
-    return info
-  })()
-  if (relocated instanceof Error) {
-    await discard()
-    return relocated
-  }
-  const intro = subagent
-    ? `**Forked subagent session created!**\nAgent: \`${subagent.agent}\`\nTask: ${subagent.description || 'No description'}\nFrom: \`${sessionId}\`\nNew session: \`${forked.id}\``
-    : `**Forked session created!**\nFrom: <#${sourceThread.id}> (\`${sessionId}\`)\nNew session: \`${forked.id}\``
-  return adoptSession(bot, {
-    channel,
-    session: relocated,
-    discard,
-    // OpenCode titles forks "<title> (fork #1)".
-    threadName: name ?? (forked.title || `Fork: ${subagent?.description || sourceThread.name}`),
-    intro,
-    note: 'You can now continue the conversation from this point.',
-    author,
   })
 }
 
 // Fork the whole session into a new "btw:" thread that answers one side
 // question (V1 /btw). The source session keeps running. The fork inherits
 // messages, agent, model and instructions, so its prompt cache is warm.
-export async function forkBtw(
+export function forkBtw(
   bot: Bot,
   {
     sourceThread,
@@ -368,69 +418,73 @@ export async function forkBtw(
     // A voice message asked for this agent.
     agent?: string
   },
-): Promise<
-  | ConfigError
-  | OpenCodeUnavailableError
-  | OpenCodeError
-  | DiscordError
-  | DbError
-  | { threadId: string; sessionId: string }
+): Effect.Effect<
+  { threadId: string; sessionId: string },
+  ConfigError | OpenCodeUnavailableError | OpenCodeError | DiscordError | DbError
 > {
-  const parentSessionId = rootSession(bot, sourceThread.id)
-  if (parentSessionId instanceof Error) return parentSessionId
-  const project = await runResult(threadProject(bot, sourceThread))
-  if (project instanceof Error) return project
-  const channel = await runResult(textChannel(bot, project.channelId))
-  if (channel instanceof Error) return channel
+  return Effect.gen(function* () {
+    const parentSessionId = rootSession(bot, sourceThread.id)
+    if (typeof parentSessionId !== 'string') return yield* Effect.fail(parentSessionId)
+    const project = yield* threadProject(bot, sourceThread)
+    const channel = yield* textChannel(bot, project.channelId)
 
-  const [forked, thread] = await Promise.all([
-    oc(bot, 'session.fork', (client) => client.session.fork({ sessionID: parentSessionId })),
-    channel.threads
-      .create({ name: `btw: ${text.replace(/\s+/g, ' ')}`.slice(0, 100), autoArchiveDuration: 1440 })
-      .catch((cause) => new DiscordError({ operation: 'create btw thread', cause })),
-  ])
-  // Either side failed: remove the other so nothing is left half set up.
-  if (forked instanceof Error) {
-    if (!(thread instanceof Error)) await thread.delete('btw fork failed').catch(() => undefined)
-    return forked
-  }
-  if (thread instanceof Error) {
-    const removed = await oc(bot, 'session.remove', (client) => client.session.remove({ sessionID: forked.id }))
-    if (removed instanceof Error) logger.warn(`discard btw fork ${forked.id}`, removed)
-    return thread
-  }
+    // Either side can fail after the other exists: keep both results, then
+    // remove the one that survived so nothing is left half set up.
+    const [forkSide, threadSide] = yield* Effect.all(
+      [
+        ocEffect(bot, 'session.fork', (client) => client.session.fork({ sessionID: parentSessionId })).pipe(
+          Effect.match({ onFailure: (error) => ({ error }), onSuccess: (forked) => ({ forked }) }),
+        ),
+        discord<ThreadChannel>('create btw thread', () =>
+          channel.threads.create({
+            name: `btw: ${text.replace(/\s+/g, ' ')}`.slice(0, 100),
+            autoArchiveDuration: 1440,
+          }),
+        ).pipe(Effect.match({ onFailure: (error) => ({ error }), onSuccess: (thread) => ({ thread }) })),
+      ],
+      { concurrency: 'unbounded' },
+    )
+    if ('error' in forkSide) {
+      if ('thread' in threadSide) {
+        yield* Effect.promise(() => threadSide.thread.delete('btw fork failed').catch(() => undefined))
+      }
+      return yield* Effect.fail(forkSide.error)
+    }
+    const forked = forkSide.forked
+    if ('error' in threadSide) {
+      yield* ocEffect(bot, 'session.remove', (client) => client.session.remove({ sessionID: forked.id })).pipe(
+        Effect.match({
+          onFailure: (error) => logger.warn(`discard btw fork ${forked.id}`, error),
+          onSuccess: () => null,
+        }),
+      )
+      return yield* Effect.fail(threadSide.error)
+    }
+    const thread = threadSide.thread
 
-  const kimaki = { threadId: thread.id, channelId: project.channelId, source: 'discord', ...cliContext(bot) }
-  const marked = await oc(bot, 'session.update', (client) =>
-    client.session.update({ sessionID: forked.id, metadata: { kimaki } }),
-  )
-  if (marked instanceof Error) return marked
-  const bound = await runResult(
-    bindThread(bot, {
+    const kimaki = { threadId: thread.id, channelId: project.channelId, source: 'discord', ...cliContext(bot) }
+    yield* ocEffect(bot, 'session.update', (client) =>
+      client.session.update({ sessionID: forked.id, metadata: { kimaki } }),
+    )
+    yield* bindThread(bot, {
       threadId: thread.id,
       sessionId: forked.id,
       channelId: project.channelId,
       directory: project.directory,
       isNew: false,
-    }),
-  )
-  if (bound instanceof Error) return bound
-  await thread.members.add(author.id).catch((e: Error) => logger.warn(`add btw member`, e))
-  const intro = await thread
-    .send({
-      content: `Reusing context from <#${sourceThread.id}> to answer prompt...\n${text}`.slice(0, 2_000),
-      allowedMentions: { parse: [] },
-      flags: SILENT_MESSAGE_FLAGS,
     })
-    .catch((cause) => new DiscordError({ operation: 'send btw intro', cause }))
-  if (intro instanceof Error) return intro
-  if (agent) {
-    const switched = await runResult(switchAgent(bot, { sessionId: forked.id, directory: project.directory, agent }))
-    if (switched instanceof Error) return switched
-  }
-
-  const sent = await runResult(
-    prompt(bot, {
+    yield* Effect.promise(() => thread.members.add(author.id).catch((e: Error) => logger.warn(`add btw member`, e)))
+    yield* discord('send btw intro', () =>
+      thread.send({
+        content: `Reusing context from <#${sourceThread.id}> to answer prompt...\n${text}`.slice(0, 2_000),
+        allowedMentions: { parse: [] },
+        flags: SILENT_MESSAGE_FLAGS,
+      }),
+    )
+    if (agent) {
+      yield* switchAgent(bot, { sessionId: forked.id, directory: project.directory, agent })
+    }
+    yield* prompt(bot, {
       sessionId: forked.id,
       threadId: thread.id,
       threadName: thread.name,
@@ -445,8 +499,7 @@ export async function forkBtw(
       messageId,
       delivery: 'steer',
       files,
-    }),
-  )
-  if (sent instanceof Error) return sent
-  return { threadId: thread.id, sessionId: forked.id }
+    })
+    return { threadId: thread.id, sessionId: forked.id }
+  })
 }

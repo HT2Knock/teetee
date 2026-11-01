@@ -60,7 +60,9 @@ export async function newWorktree(
   if (sourceThread) {
     const sessionId = rootSession(bot, sourceThread.id)
     if (sessionId instanceof Error) return sessionId
-    return fork(bot, { sourceThread, sessionId, author, name: `⬦ ${slug}`, worktree: { name: slug, baseBranch } })
+    return runResult(
+      fork(bot, { sourceThread, sessionId, author, name: `⬦ ${slug}`, worktree: { name: slug, baseBranch } }),
+    )
   }
   const project = await runResult(projectOf(bot, channelId))
   if (project instanceof Error) return project

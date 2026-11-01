@@ -424,6 +424,13 @@ timer. `effect-bridge.ts` gains `fromResult`, the inverse of `runResult`, for
 the helpers that still report a failure as a value (`resolveWorkingDirectory`,
 `eventLoop.bind`). Its callers are promise-shaped and bridge with `runResult`.
 
+Sixth slice, done: `sessions.ts` returns `Effect`. `adoptSession`, `resume`,
+`fork`, `forkBtw`, `channelForDirectory` and `channelForSession` fail with
+tagged errors, the `thread_sessions` swap runs in `sql.withTransaction` through
+`bot.query`, and a failed adoption deletes the new thread with `tapError`
+before any old binding is touched. The Discord thread calls go through a local
+`discord()` helper, the same shape `project.ts` uses.
+
 Exit: zero cycles, core imports no `discord.js`, no `instanceof Error` in
 production code.
 
