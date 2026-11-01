@@ -89,4 +89,3 @@ test('bot start writes the plugin shim, OpenCode loads it, a restart does not re
   bot = await startTestBot({ dataDir, twin, server })
   expect(fs.statSync(shim).mtimeMs).toBe(written)
 }, 30_000)
-

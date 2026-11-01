@@ -16,25 +16,12 @@ import path from 'node:path'
 const outdir = 'dist'
 const manifestPath = path.join(outdir, '.bundle-files.json')
 
-// Packages that cannot be bundled, because their module code breaks when the
-// bundler wraps it as ESM:
-// - `@snazzah/davey` (dependency of `@discordjs/voice`) assigns to `require`
-//   (`require = createRequire(__filename)`), which is a readonly binding once
-//   bundled. Loading `@discordjs/voice` from node_modules keeps it working.
-// - `werift` and `opusscript` ship wasm and `.node` assets that voice calls load
-//   from their own package directory.
-// - `prism-media` requires `ffmpeg-static` only for the FFmpeg transcoder, and
-//   that package is not installed (voice uses opusscript), so its require fails
-//   at build time.
-const external = ['@discordjs/voice', 'werift', 'opusscript', 'prism-media', 'ffmpeg-static']
-
 const result = await Bun.build({
   entrypoints: ['src/cli.ts'],
   outdir,
   target: 'bun',
   splitting: true,
   sourcemap: 'external',
-  external,
   naming: { entry: '[name].[ext]', chunk: '[name]-[hash].[ext]', asset: '[name]-[hash].[ext]' },
 })
 

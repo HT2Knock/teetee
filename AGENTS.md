@@ -4,9 +4,7 @@ deploy: `git push`, then on the bot host `git pull && bun install && bun run bui
 
 after every change and every feature run `bun run build` inside `kimaki`. it runs `tsc` and then `scripts/bundle.ts`: the OpenCode plugin autostarts the bot from `dist/cli.js` (`src/autostart.ts`), so a stale dist starts old code. try to never use `as any`.
 
-`scripts/bundle.ts` overwrites `dist/cli.js` with a `Bun.build` bundle of `src/cli.ts` and writes content-hashed chunks next to it, keeping `tsc` output because the plugin shim loads `<package>/dist/plugin/<dir>/index.js` as plain ESM. splitting is required: without it the lazy `await import()` stacks are inlined into the entry and evaluated on every run (200 ms vs 76 ms for `kimaki --help`). packages whose module code breaks when bundled are `external` in that script (`@discordjs/voice` assigns to `require`, `werift`/`opusscript` load wasm and `.node` assets, `prism-media` requires the absent `ffmpeg-static`). a stale chunk list is removed through `dist/.bundle-files.json`.
-
-always load the `changesets` skill before fixing bugs or adding features. User-facing fixes and features usually need a `.changeset/*.md` entry, and the skill explains package selection, issue references, descriptive filenames, and `.changeset/readme.md` expectations.
+`scripts/bundle.ts` overwrites `dist/cli.js` with a `Bun.build` bundle of `src/cli.ts` and writes content-hashed chunks next to it, keeping `tsc` output because the plugin shim loads `<package>/dist/plugin/<dir>/index.js` as plain ESM. splitting is required: without it the lazy `await import()` stacks are inlined into the entry and evaluated on every run (200 ms vs 76 ms for `kimaki --help`). a package whose module code breaks when bundled goes in `external` there. a stale chunk list is removed through `dist/.bundle-files.json`.
 
 never use `spawnSync` or `execSync`. use async `execFile` (`promisify(execFile)`) or `spawn` from `node:child_process`, with a timeout.
 
@@ -14,7 +12,7 @@ after changes to message handling, queueing or the reducer run the full test sui
 
 each kimaki e2e test file starts its own OpenCode server (~400 MB). `scripts/run-tests.ts` caps parallel files at a third of the CPUs (`bun test --parallel`); override with `KIMAKI_TEST_WORKERS`. other agents may run suites at the same time, so run single files while iterating and the full suite once at the end. timeouts in a full run on a loaded machine may be load-related: rerun the failing file alone before debugging.
 
-kimaki CLI startup must stay light (~0.06s, ~70 MB): agents and tests call `kimaki` many times. `kimaki/src/cli/*.ts` must not import SQLite (`db.ts`, `schema.ts`, `credentials.ts`, `project.ts`, `voice.ts`) or `discord.js` at top level; `await import()` them inside the actions that need them. use `discord-api-types/v10` for enums like `ChannelType`.
+kimaki CLI startup must stay light (~0.06s, ~70 MB): agents and tests call `kimaki` many times. `kimaki/src/cli/*.ts` must not import SQLite (`db.ts`, `schema.ts`, `credentials.ts`, `project.ts`) or `discord.js` at top level; `await import()` them inside the actions that need them. use `discord-api-types/v10` for enums like `ChannelType`.
 
 kimaki runs on bun only. anything that spawns a kimaki entrypoint goes through `src/runtime.ts` (`entryArgv`, `evalArgv`, `runtimeExecutable`): bun runs typescript directly, so there is no loader to add. never write `process.execPath` by hand in a spawn. e2e tests use `cliCommand()` from `src/test/harness.ts`, and `kimaki status` reports the runtime. `bun run test` inside `kimaki` runs the suite with `bun test`; `bunfig.toml` preloads the test env and excludes `dist/`.
 
@@ -26,16 +24,13 @@ read the matching doc **before** starting these tasks. they hold the full proced
 
 | task                                                                               | read first                                |
 | ---------------------------------------------------------------------------------- | ----------------------------------------- |
-| any larger kimaki feature: why it works the way it does, what was dropped from V1     | `docs/kimaki-v2-rebuild-spec.md`          |
-| hosted gateway, `gateway_clients`, `--gateway`, bot credentials                     | `docs/gateway-architecture.md`            |
-| Strada events, DAU/WAU/MAU, funnels, retention SQL                                  | `docs/strada-product-analytics.md`        |
 | event sourcing patterns and examples                                                | `docs/event-sourcing-for-application-state.md` |
 | reducer fixtures (recorded OpenCode V2 event streams)                               | `docs/opencode-v2-events/`                |
 
 # repo architecture
 
 ```
-kimaki/ (bot + CLI, local SQLite) ──REST+WS (clientId:secret)──▶ hosted gateway (kimaki.dev) ──▶ Discord
+kimaki/ (bot + CLI, local SQLite) ──REST+WS (bot token)──▶ Discord
    │
    └── one /api/event stream + HTTP client ──▶ user's shared OpenCode V2 service (not a bot-owned server)
 ```
@@ -49,7 +44,7 @@ OpenCode events ──▶ opencode-server.ts ──▶ event-loop.ts ──▶ t
 
 - `main.ts`: wiring. lock port, then SQLite migration, then OpenCode and Discord login in parallel.
 - `bot.ts`: the `Bot` context passed to every module. `store.ts`: the one zustand store.
-- `ingress.ts`: Discord messages, attachments, voice. `slash-commands.ts` + `commands/*`: slash commands and components.
+- `ingress.ts`: Discord messages and attachments. `slash-commands.ts` + `commands/*`: slash commands and components.
 - `input.ts`: the input layer. `dispatch` routes a Discord message and `send` runs `kimaki send`; `startSession` creates the thread and session. It imports prompt.ts and sessions.ts, never the other way round.
 - `session-context.ts`: project, thread and instruction facts of a session plus the agent/model switches. No input is sent from here, which is what keeps the graph acyclic.
 - `opencode-server.ts`: finds the OpenCode service, owns the event subscription, installs the plugin shim.
@@ -59,29 +54,6 @@ OpenCode events ──▶ opencode-server.ts ──▶ event-loop.ts ──▶ t
 - `cli.ts`, `cli/*.ts`: goke CLI. `plugin/`: code that runs inside the OpenCode process.
 - `system-prompt.ts` holds the session instruction entry (the whole agent-facing CLI reference). Only two parts are opt-out skills: `kimaki-debug` and `kimaki-thread-ops` (`skills/<id>/SKILL.md`, `builtin-skills.ts`), registered by the `kimaki` plugin through `ctx.skill.transform` and hidden from Discord slash commands. `kimaki --disable-skills all|id,id` denies them per session with `skill:<id>` permission rules (`disabledSkillRules`).
 - `autostart.ts`: the bot writes `<dataDir>/autostart.command`; the plugin opens it in the default terminal when OpenCode starts and no bot answers on the lock port.
-- the gateway itself (multi-tenant Discord Gateway + REST proxy) is hosted, not in this repo. `--gateway` points the bot at it; onboarding and `gateway_clients` live there.
-
-full gateway diagram, auth flow and onboarding flow: `docs/gateway-architecture.md`.
-
-## gateway REST safety
-
-gateway REST rule for kimaki code: when running with `client_id:secret`
-through the hosted gateway, Discord REST calls must be guild-scoped or explicitly
-allowlisted by the proxy (`/gateway/bot`, `/users/@me`, etc). avoid global
-application routes like `/applications/{app_id}/commands`; use
-`/applications/{app_id}/guilds/{guild_id}/commands` instead so auth can resolve
-scope and allow the request. kimaki registers slash commands per guild (`registerGuild` in `slash-commands.ts`).
-
-multi-tenant REST safety invariant:
-
-- never allow client-authenticated requests to hit unscoped bot-token routes.
-- only tokenized interaction/webhook routes are allowed without auth
-  (`/interactions/{id}/{token}/...`, `/webhooks/{id}/{token}/...`).
-- never treat `/webhooks/{id}` as allowlisted.
-- for `AllowedWithoutAuth` routes, do not inject bot `Authorization` upstream.
-- fail closed (`403`/`401`) when route scope cannot be proven as guild-scoped or
-  token-scoped.
-
 ## opencode SDK
 
 kimaki runs on native OpenCode V2. import the client from `@opencode/client` and plugin types from `@opencode/plugin`. never import `@opencode-ai/sdk` (v1, including its `/v2` export). calls use flat inputs and return endpoint results or reject; there is no V1 `.data` / `.error` wrapper. paginated results contain `data` and `cursor`.
@@ -140,16 +112,6 @@ kimaki uses bun:sqlite (sync), not libSQL. opening a file that is not a database
 
 inline straightforward Drizzle queries (`db.query.*.findFirst`, `db.insert`, `db.update`) at the call site. no repository layer of query wrappers.
 
-## publishing
-
-this workspace does not publish packages. `kimaki` on npm is upstream's; a local change ships by deploying the bot host (see the top of this file).
-
-## github issues
-
-never suggest installing kimaki from git (e.g. `npm i -g remorses/kimaki#main`). it does not work because the package needs a build step. always point users to the next npm release instead.
-
-the user-facing bug report workflow (export events, share evidence in a gist, issue vs PR) lives at https://kimaki.dev/docs/guides/report-bugs, in the upstream repo. file Kimaki bugs on remorses/kimaki; this fork is for the local bot.
-
 ## errors as values
 
 functions return errors instead of throwing. every error class is an Effect `Data.TaggedError` (`kimaki/src/errors.ts` holds the shared ones), so `_tag` discriminates the union and Effect can recover with `Effect.catchTag`. messages are built in each constructor, and `attempt(run, handle)` turns a thrown error into a tagged one; a thrown non-Error is rethrown.
@@ -179,24 +141,13 @@ jq -r .event.type ./tmp/events.jsonl | sort | uniq -c
 
 thread events (root, subagents and `kimaki.*` internal events) are recorded in `<dataDir>/session-events/<threadId>.jsonl` (`session-events.ts`). streaming deltas and `session.step.streamed` are skipped, long strings are truncated, and files restart at 20 MiB. the file can be replayed with `test/replay.ts` to reproduce a bug; a recording without `session.created` needs an explicit initial `view`. `kimaki session read <id>` prints the messages as markdown.
 
-## product analytics (Strada)
-
-anonymous install-level product events go to Strada via `kimaki/src/analytics.ts` (`bot_started`, `project_registered`, `session_created`, `turn_started`, `turn_completed`, `tokens_used`). no Discord IDs, paths, prompts, or secrets. metrics are **active installs**, not people. `tokens_used` sums `session.step.ended` and `session.step.failed` usage per execution (root and subagents), then emits on success, failure or interruption. executions not observed from their start are skipped after a bot restart.
-
-- prod project slug: `kimaki`
-- disable: `kimaki --no-analytics` or `KIMAKI_STRADA_ENABLED=0`. off under tests.
-- query with `strada` CLI; login as the org owner (t.de Google account)
-
-full event schema, DAU/WAU/MAU, funnels, retention, completion rate, and copy-paste SQL: `docs/strada-product-analytics.md`.
-
 ## opencode plugin
 
 `kimaki/src/plugin/` runs inside the **OpenCode server process**, not the bot. on start the bot writes a shim per plugin into `<opencode config dir>/plugins/<name>/index.js` that re-exports `dist/plugin/` of the running Kimaki install (`installPluginShim` in `opencode-server.ts`), also when the bot runs from `src`: OpenCode watches plugin files and reloads on change, so a `src` target would load half-edited code on every save. run `bun run build` to ship plugin changes. no opencode.json edit. writing the shim only when its content changes matters: any change in that folder reloads every location and cancels pending forms.
 
 - `plugin/index.ts` (`kimaki`): git branch reminder, `<discord-user>` turn context rendered from `metadata.discord` into the model request only (stored prompt text stays clean for the TUI), extra `description` / `hasSideEffect` tool inputs, shell env, file edit log.
-- `plugin/anthropic/index.ts` (`kimaki-anthropic`): Claude Pro/Max OAuth for every session, TUI included.
 
-each plugin is a directory loaded through its `index` module. OpenCode only accepts directories in opencode.json `plugins`, so plain OpenCode users can list `<kimaki>/src/plugin/anthropic` there. OpenCode keeps one plugin per ID and reports a second one as failed (`Duplicate plugin ID`), so `installPluginShim` removes a shim when the global `opencode.json`/`opencode.jsonc` already lists the same plugin directory of any Kimaki install. the `anthropic` directory must import nothing from Kimaki outside itself except npm packages.
+each plugin is a directory loaded through its `index` module. OpenCode keeps one plugin per ID and reports a second one as failed (`Duplicate plugin ID`), so `installPluginShim` removes a shim when the global `opencode.json`/`opencode.jsonc` already lists the same plugin directory of any Kimaki install.
 
 each module has one `export default Plugin.define(...)`. keep utilities in separate files and import them.
 
@@ -300,7 +251,6 @@ use this to write tests that find messages matching specific patterns. formattin
 - `!cmd` in a thread runs a user shell: a start line, then one output message from `session.shell.*` events.
 - queued messages (`/queue`, or a message sent while busy with queue delivery) get `-# Queued at position N...`. when delivered, the bot posts `» **Tommy:** content` and edits the ack to `Queued message sent`. remove one by deleting the Discord message or with `/clear-queue`.
 - root user prompts without `metadata.discord` (sent from the TUI, phone or another client) show as `» **user:** text` (`queue.ts`). every bot prompt goes through `prompt()` with that metadata; synthetic inbox items and subagent prompts are never echoed. `session.command` takes no metadata, so `command()` dispatches `kimaki.command` first to hide the expanded template.
-- voice messages are transcribed (`voice.ts`) and the transcription decides the route (steer, queue, new session, agent).
 
 # session runtime
 
@@ -374,7 +324,7 @@ always add `expect(await discord.thread(id).text()).toMatchInlineSnapshot()` (or
 - `startTwin()`, `seedProjectChannel()`, `startTestBot()`: digital Discord and the bot, in-process.
 - `warmUp({ server })` at the end of `beforeAll`: one throwaway turn so the first test does not pay the OpenCode cold start.
 - `afterAll`: `bot.stop()`, `twin.stop()`, `server.stop()`, then delete the temp data dir.
-- `manualClock()` and `schedulingKit()` for sleeps and routines; `startFakeOpenAI()` / `startFakeGemini()` for voice.
+- `manualClock()` and `schedulingKit()` for sleeps and routines.
 
 ## e2e testing learnings
 
@@ -402,11 +352,3 @@ realistic assistant output shapes:
 
 represent opencode tool usage in matchers as `tool-call` parts with `toolName` and JSON `input` (for example `read`, `edit`, `write`, `shell`, `subagent`). do not fake them as plain text when the test is about tool execution or routing.
 
-# not ported from V1 yet
-
-these V1 features have no kimaki equivalent. do not document them as existing:
-
-- self-upgrade (`kimaki upgrade`, `/upgrade-and-restart`)
-- `sync-skills` (V1 copied user skills; the `kimaki-*` skills in `skills/` are new, see `builtin-skills.ts`)
-- image optimizer plugin (shrink images over 2000px / 4 MB before the model sees them)
-- kitty graphics plugin (images printed by shell tools sent to Discord)

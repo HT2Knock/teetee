@@ -54,6 +54,14 @@ import {
 } from './serializers.js'
 import { generateSnowflake } from './snowflake.js'
 
+// Discord's JSON error body, as discord.js expects it.
+function discordError({ code, message, status }: { code: number; message: string; status: number }): never {
+  throw new Response(JSON.stringify({ code, message, errors: {} }), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
 // discord.js (via undici) URL-encodes @original to %40original.
 // Decode so route handlers can check for the canonical form.
 function resolveWebhookMessageId(raw: string): string {
@@ -268,14 +276,7 @@ export function createServer({
           where: { id: params.user_id },
         })
         if (!user) {
-          throw new Response(
-            JSON.stringify({
-              code: 10013,
-              message: 'Unknown User',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10013, message: 'Unknown User', status: 404 })
         }
         return userToAPI(user)
       },
@@ -424,14 +425,7 @@ export function createServer({
           },
         })
         if (!cmd) {
-          throw new Response(
-            JSON.stringify({
-              code: 10063,
-              message: 'Unknown application command',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10063, message: 'Unknown application command', status: 404 })
         }
         return {
           id: cmd.id,
@@ -460,14 +454,7 @@ export function createServer({
           where: { id: params.channel_id },
         })
         if (!channel) {
-          throw new Response(
-            JSON.stringify({
-              code: 10003,
-              message: 'Unknown Channel',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10003, message: 'Unknown Channel', status: 404 })
         }
         const messageId = generateSnowflake()
         await prisma.message.create({
@@ -519,14 +506,7 @@ export function createServer({
           where: { id: params.channel_id },
         })
         if (!channel) {
-          throw new Response(
-            JSON.stringify({
-              code: 10003,
-              message: 'Unknown Channel',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10003, message: 'Unknown Channel', status: 404 })
         }
         let dbMessage = await prisma.message.findUnique({
           where: { id: params.message_id },
@@ -547,14 +527,7 @@ export function createServer({
           }
         }
         if (!dbMessage) {
-          throw new Response(
-            JSON.stringify({
-              code: 10008,
-              message: 'Unknown Message',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10008, message: 'Unknown Message', status: 404 })
         }
         const author = await prisma.user.findUniqueOrThrow({
           where: { id: dbMessage.authorId },
@@ -580,27 +553,13 @@ export function createServer({
           where: { id: params.channel_id },
         })
         if (!channel) {
-          throw new Response(
-            JSON.stringify({
-              code: 10003,
-              message: 'Unknown Channel',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10003, message: 'Unknown Channel', status: 404 })
         }
         const existing = await prisma.message.findUnique({
           where: { id: params.message_id },
         })
         if (!existing) {
-          throw new Response(
-            JSON.stringify({
-              code: 10008,
-              message: 'Unknown Message',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10008, message: 'Unknown Message', status: 404 })
         }
         await prisma.message.update({
           where: { id: params.message_id },
@@ -643,27 +602,13 @@ export function createServer({
           where: { id: params.channel_id },
         })
         if (!channel) {
-          throw new Response(
-            JSON.stringify({
-              code: 10003,
-              message: 'Unknown Channel',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10003, message: 'Unknown Channel', status: 404 })
         }
         const existing = await prisma.message.findUnique({
           where: { id: params.message_id },
         })
         if (!existing) {
-          throw new Response(
-            JSON.stringify({
-              code: 10008,
-              message: 'Unknown Message',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10008, message: 'Unknown Message', status: 404 })
         }
         await prisma.message.delete({ where: { id: params.message_id } })
         gateway.broadcast(GatewayDispatchEvents.MessageDelete, {
@@ -682,14 +627,7 @@ export function createServer({
           where: { id: params.channel_id },
         })
         if (!channel) {
-          throw new Response(
-            JSON.stringify({
-              code: 10003,
-              message: 'Unknown Channel',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10003, message: 'Unknown Channel', status: 404 })
         }
         const url = new URL(request.url, 'http://localhost')
         const before = url.searchParams.get('before')
@@ -761,27 +699,13 @@ export function createServer({
           where: { id: params.channel_id },
         })
         if (!channel) {
-          throw new Response(
-            JSON.stringify({
-              code: 10003,
-              message: 'Unknown Channel',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10003, message: 'Unknown Channel', status: 404 })
         }
         const message = await prisma.message.findUnique({
           where: { id: params.message_id },
         })
         if (!message) {
-          throw new Response(
-            JSON.stringify({
-              code: 10008,
-              message: 'Unknown Message',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10008, message: 'Unknown Message', status: 404 })
         }
         await prisma.reaction.upsert({
           where: {
@@ -844,14 +768,7 @@ export function createServer({
           where: { id: params.channel_id },
         })
         if (!channel) {
-          throw new Response(
-            JSON.stringify({
-              code: 10003,
-              message: 'Unknown Channel',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10003, message: 'Unknown Channel', status: 404 })
         }
         return channelToAPI(channel)
       },
@@ -866,14 +783,7 @@ export function createServer({
           where: { id: params.channel_id },
         })
         if (!channel) {
-          throw new Response(
-            JSON.stringify({
-              code: 10003,
-              message: 'Unknown Channel',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10003, message: 'Unknown Channel', status: 404 })
         }
         const isThread = isThreadChannelType(channel.type)
         await prisma.channel.update({
@@ -909,14 +819,7 @@ export function createServer({
           where: { id: params.channel_id },
         })
         if (!channel) {
-          throw new Response(
-            JSON.stringify({
-              code: 10003,
-              message: 'Unknown Channel',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10003, message: 'Unknown Channel', status: 404 })
         }
         const isThread = isThreadChannelType(channel.type)
         const apiChannel = channelToAPI(channel)
@@ -947,14 +850,7 @@ export function createServer({
           where: { id: params.channel_id },
         })
         if (!channel) {
-          throw new Response(
-            JSON.stringify({
-              code: 10003,
-              message: 'Unknown Channel',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10003, message: 'Unknown Channel', status: 404 })
         }
         const threadId = generateSnowflake()
         const threadType = body.type ?? ChannelType.PublicThread
@@ -997,27 +893,13 @@ export function createServer({
           where: { id: params.channel_id },
         })
         if (!channel) {
-          throw new Response(
-            JSON.stringify({
-              code: 10003,
-              message: 'Unknown Channel',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10003, message: 'Unknown Channel', status: 404 })
         }
         const message = await prisma.message.findUnique({
           where: { id: params.message_id },
         })
         if (!message) {
-          throw new Response(
-            JSON.stringify({
-              code: 10008,
-              message: 'Unknown Message',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10008, message: 'Unknown Message', status: 404 })
         }
         // Real Discord returns 400 with code 160004 if a thread already
         // exists for this message. Reproduce this so tests catch race
@@ -1027,14 +909,7 @@ export function createServer({
           where: { starterMessageId: params.message_id },
         })
         if (existingThread) {
-          throw new Response(
-            JSON.stringify({
-              code: 160004,
-              message: 'A thread has already been created for this message',
-              errors: {},
-            }),
-            { status: 400, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 160004, message: 'A thread has already been created for this message', status: 400 })
         }
         const threadId = generateSnowflake()
         await prisma.channel.create({
@@ -1072,14 +947,7 @@ export function createServer({
           where: { id: params.channel_id },
         })
         if (!channel) {
-          throw new Response(
-            JSON.stringify({
-              code: 10003,
-              message: 'Unknown Channel',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10003, message: 'Unknown Channel', status: 404 })
         }
         const existing = await prisma.threadMember.findUnique({
           where: {
@@ -1124,14 +992,7 @@ export function createServer({
           where: { id: params.channel_id },
         })
         if (!channel) {
-          throw new Response(
-            JSON.stringify({
-              code: 10003,
-              message: 'Unknown Channel',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10003, message: 'Unknown Channel', status: 404 })
         }
         const members = await prisma.threadMember.findMany({
           where: { channelId: params.channel_id },
@@ -1154,14 +1015,7 @@ export function createServer({
           include: { roles: true },
         })
         if (!guild) {
-          throw new Response(
-            JSON.stringify({
-              code: 10004,
-              message: 'Unknown Guild',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10004, message: 'Unknown Guild', status: 404 })
         }
         return guildToAPI(guild)
       },
@@ -1174,14 +1028,7 @@ export function createServer({
           where: { id: params.guild_id },
         })
         if (!guild) {
-          throw new Response(
-            JSON.stringify({
-              code: 10004,
-              message: 'Unknown Guild',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10004, message: 'Unknown Guild', status: 404 })
         }
         const channels = await prisma.channel.findMany({
           where: {
@@ -1202,14 +1049,7 @@ export function createServer({
           where: { id: params.guild_id },
         })
         if (!guild) {
-          throw new Response(
-            JSON.stringify({
-              code: 10004,
-              message: 'Unknown Guild',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10004, message: 'Unknown Guild', status: 404 })
         }
         const channelId = generateSnowflake()
         await prisma.channel.create({
@@ -1240,14 +1080,7 @@ export function createServer({
           where: { id: params.guild_id },
         })
         if (!guild) {
-          throw new Response(
-            JSON.stringify({
-              code: 10004,
-              message: 'Unknown Guild',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10004, message: 'Unknown Guild', status: 404 })
         }
         const roles = await prisma.role.findMany({
           where: { guildId: params.guild_id },
@@ -1265,14 +1098,7 @@ export function createServer({
           where: { id: params.guild_id },
         })
         if (!guild) {
-          throw new Response(
-            JSON.stringify({
-              code: 10004,
-              message: 'Unknown Guild',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10004, message: 'Unknown Guild', status: 404 })
         }
         const roleCount = await prisma.role.count({
           where: { guildId: params.guild_id },
@@ -1311,14 +1137,7 @@ export function createServer({
           },
         })
         if (!role) {
-          throw new Response(
-            JSON.stringify({
-              code: 10011,
-              message: 'Unknown Role',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10011, message: 'Unknown Role', status: 404 })
         }
         await prisma.role.update({
           where: { id: params.role_id },
@@ -1351,14 +1170,7 @@ export function createServer({
           where: { id: params.guild_id },
         })
         if (!guild) {
-          throw new Response(
-            JSON.stringify({
-              code: 10004,
-              message: 'Unknown Guild',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10004, message: 'Unknown Guild', status: 404 })
         }
         const url = new URL(request.url, 'http://localhost')
         const query = url.searchParams.get('query') ?? ''
@@ -1383,14 +1195,7 @@ export function createServer({
           where: { id: params.guild_id },
         })
         if (!guild) {
-          throw new Response(
-            JSON.stringify({
-              code: 10004,
-              message: 'Unknown Guild',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10004, message: 'Unknown Guild', status: 404 })
         }
         const url = new URL(request.url, 'http://localhost')
         const after = url.searchParams.get('after')
@@ -1422,14 +1227,7 @@ export function createServer({
           include: { user: true },
         })
         if (!member) {
-          throw new Response(
-            JSON.stringify({
-              code: 10007,
-              message: 'Unknown Member',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10007, message: 'Unknown Member', status: 404 })
         }
         return memberToAPI(member)
       },
@@ -1442,14 +1240,7 @@ export function createServer({
           where: { id: params.guild_id },
         })
         if (!guild) {
-          throw new Response(
-            JSON.stringify({
-              code: 10004,
-              message: 'Unknown Guild',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10004, message: 'Unknown Guild', status: 404 })
         }
         const threads = await prisma.channel.findMany({
           where: {
@@ -1488,24 +1279,10 @@ export function createServer({
           where: { interactionId: params.interaction_id },
         })
         if (!existing) {
-          throw new Response(
-            JSON.stringify({
-              code: 10062,
-              message: 'Unknown Interaction',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10062, message: 'Unknown Interaction', status: 404 })
         }
         if (existing.acknowledged) {
-          throw new Response(
-            JSON.stringify({
-              code: 40060,
-              message: 'Interaction has already been acknowledged',
-              errors: {},
-            }),
-            { status: 400, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 40060, message: 'Interaction has already been acknowledged', status: 400 })
         }
 
         const callbackType = body.type
@@ -1559,27 +1336,13 @@ export function createServer({
         } else if (callbackType === InteractionResponseType.UpdateMessage) {
           messageId = existing.messageId
           if (!messageId) {
-            throw new Response(
-              JSON.stringify({
-                code: 40060,
-                message: 'Interaction is not attached to a message',
-                errors: {},
-              }),
-              { status: 400, headers: { 'Content-Type': 'application/json' } },
-            )
+            discordError({ code: 40060, message: 'Interaction is not attached to a message', status: 400 })
           }
           const origMessage = await prisma.message.findUnique({
             where: { id: messageId },
           })
           if (!origMessage) {
-            throw new Response(
-              JSON.stringify({
-                code: 10008,
-                message: 'Unknown Message',
-                errors: {},
-              }),
-              { status: 404, headers: { 'Content-Type': 'application/json' } },
-            )
+            discordError({ code: 10008, message: 'Unknown Message', status: 404 })
           }
           await prisma.message.update({
             where: { id: messageId },
@@ -1647,14 +1410,7 @@ export function createServer({
           where: { interactionToken: params.webhook_token },
         })
         if (!interaction) {
-          throw new Response(
-            JSON.stringify({
-              code: 10062,
-              message: 'Unknown Interaction',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10062, message: 'Unknown Interaction', status: 404 })
         }
 
         const messageId = generateSnowflake()
@@ -1734,14 +1490,7 @@ export function createServer({
           where: { id: messageId },
         })
         if (!dbMessage) {
-          throw new Response(
-            JSON.stringify({
-              code: 10008,
-              message: 'Unknown Message',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10008, message: 'Unknown Message', status: 404 })
         }
         const author = await prisma.user.findUniqueOrThrow({
           where: { id: dbMessage.authorId },
@@ -1830,14 +1579,7 @@ export function createServer({
           where: { id: messageId },
         })
         if (!existing) {
-          throw new Response(
-            JSON.stringify({
-              code: 10008,
-              message: 'Unknown Message',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10008, message: 'Unknown Message', status: 404 })
         }
 
         // Skip the DB update if we just created the message (deferred case)
@@ -1912,14 +1654,7 @@ export function createServer({
           where: { id: messageId },
         })
         if (!dbMessage) {
-          throw new Response(
-            JSON.stringify({
-              code: 10008,
-              message: 'Unknown Message',
-              errors: {},
-            }),
-            { status: 404, headers: { 'Content-Type': 'application/json' } },
-          )
+          discordError({ code: 10008, message: 'Unknown Message', status: 404 })
         }
         const channel = await prisma.channel.findUnique({
           where: { id: dbMessage.channelId },

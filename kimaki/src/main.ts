@@ -83,11 +83,7 @@ export async function startBot(options: StartBotOptions): Promise<Error | BotHan
   const db = opened.db
 
   const discord = new Client({
-    intents: [
-      GatewayIntentBits.Guilds,
-      GatewayIntentBits.GuildMessages,
-      GatewayIntentBits.MessageContent,
-    ],
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
     partials: [Partials.Channel, Partials.Message, Partials.User, Partials.ThreadMember],
     ...(options.discordRestUrl && { rest: { api: options.discordRestUrl, version: '10' } }),
   })

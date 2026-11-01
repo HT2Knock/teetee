@@ -444,7 +444,7 @@ export function createLoginRoutes(): InteractionRoutes {
   return {
     admin: true,
     commands: {
-      'login': {
+      login: {
         definition: new SlashCommandBuilder().setName('login').setDescription('Connect an OpenCode provider'),
         run: loginCommand,
       },

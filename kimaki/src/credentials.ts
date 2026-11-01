@@ -54,7 +54,11 @@ export async function readSavedCredentials({ db }: { db: KimakiDb }): Promise<Db
     )
     .catch((e) => new DbError({ operation: 'read bot_tokens', cause: e }))
   if (rows instanceof Error) return rows
-  return parseRows<BotTokenRow>('bot_tokens', rows).map(credentialsFromRow).find((row) => row !== null) ?? null
+  return (
+    parseRows<BotTokenRow>('bot_tokens', rows)
+      .map(credentialsFromRow)
+      .find((row) => row !== null) ?? null
+  )
 }
 
 export async function saveCredentials({

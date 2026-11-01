@@ -112,12 +112,7 @@ export function registerStartCommand(cli: Goke) {
       const [
         { startBot },
         { ensureOpencode, kimakiShellCommand, runOnboarding, startCaffeinate },
-        {
-          emitEvent,
-          installUrlFor,
-          readSavedCredentials,
-          resolveCredentials,
-        },
+        { emitEvent, installUrlFor, readSavedCredentials, resolveCredentials },
         { openDb },
         { opencodeConfigDir },
         { defaultMachineName },

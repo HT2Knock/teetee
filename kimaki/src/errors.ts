@@ -7,6 +7,15 @@
 
 import { Data } from 'effect'
 
+// Shared shape of errors that name the operation that failed.
+function operationError<Tag extends string>(tag: Tag, label: string) {
+  return class extends Data.TaggedError(tag)<{ operation: string; message: string; cause?: unknown }> {
+    constructor({ operation, cause }: { operation: string; cause?: unknown }) {
+      super({ operation, cause, message: `${label} ${operation} failed` })
+    }
+  }
+}
+
 // Runs `run` and turns a thrown error into `handle(cause)`; a thrown value that
 // is not an Error is rethrown, because it is a bug, not a failure to report.
 export function attempt<T>(run: () => T): T | Error
@@ -20,15 +29,10 @@ export function attempt<T, E>(run: () => T, handle?: (cause: Error) => E): T | E
   }
 }
 
-export class OpenCodeError extends Data.TaggedError('OpenCodeError')<{
-  operation: string
-  message: string
-  cause?: unknown
-}> {
-  constructor({ operation, cause }: { operation: string; cause?: unknown }) {
-    super({ operation, cause, message: `OpenCode ${operation} failed` })
-  }
-}
+export class OpenCodeError extends operationError('OpenCodeError', 'OpenCode') {}
+export class DiscordError extends operationError('DiscordError', 'Discord') {}
+export class DbError extends operationError('DbError', 'Database') {}
+export class FilesystemError extends operationError('FilesystemError', 'Filesystem') {}
 
 export class OpenCodeUnavailableError extends Data.TaggedError('OpenCodeUnavailableError')<{
   reason: string
@@ -108,26 +112,6 @@ export class BotNotRunningError extends Data.TaggedError('BotNotRunningError')<{
   }
 }
 
-export class DiscordError extends Data.TaggedError('DiscordError')<{
-  operation: string
-  message: string
-  cause?: unknown
-}> {
-  constructor({ operation, cause }: { operation: string; cause?: unknown }) {
-    super({ operation, cause, message: `Discord ${operation} failed` })
-  }
-}
-
-export class DbError extends Data.TaggedError('DbError')<{
-  operation: string
-  message: string
-  cause?: unknown
-}> {
-  constructor({ operation, cause }: { operation: string; cause?: unknown }) {
-    super({ operation, cause, message: `Database ${operation} failed` })
-  }
-}
-
 export class DbNotMigratedError extends Data.TaggedError('DbNotMigratedError')<{
   missing: string
   message: string
@@ -160,15 +144,5 @@ export class LockPortError extends Data.TaggedError('LockPortError')<{
 }> {
   constructor({ port, reason, cause }: { port: number; reason: string; cause?: unknown }) {
     super({ port, reason, cause, message: `Could not take lock port ${port}: ${reason}` })
-  }
-}
-
-export class FilesystemError extends Data.TaggedError('FilesystemError')<{
-  operation: string
-  message: string
-  cause?: unknown
-}> {
-  constructor({ operation, cause }: { operation: string; cause?: unknown }) {
-    super({ operation, cause, message: `Filesystem ${operation} failed` })
   }
 }
