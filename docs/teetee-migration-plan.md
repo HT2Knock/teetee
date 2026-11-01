@@ -271,7 +271,7 @@ Exit: `bun run verify` passes locally and CI is green on `main`.
 
 ### Phase 1: delete dead surface
 
-Status: done. Commits on `main` from `5a5e1c1` onward.
+Status: done. See the Phase 1 commits on `main`.
 
 - Removed voice, Strada, the hosted gateway, the Anthropic plugin, the
   changesets, the upstream changelog, and the stale docs.
