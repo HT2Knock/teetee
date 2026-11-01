@@ -11,7 +11,6 @@ import type { JsonValue, SessionMetadata } from '@opencode/client'
 import { ChannelType, type Client, type TextChannel, type ThreadChannel } from 'discord.js'
 
 import type { AgentUi } from './agent-ui.ts'
-import type { Analytics } from './analytics.ts'
 import type { KimakiDb } from './db.ts'
 import type { EffectsRunner } from './effects.ts'
 import { ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
@@ -46,7 +45,6 @@ export type Bot = {
   opencode: OpencodeConnection
   eventLoop: EventLoop
   effects: EffectsRunner
-  analytics: Analytics
   // The scheduler's only source of "now"; tests pass a manual clock.
   clock: Clock
   dataDir: string

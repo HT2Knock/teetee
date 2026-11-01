@@ -103,7 +103,6 @@ export function registerStartCommand(cli: Goke) {
       '--disable-skills <list>',
       `Built-in Kimaki skills to turn off: "all" or a comma separated list (${BUILTIN_SKILL_IDS.join(',')})`,
     )
-    .option('--no-analytics', 'Disable anonymous usage analytics (same as KIMAKI_STRADA_ENABLED=0)')
     .option('--if-not-running', 'Start only if no bot runs; never stop the running one (used by autostart)')
     .action(async (options) => {
       // The IPC check ignores a KIMAKI_SUPERVISED leaked into a shell by an older bot.
@@ -125,7 +124,6 @@ export function registerStartCommand(cli: Goke) {
           restApiUrl,
         },
         { openDb },
-        { createAnalytics },
         { opencodeConfigDir },
         { defaultMachineName },
       ] = await Promise.all([
@@ -133,7 +131,6 @@ export function registerStartCommand(cli: Goke) {
         import('../onboarding.ts'),
         import('../credentials.ts'),
         import('../db.ts'),
-        import('../analytics.ts'),
         import('../opencode-server.ts'),
         import('../project.ts'),
       ])
@@ -230,7 +227,6 @@ export function registerStartCommand(cli: Goke) {
         opencodeServiceFile: process.env['KIMAKI_OPENCODE_SERVICE_FILE'],
         ensureOpencode: true,
         opencodeConfigDir: opencodeConfigDir(),
-        analytics: createAnalytics({ dataDir, botMode: credentials.mode, enabled: !options.noAnalytics }),
         autoWorktrees: Boolean(options.worktrees),
         allowAllUsers: Boolean(options.allowAllUsers),
         disabledSkills,
@@ -279,7 +275,6 @@ export function registerStartCommand(cli: Goke) {
             ...(options.worktrees ? ['--worktrees'] : []),
             ...(options.allowAllUsers ? ['--allow-all-users'] : []),
             ...(options.disableSkills ? ['--disable-skills', options.disableSkills] : []),
-            ...(options.noAnalytics ? ['--no-analytics'] : []),
             ...(options.machineName ? ['--machine-name', options.machineName] : []),
           ],
         })

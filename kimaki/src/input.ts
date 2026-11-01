@@ -286,7 +286,6 @@ async function createBoundSession(
     permissions,
     parentSessionId,
     task,
-    checkout,
   }: {
     thread: ThreadChannel
     channel: TextChannel
@@ -321,7 +320,6 @@ async function createBoundSession(
     }),
   )
   if (session instanceof Error) return session
-  bot.analytics.track('session_created', { has_worktree: Boolean(checkout), source: 'discord' })
   const instructions = await putInstructions(bot, {
     sessionId: session.id,
     thread,

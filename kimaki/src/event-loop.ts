@@ -16,7 +16,6 @@
 
 import { DiscordAPIError, RESTJSONErrorCodes, type Client } from 'discord.js'
 
-import type { Analytics } from './analytics.ts'
 import { verbosityFromV1, type KimakiDb } from './db.ts'
 import type { EffectsRunner } from './effects.ts'
 import { DbError, DiscordError, OpenCodeError } from './errors.ts'
@@ -78,7 +77,6 @@ export function createEventLoop({
   discord,
   effects,
   recorder,
-  analytics,
   onTranscriptDue,
 }: {
   store: BotStore
@@ -86,7 +84,6 @@ export function createEventLoop({
   discord: Client
   effects: EffectsRunner
   recorder: EventRecorder
-  analytics: Analytics
   // A root session stopped running (also after an interrupt): its transcript file is stale.
   onTranscriptDue: (sessionId: string) => void
 }) {
@@ -174,7 +171,6 @@ export function createEventLoop({
   function deliver(threadId: string, event: ThreadEvent) {
     logRun(threadId, event)
     recorder.record(threadId, event)
-    if (!isKimakiEvent(event)) analytics.observe(event, store.getState().roots[threadId] === eventSessionId(event))
     if (
       (event.type === 'session.execution.succeeded' ||
         event.type === 'session.execution.failed' ||

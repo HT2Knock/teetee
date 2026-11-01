@@ -4,28 +4,24 @@
 import path from 'node:path'
 import type { Goke } from 'goke'
 
-import { createAnalytics } from '../analytics.ts'
 import type { KimakiDb } from '../db.ts'
-import { callBot } from '../lock-server.ts'
-import { action, DATA_DIR_HELP, dataDirOrDefault, fail, openCliDb, printJson } from './shared.ts'
+import { action, DATA_DIR_HELP, fail, openCliDb, printJson } from './shared.ts'
 
 const WORKTREE_TIMEOUT_MS = 25 * 60_000
 
 // SQLite and Discord helpers load lazily: see the note in shared.ts.
 async function addProject({
   db,
-  dataDir,
   guild,
   directory,
   machine,
 }: {
   db: KimakiDb
-  dataDir: string
   guild: string | undefined
   directory: string
   machine: string
 }) {
-  const [{ readSavedCredentials, restApiUrl }, { addProjectChannel, countUserProjects, createApi, resolveGuildId }] =
+  const [{ readSavedCredentials, restApiUrl }, { addProjectChannel, createApi, resolveGuildId }] =
     await Promise.all([import('../credentials.ts'), import('../project.ts')])
   const credentials = await readSavedCredentials({ db })
   if (credentials instanceof Error) return credentials
@@ -34,18 +30,6 @@ async function addProject({
   if (guildId instanceof Error) return guildId
   const api = createApi({ token: credentials.token, restUrl: restApiUrl(credentials) })
   const added = await addProjectChannel({ api, db, guildId, directory, machine })
-  if (added instanceof Error || !added.created) return added
-  // Agents run this while the bot runs: follow the bot's --no-analytics.
-  const status = await callBot({ dataDir, route: 'status', input: {} })
-  const botAnalytics = status instanceof Error ? null : status.data.analytics
-  const analytics = createAnalytics({ dataDir, botMode: credentials.mode, enabled: botAnalytics !== false })
-  const projects = await countUserProjects({ db, dataDir })
-  analytics.track('project_registered', {
-    project_kind: 'user',
-    source: 'cli',
-    ...(!(projects instanceof Error) && { user_project_count: projects }),
-  })
-  await analytics.flush()
   return added
 }
 
@@ -77,7 +61,6 @@ export function registerProjectCommands(cli: Goke) {
       const opened = await openCliDb(options.dataDir)
       const result = await addProject({
         db: opened.db,
-        dataDir: dataDirOrDefault(options.dataDir),
         guild: options.guild,
         directory: path.resolve(directory ?? process.cwd()),
         machine: options.machineName ?? defaultMachineName(),

@@ -184,12 +184,3 @@ export async function listProjects({ db }: { db: KimakiDb }) {
   return parseRows<ChannelDirectoryRow>('channel_directories', rows)
 }
 
-// Distinct project directories with a text channel, without the default
-// kimaki channel (analytics user_project_count).
-export async function countUserProjects({ db, dataDir }: { db: KimakiDb; dataDir: string }): Promise<DbError | number> {
-  const rows = await listProjects({ db })
-  if (rows instanceof Error) return rows
-  const defaultDirectory = path.resolve(defaultProjectDirectory({ dataDir }))
-  return new Set(rows.map((row) => path.resolve(row.directory)).filter((directory) => directory !== defaultDirectory))
-    .size
-}

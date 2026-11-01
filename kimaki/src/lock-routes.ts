@@ -380,7 +380,6 @@ const lockRoutes = {
         uptimeSec: Math.round(process.uptime()),
         dataDir: bot.dataDir,
         mode: bot.token.includes(':') ? ('gateway' as const) : ('self_hosted' as const),
-        analytics: bot.analytics.enabled,
         opencode: { connected: bot.opencode.connected, url: endpoint?.url ?? null, version: endpoint?.version ?? null },
         guilds: [...bot.discord.guilds.cache.values()].map((guild) => ({ id: guild.id, name: guild.name })),
       }
