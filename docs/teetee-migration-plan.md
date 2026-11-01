@@ -156,11 +156,17 @@ unchanged, including columns of removed features.
 | Tool | Role | Gate |
 | --- | --- | --- |
 | `bun check` | type check (1.3 s today) | CI |
-| `bun build` | `dist/cli.js` and the plugin entries | CI |
+| `tsc --noCheck` | emit `dist/` for the plugin shim | build |
+| `bun scripts/bundle.ts` | `dist/cli.js` | build |
 | `oxlint` | lint | zero warnings |
 | `oxfmt` | format, width 120 | `--check` in CI |
 | `fallow` | cycles, dead code, duplication, complexity | hard fail |
 | `bun test` | unit and e2e | CI, retry 3 |
+
+The plugin entries still come from `tsc --noCheck`, not `bun build`. The plugin
+resolves `skills/` and `dist/cli.js` with `import.meta.url` plus `..`, so a
+single-file bundle in `dist/plugin/` would resolve one directory too deep.
+Bundling them is Phase 3 work, after those paths get a bundle-safe helper.
 
 Hard gates, all blocking:
 
@@ -172,16 +178,20 @@ Hard gates, all blocking:
   `node:http`.
 - CLI startup: `bun src/cli.ts --help` under 120 ms.
 
-Gate changes:
+Live after Phase 0: type check, zero-warning lint, format check, dead code, and
+architecture. Cycles, duplication, complexity, core purity, and the CLI budget
+turn on as each phase removes the debt they measure.
 
-- Remove `tsc` from `build`. Emit `dist/cli.js` with `scripts/bundle.ts` and the
-  plugin entries with `bun build`. Delete `dist/.tsbuildinfo`.
-- Add `.oxlintrc.json`: `correctness`, `suspicious`, and `perf` categories,
-  `import`, `promise`, and `node` plugins, deny `no-explicit-any` and
-  `no-unused-vars`.
-- Set `printWidth: 120` in `.oxfmtrc.jsonc`. One formatting-only commit.
-- Fix `.github/workflows/ci.yml`: it still builds the deleted `errore`
-  workspace.
+Gate changes, done:
+
+- `build` runs `bun check`, then `tsc --noCheck` to emit, then the CLI bundle.
+- `.oxlintrc.json` enables the `correctness` category plus explicit rules:
+  `no-shadow`, `no-unused-vars`, `no-useless-escape`, `no-unsafe-finally`,
+  `no-unsafe-optional-chaining`, `no-explicit-any`, `no-console`, `eqeqeq`,
+  and `import/no-duplicates`. Tests relax `no-shadow` and `no-useless-escape`.
+- `.oxfmtrc.jsonc` uses `printWidth: 120` and leaves Markdown and YAML alone.
+- `.github/workflows/ci.yml` no longer builds the deleted `errore` workspace,
+  and runs `bun run verify` before the tests.
 - Phase 1 fixes the 39 duplicate groups before the duplicate gate turns on.
   Most are in `discord-digital-twin/src/server.ts`.
 
@@ -248,10 +258,13 @@ check is green.
 
 ### Phase 0: guardrails
 
+Status: done. Commits `2d264bc` and `af73fa8`, rollback tag
+`pre-migration-rollback`.
+
 - Fix CI. Add `check`, `lint`, `fmt`, `fallow`, and `verify` scripts.
 - Install `oxlint` and `oxfmt` at the workspace root.
 - Run `oxfmt` once, in a commit that changes no logic.
-- Record the fallow baseline: 39 clone groups, 2 dead files, 41 targets.
+- Record the fallow baseline: 39 clone groups, 0 dead files, 41 targets.
 - Add an annotated tag as the rollback point.
 
 Exit: `bun run verify` passes locally and CI is green on `main`.
