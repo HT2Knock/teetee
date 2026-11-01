@@ -1,7 +1,6 @@
 // The two tokens of one bot. `control` is this machine: the RPC and every MCP
 // tool. `notify` is for other machines: message, upload and button tools only.
-// No imports, so the HTTP server and the MCP handler can both read it without a
-// cycle.
+// No imports, so rpc.ts and mcp.ts can both read it without a cycle.
 
 export type BotTokens = { control: string; notify: string }
 

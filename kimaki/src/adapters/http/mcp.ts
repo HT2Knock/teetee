@@ -1,12 +1,6 @@
-// The MCP endpoint behind /mcp. One JSON-RPC method per MCP request; every tool
-// runs a lock route, so MCP and the CLI share one implementation and one input
-// schema.
-//
-// Two tokens:
-//   control  this machine (OpenCode plugin, CLI, tests): every tool
-//   notify   other machines and clients: send, upload, buttons, user_lookup
-// A notify token never starts a session, reads a transcript, or runs a shell,
-// because those actions run code on the bot host.
+// The MCP endpoint behind /mcp. Every tool runs a lock route, so MCP and the
+// CLI share one implementation and one input schema. Token scopes are in
+// tokens.ts.
 
 import type { Bot } from '../../bot.ts'
 import { runLockRoute } from './routes.ts'
@@ -19,11 +13,9 @@ type ToolResult = { data: unknown } | Error
 type McpTool = {
   name: string
   description: string
-  // control tools reject a notify token.
   scope: McpScope
   inputSchema: { type: 'object'; properties: Record<string, unknown>; required?: string[] }
-  // A per-tool scope rule beyond `scope`, for example notify cannot start a
-  // session. Returns the reason to reject, or null.
+  // Returns the reason to reject, or null.
   guard?: (args: Record<string, unknown>) => string | null
   run: (bot: Bot, args: Record<string, unknown>, signal: AbortSignal) => Promise<ToolResult>
 }

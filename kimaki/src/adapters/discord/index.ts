@@ -14,7 +14,6 @@ export * from 'discord.js'
 
 const logger = createLogger('DISCORD')
 
-// The close handshake takes ~120ms to Discord.
 const DISCORD_CLOSE_WAIT_MS = 500
 
 export type DiscordClientOptions = {
@@ -23,8 +22,7 @@ export type DiscordClientOptions = {
   restUrl?: string | null
 }
 
-// One Gateway client with the intents Kimaki needs, the REST sandbox override
-// for tests, and the lifecycle logs. Callers own login and destroy.
+// Callers own login and destroy.
 export function createDiscordClient(options: DiscordClientOptions = {}): Client {
   const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
