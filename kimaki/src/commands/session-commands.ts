@@ -19,6 +19,7 @@ import {
   type StringSelectMenuInteraction,
 } from '../adapters/discord/index.ts'
 import { oc, type Bot, type PromptFile } from '../bot.ts'
+import { runResult } from '../effect-bridge.ts'
 import { ConfigError } from '../errors.ts'
 import { selectRow, truncate } from '../format-parts.ts'
 import { startSession } from '../input.ts'
@@ -90,11 +91,13 @@ async function resumeCommand(bot: Bot, interaction: ChatInputCommandInteraction)
     )
   }
   await interaction.deferReply()
-  const result = await resume(bot, {
-    channelId: target.channelId,
-    sessionId: interaction.options.getString('session', true).trim(),
-    author: authorOf(interaction),
-  })
+  const result = await runResult(
+    resume(bot, {
+      channelId: target.channelId,
+      sessionId: interaction.options.getString('session', true).trim(),
+      author: authorOf(interaction),
+    }),
+  )
   if (result instanceof Error) return replyError(interaction, result)
   await interaction.editReply({ content: `Resumed session "${result.title}" in <#${result.threadId}>` })
 }
@@ -195,13 +198,15 @@ async function forkSelected(
     return { agent: child.agent ?? 'subagent', description: child.title ?? '' }
   })()
   if (subagent instanceof Error) return replyError(interaction, subagent)
-  const result = await fork(bot, {
-    sourceThread: target.thread,
-    sessionId: subagents ? selected : sourceSessionId,
-    ...(!subagents && { before: selected }),
-    ...(subagent && { subagent }),
-    author: authorOf(interaction),
-  })
+  const result = await runResult(
+    fork(bot, {
+      sourceThread: target.thread,
+      sessionId: subagents ? selected : sourceSessionId,
+      ...(!subagents && { before: selected }),
+      ...(subagent && { subagent }),
+      author: authorOf(interaction),
+    }),
+  )
   if (result instanceof Error) return replyError(interaction, result)
   const label = subagents ? 'Subagent session forked!' : 'Session forked!'
   await interaction.editReply({ content: `${label} Continue in <#${result.threadId}>`, components: [] })

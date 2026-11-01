@@ -613,7 +613,9 @@ export async function dispatch(
   if (marked instanceof Error) return marked
   switch (route.kind) {
     case 'btw':
-      return forkBtw(bot, { sourceThread: thread, text: route.text, author, messageId, files, agent: route.agent })
+      return runResult(
+        forkBtw(bot, { sourceThread: thread, text: route.text, author, messageId, files, agent: route.agent }),
+      )
     case 'new-session':
       // A fresh thread in the same channel, with no history.
       return startSession(bot, {

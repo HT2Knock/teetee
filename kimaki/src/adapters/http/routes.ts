@@ -173,7 +173,8 @@ const channelTarget = {
 }
 
 async function projectChannel(bot: Bot, input: { channelId?: string; directory?: string }) {
-  const channelId = input.channelId ?? (await channelForDirectory(bot, path.resolve(input.directory ?? process.cwd())))
+  const channelId =
+    input.channelId ?? (await runResult(channelForDirectory(bot, path.resolve(input.directory ?? process.cwd()))))
   if (channelId instanceof Error) return channelId
   const project = await runResult(projectOf(bot, channelId))
   if (project instanceof Error) return project
@@ -691,9 +692,9 @@ const lockRoutes = {
       { error: 'Expected action arguments' },
     ),
     run: async (bot, input) => {
-      const channelId = input.channelId ?? (await channelForSession(bot, input.sessionId))
+      const channelId = input.channelId ?? (await runResult(channelForSession(bot, input.sessionId)))
       if (channelId instanceof Error) return channelId
-      return resume(bot, { channelId, sessionId: input.sessionId, author: cliAuthor(bot) })
+      return runResult(resume(bot, { channelId, sessionId: input.sessionId, author: cliAuthor(bot) }))
     },
   }),
   'session.cwd': route({
@@ -747,13 +748,15 @@ const lockRoutes = {
       const target = await localThread(bot, input)
       if (target instanceof Error) return target
       // A child session ID forks that child, not the root.
-      return fork(bot, {
-        sourceThread: target.thread,
-        sessionId: input.sessionId ?? target.sessionId,
-        before: input.before,
-        name: input.name,
-        author: cliAuthor(bot),
-      })
+      return runResult(
+        fork(bot, {
+          sourceThread: target.thread,
+          sessionId: input.sessionId ?? target.sessionId,
+          before: input.before,
+          name: input.name,
+          author: cliAuthor(bot),
+        }),
+      )
     },
   }),
   'session.command': route({
