@@ -182,7 +182,7 @@ async function resolveAgentAndModel(
   },
 ) {
   const requestedAgent = (route.kind === 'steer' && route.agent) || defaults?.channel_agent?.agent_name
-  const selected = requestedAgent ? await agentSelection(bot, { directory, agent: requestedAgent }) : null
+  const selected = requestedAgent ? await runResult(agentSelection(bot, { directory, agent: requestedAgent })) : null
   if (selected instanceof Error) return selected
   const global = await runResult(globalModel(bot))
   if (global instanceof Error) return global
@@ -222,7 +222,7 @@ async function resolveSetup(
   const checkout = await resolveCheckout(bot, { requestedDirectory, useWorktree, slug, baseBranch, defaults })
   if (checkout instanceof Error) return checkout
   const directory = checkout.checkout?.directory ?? requestedDirectory
-  const plugin = await bot.features.waitForPlugin(directory)
+  const plugin = await runResult(bot.features.waitForPlugin(directory))
   if (plugin instanceof Error) return plugin
   const picked = await resolveAgentAndModel(bot, { directory, route, explicitModel, defaults })
   if (picked instanceof Error) return picked
@@ -321,17 +321,21 @@ async function createBoundSession(
     }),
   )
   if (session instanceof Error) return session
-  const instructions = await putInstructions(bot, {
-    sessionId: session.id,
-    thread,
-    channel,
-    directory,
-    userId: author.id,
-    parentSessionId,
-    scheduledTask: task ?? null,
-  })
+  const instructions = await runResult(
+    putInstructions(bot, {
+      sessionId: session.id,
+      thread,
+      channel,
+      directory,
+      userId: author.id,
+      parentSessionId,
+      scheduledTask: task ?? null,
+    }),
+  )
   if (instructions instanceof Error) return instructions
-  const bound = await bindThread(bot, { threadId: thread.id, sessionId: session.id, channelId, directory, isNew: true })
+  const bound = await runResult(
+    bindThread(bot, { threadId: thread.id, sessionId: session.id, channelId, directory, isNew: true }),
+  )
   if (bound instanceof Error) return bound
   return { sessionId: session.id }
 }
@@ -561,7 +565,7 @@ async function runInSession(
     case 'steer': {
       const agent = route.agent
       if (agent) {
-        const switched = await switchAgent(bot, { sessionId, directory, agent, model })
+        const switched = await runResult(switchAgent(bot, { sessionId, directory, agent, model }))
         if (switched instanceof Error) return switched
       }
       return runResult(steer(bot, { ...base, text: route.text }))
@@ -595,15 +599,17 @@ export async function dispatch(
   // New input supersedes a pending `kimaki sleep` of this session.
   const slept = await runResult(cancelSleep(bot, sessionId))
   if (slept instanceof Error) logger.warn(slept)
-  const project = await threadProject(bot, thread)
+  const project = await runResult(threadProject(bot, thread))
   if (project instanceof Error) return project
-  const marked = await ensureSessionMarker(bot, {
-    sessionId,
-    thread,
-    channelId: project.channelId,
-    directory: project.directory,
-    userId: author.id,
-  })
+  const marked = await runResult(
+    ensureSessionMarker(bot, {
+      sessionId,
+      thread,
+      channelId: project.channelId,
+      directory: project.directory,
+      userId: author.id,
+    }),
+  )
   if (marked instanceof Error) return marked
   switch (route.kind) {
     case 'btw':
@@ -787,7 +793,7 @@ async function switchSendModel(bot: Bot, sessionId: string, requested: string | 
   if (!requested) return
   const model = parseModel(requested, null)
   if (!model) return new ConfigError({ reason: 'Use --model provider/model' })
-  return switchModel(bot, { sessionId, model: { ...model, variant: null } })
+  return runResult(switchModel(bot, { sessionId, model: { ...model, variant: null } }))
 }
 
 // CRAP is estimated from exports because fallow cannot see e2e coverage.

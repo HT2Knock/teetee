@@ -701,7 +701,7 @@ const lockRoutes = {
     run: async (bot, input) => {
       const target = await localThread(bot, input)
       if (target instanceof Error) return target
-      return sessionCwd(bot, { thread: target.thread, directory: input.directory })
+      return runResult(sessionCwd(bot, { thread: target.thread, directory: input.directory }))
     },
   }),
   'session.title': route({

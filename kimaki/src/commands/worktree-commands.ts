@@ -218,10 +218,9 @@ async function cwdCommand(bot: Bot, interaction: ChatInputCommandInteraction) {
   if (!target) return
   if (!target.thread || !target.sessionId)
     return replyError(interaction, new ConfigError({ reason: 'Use /cwd in a session thread.' }))
-  const result = await sessionCwd(bot, {
-    thread: target.thread,
-    directory: interaction.options.getString('path') ?? undefined,
-  })
+  const result = await runResult(
+    sessionCwd(bot, { thread: target.thread, directory: interaction.options.getString('path') ?? undefined }),
+  )
   if (result instanceof Error) return replyError(interaction, result)
   const content = result.requestedDirectory
     ? `Directory change requested: \`${result.requestedDirectory}\``

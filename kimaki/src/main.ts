@@ -253,8 +253,7 @@ const runBot = ({ options, settings, clock, store, cleanup, onBot }: BuildInput)
         }),
     )
     if (failure) return failure
-    const refreshed = yield* Effect.promise(() => refreshCliContext(bot))
-    if (refreshed instanceof Error) return refreshed
+    yield* refreshCliContext(bot)
     const commands = registerSlashCommands(bot, createInteractionRegistry(), {
       globalDirectory: settings.opencodeConfigDir,
     })
