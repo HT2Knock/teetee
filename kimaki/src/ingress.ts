@@ -27,17 +27,15 @@ import {
 } from 'discord.js'
 import { attempt } from './errors.ts'
 
-import { projectOf, sessionDirectory, type Bot, type PromptFile } from './bot.ts'
+import { projectOf, type Bot, type PromptFile } from './bot.ts'
 import { formatError, NOTIFY_MESSAGE_FLAGS, SILENT_MESSAGE_FLAGS } from './format-parts.ts'
 import { createLogger } from './logger.ts'
 import { parseInput, sendInput } from './lock-routes.ts'
 import { dispatch, send, startSession } from './input.ts'
 import { cancelQueuedPrompt, requeueEdited } from './prompt.ts'
 import { REMOTE_PROMPT_FILE, REMOTE_RESULT_PREFIX, REMOTE_SEND_PREFIX } from './remote-send.ts'
-import { formatEcho, queuedItemFor } from './queue.ts'
-import { parseTextMessage, type Route } from './routes.ts'
-import { primaryAgents } from './session-context.ts'
-import { isVoiceAttachment, parseVoiceMessage, transcribe, voiceMediaType, type AttachmentLike } from './voice.ts'
+import { queuedItemFor } from './queue.ts'
+import { parseTextMessage } from './routes.ts'
 
 const logger = createLogger('INGRESS')
 
@@ -130,48 +128,7 @@ async function download(url: string): Promise<AttachmentError | Buffer> {
   return Buffer.from(body)
 }
 
-function attachmentLike(attachment: Attachment): AttachmentLike {
-  return {
-    contentType: attachment.contentType,
-    name: attachment.name,
-    duration: attachment.duration,
-    waveform: attachment.waveform,
-    width: attachment.width,
-    height: attachment.height,
-  }
-}
-
 // Voice: transcribe first. The transcription picks the route (spec 9.4).
-async function voiceRoute(
-  bot: Bot,
-  {
-    message,
-    attachment,
-    directory,
-    inSession,
-  }: { message: Message; attachment: Attachment; directory: string; inSession: boolean },
-): Promise<Error | Route> {
-  const audio = await download(attachment.url)
-  if (audio instanceof Error) return audio
-  const agents = await primaryAgents(bot, directory)
-  if (agents instanceof Error) return agents
-  const result = await transcribe({
-    db: bot.db,
-    token: bot.token,
-    opencodeDbFile: bot.opencodeDbFile,
-    baseUrls: bot.transcriptionBaseUrls,
-    audio,
-    mediaType: voiceMediaType(attachment),
-    directory,
-    // The ID is what switchAgent and session.create take.
-    agents: agents.map((agent) => ({ name: agent.id, description: agent.description ?? '' })),
-    inSession,
-  })
-  if (result instanceof Error) return result
-  logger.log(`voice message ${message.id} -> ${result.route}${result.agent ? ` (${result.agent})` : ''}`)
-  return parseVoiceMessage(result)
-}
-
 // A remote send envelope another machine's `kimaki send` posted in a channel this bot owns.
 async function handleRemoteEnvelope(
   bot: Bot,
@@ -229,17 +186,6 @@ async function handleMessage(bot: Bot, message: Message) {
   const project = await projectOf(bot, channelId)
   if (project instanceof Error) return logger.warn(project)
   if (!project) return
-  if (project.channel_type === 'voice') {
-    // The text chat of the voice channel talks to the running call.
-    if (message.author.bot || thread || !(await authorCanUseKimaki(bot, message))) return
-    bot.features.voiceCalls.text(bot, {
-      guildId: message.guild.id,
-      channelId,
-      author: { id: message.author.id, username: message.author.username },
-      content: message.content,
-    })
-    return
-  }
   if (message.author.bot) {
     if (message.author.id !== bot.discord.user?.id) return
     return handleRemoteEnvelope(bot, { message, channelId, threadId: thread?.id ?? null })
@@ -257,19 +203,15 @@ async function handleMessage(bot: Bot, message: Message) {
   }
 
   const attachments = [...message.attachments.values()]
-  const voice = attachments.find((attachment) => isVoiceAttachment(attachmentLike(attachment)))
   const files = await saveAttachments({
     dataDir: bot.dataDir,
     messageId: message.id,
-    attachments: attachments.filter((attachment) => attachment !== voice),
+    attachments,
   })
   if (files instanceof Error) return reportError(files)
-  const directory = sessionId && voice ? await sessionDirectory(bot, sessionId) : project.directory
-  if (directory instanceof Error) return reportError(directory)
-  const route = voice
-    ? await voiceRoute(bot, { message, attachment: voice, directory, inSession: Boolean(sessionId) })
-    : (parseTextMessage({ content: message.content }) ??
-      (files.length > 0 ? { kind: 'steer' as const, text: '' } : null))
+  const route =
+    parseTextMessage({ content: message.content }) ??
+    (files.length > 0 ? { kind: 'steer' as const, text: '' } : null)
   if (route instanceof Error) return reportError(route)
   if (!route) return
   const detail = route.kind === 'command' ? ` /${route.name}` : route.kind === 'skill' ? ` ${route.id}` : ''
@@ -278,13 +220,6 @@ async function handleMessage(bot: Bot, message: Message) {
     `${route.kind}${detail} from ${author.username} in ${thread ? `thread ${thread.id}` : `channel ${channelId}`}${attached}`,
   )
   // The transcription is not visible anywhere else.
-  if (voice && thread && route.kind !== 'shell' && route.kind !== 'command' && route.kind !== 'skill') {
-    await message.reply({
-      content: formatEcho({ username: author.username, text: route.text }),
-      allowedMentions: { parse: [] },
-      flags: SILENT_MESSAGE_FLAGS,
-    })
-  }
 
   if (!thread) {
     // A channel message starts a session. Queue and btw need one to wait
@@ -299,7 +234,6 @@ async function handleMessage(bot: Bot, message: Message) {
       route: first,
       author,
       messageId: message.id,
-      showInput: Boolean(voice),
       files,
     })
     if (started instanceof Error) return reportError(started)

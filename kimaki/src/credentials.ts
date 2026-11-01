@@ -73,7 +73,7 @@ function appIdFromToken(token: string): string | null {
   return /^\d{17,20}$/.test(decoded) ? decoded : null
 }
 
-export function credentialsFromRow(row: BotTokenRow): Credentials | null {
+function credentialsFromRow(row: BotTokenRow): Credentials | null {
   if (row.bot_mode === 'self_hosted') {
     return row.token ? { mode: 'self_hosted', appId: row.app_id, token: row.token, baseUrl: null } : null
   }

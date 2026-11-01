@@ -8,14 +8,12 @@ import { execFile, execFileSync, spawn, type ChildProcess } from 'node:child_pro
 import { promisify } from 'node:util'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
-import http from 'node:http'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
 import { setTimeout as sleep } from 'node:timers/promises'
-import { Database } from 'bun:sqlite'
 import { OpenCode, type OpenCodeClient } from '@opencode/client'
 import { Service } from '@opencode/client/service'
 import { ChannelType, ComponentType, type APIMessage } from 'discord.js'
@@ -31,7 +29,6 @@ import { startBot, type BotHandle } from '../main.ts'
 import type { LockRouteInput, LockRouteName } from '../lock-routes.ts'
 import { entryArgv } from '../runtime.ts'
 import { listTasks, type Clock } from '../scheduler.ts'
-import type { RealtimeBaseUrls } from '../voice-call.ts'
 
 const TEST_MODEL = 'deterministic-v2'
 
@@ -235,253 +232,10 @@ export type TestTwin = {
   unregisteredChannelId: string
 }
 
-// One scripted backend response: text, a tool call, or text that ends with a tool call.
-export type FakeLiveReply =
-  | { type: 'say'; text: string; then?: { name: string; args: ToolInput } }
-  | { type: 'call'; name: string; args: ToolInput }
-
-export type FakeLive = {
-  // startTestBot({ realtimeBaseUrls }).
-  baseUrls: RealtimeBaseUrls
-  // Backend answers in order, one per Responses request.
-  replies: FakeLiveReply[]
-  // What the user "said" in each utterance, in order.
-  transcripts: string[]
-  // The first speakable append of a call is Kimaki's greeting request; the fake model answers it with this.
-  greeting: string
-  // GPT-Live instructions of each call, and backend instructions of each Responses request.
-  liveInstructions: string[]
-  backendInstructions: string[]
-  // Text of each new user message the backend got, function outputs, and every context append.
-  backendInputs: string[]
-  toolOutputs: Array<{ name: string; output: string }>
-  appends: Array<{ channel: string; text: string; delegation: boolean }>
-  voicedFrames: () => number
-  openCalls: () => number
-  stop: () => Promise<void>
-}
-
-// GPT-Live and its backend, deterministic, over real WebRTC on loopback:
-// - POST /calls answers the SDP offer with a werift peer and hears the bot's Opus.
-//   Speech then 300ms of silence ends an utterance: a user turn and a delegation
-//   with the next transcript.
-// - The sideband speaks every speakable append verbatim: an assistant turn plus tone RTP.
-// - POST /responses streams the next scripted reply as Responses SSE.
-export async function startFakeLive(): Promise<FakeLive> {
-  const [{ WebSocketServer }, werift, { default: OpusScript }] = await Promise.all([
-    import('ws'),
-    import('werift'),
-    import('opusscript'),
-  ])
-  const port = await freePort()
-  const counter = { id: 0, voiced: 0 }
-  const nextId = (prefix: string) => `${prefix}_${++counter.id}`
-  // 20 ms frames of a 440 Hz tone, 48 kHz stereo, for the model's voice.
-  const encoder = new OpusScript(48_000, 2, OpusScript.Application.VOIP)
-  const tone = Array.from({ length: 15 }, (_, frame) => {
-    const pcm = Buffer.alloc(960 * 4)
-    for (let i = 0; i < 960; i++) {
-      const sample = Math.round(Math.sin((2 * Math.PI * 440 * (frame * 960 + i)) / 48_000) * 8000)
-      pcm.writeInt16LE(sample, i * 4)
-      pcm.writeInt16LE(sample, i * 4 + 2)
-    }
-    return Buffer.from(encoder.encode(pcm, 960))
-  })
-  encoder.delete()
-  type FakeCall = {
-    peer: InstanceType<typeof werift.RTCPeerConnection>
-    socket: import('ws').WebSocket | null
-    spoken: number
-    rtp: { sequence: number; timestamp: number }
-  }
-  const calls = new Map<string, FakeCall>()
-  const seenOutputs = new Set<string>()
-
-  const fake: FakeLive = {
-    baseUrls: {
-      calls: `http://127.0.0.1:${port}/backend-api/codex/realtime/calls`,
-      sideband: `ws://127.0.0.1:${port}/v1/live`,
-      responses: `http://127.0.0.1:${port}/backend-api/codex/responses`,
-    },
-    replies: [],
-    transcripts: [],
-    greeting: 'Hello.',
-    liveInstructions: [],
-    backendInstructions: [],
-    backendInputs: [],
-    toolOutputs: [],
-    appends: [],
-    voicedFrames: () => counter.voiced,
-    openCalls: () => [...calls.values()].filter((call) => call.socket !== null).length,
-    stop: async () => {
-      await Promise.all([...calls.values()].map((call) => call.peer.close()))
-      sockets.close()
-      await new Promise<void>((resolve) => server.close(() => resolve()))
-    },
-  }
-
-  const send = (call: FakeCall, event: ToolInput) => call.socket?.send(JSON.stringify(event))
-  const speak = (call: FakeCall, text: string) => {
-    send(call, { type: 'turn.done', turn: { id: nextId('turn'), role: 'assistant', transcript: text } })
-    const [transceiver] = call.peer.getTransceivers()
-    for (const opus of tone) {
-      const header = new werift.RtpHeader({
-        payloadType: 111,
-        sequenceNumber: call.rtp.sequence,
-        timestamp: call.rtp.timestamp,
-        marker: false,
-      })
-      call.rtp.sequence = (call.rtp.sequence + 1) & 0xffff
-      call.rtp.timestamp = (call.rtp.timestamp + 960) >>> 0
-      void transceiver?.sender.sendRtp(new werift.RtpPacket(header, opus))
-    }
-  }
-
-  async function createCall(body: { sdp: string; session: { instructions?: string } }) {
-    fake.liveInstructions.push(body.session.instructions ?? '')
-    const peer = new werift.RTCPeerConnection({ codecs: { audio: [werift.useOPUS({ payloadType: 111 })], video: [] } })
-    const callId = nextId('rtc')
-    const call: FakeCall = { peer, socket: null, spoken: 0, rtp: { sequence: 1, timestamp: 0 } }
-    calls.set(callId, call)
-    await peer.setRemoteDescription({ type: 'offer', sdp: body.sdp })
-    const decoder = new OpusScript(48_000, 2)
-    const speech = { active: false, silentFrames: 0 }
-    peer.getTransceivers()[0]!.receiver.track.onReceiveRtp.subscribe((rtp) => {
-      const pcm = Buffer.from(decoder.decode(rtp.payload))
-      const loud = Array.from({ length: pcm.length / 2 }, (_, i) => Math.abs(pcm.readInt16LE(i * 2))).some(
-        (sample) => sample > 500,
-      )
-      if (loud) {
-        counter.voiced++
-        speech.active = true
-        speech.silentFrames = 0
-        return
-      }
-      if (!speech.active || ++speech.silentFrames < 15) return
-      speech.active = false
-      const text = fake.transcripts.shift() ?? ''
-      send(call, { type: 'turn.done', turn: { id: nextId('turn'), role: 'user', transcript: text } })
-      send(call, {
-        type: 'delegation.created',
-        item: { id: nextId('item'), type: 'delegation', target: 'client', content: [{ type: 'input_text', text }] },
-      })
-    })
-    await peer.setLocalDescription(await peer.createAnswer())
-    return { callId, sdp: peer.localDescription!.sdp }
-  }
-
-  // Responses SSE for one request: the next scripted reply, as finished output items.
-  function respond(body: {
-    instructions?: string
-    input?: Array<{
-      type?: string
-      role?: string
-      call_id?: string
-      output?: string
-      name?: string
-      content?: Array<{ text?: string }>
-    }>
-  }) {
-    fake.backendInstructions.push(body.instructions ?? '')
-    const input = body.input ?? []
-    const names = new Map(
-      input.flatMap((item) => (item.type === 'function_call' && item.call_id ? [[item.call_id, item.name ?? '']] : [])),
-    )
-    for (const item of input) {
-      if (item.type !== 'function_call_output' || !item.call_id || seenOutputs.has(item.call_id)) continue
-      seenOutputs.add(item.call_id)
-      fake.toolOutputs.push({ name: names.get(item.call_id) ?? '', output: item.output ?? '' })
-    }
-    const last = input.at(-1)
-    if (last?.type === 'message' && last.role === 'user') fake.backendInputs.push(last.content?.[0]?.text ?? '')
-    const reply = fake.replies.shift()
-    const items: ToolInput[] = []
-    if (reply?.type === 'say')
-      items.push({ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: reply.text }] })
-    const call = reply?.type === 'call' ? reply : reply?.then
-    if (call)
-      items.push({
-        type: 'function_call',
-        call_id: nextId('call'),
-        name: call.name,
-        arguments: JSON.stringify(call.args),
-      })
-    const events = [
-      ...items.map((item) => ({ type: 'response.output_item.done', item })),
-      { type: 'response.completed', response: {} },
-    ]
-    return events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('')
-  }
-
-  const readBody = async (request: http.IncomingMessage) => {
-    const chunks: Buffer[] = []
-    for await (const chunk of request) chunks.push(chunk as Buffer)
-    return Buffer.concat(chunks).toString('utf8')
-  }
-
-  const server = http.createServer((request, response) => {
-    void (async () => {
-      const body = await readBody(request)
-      if (request.url?.startsWith('/backend-api/codex/realtime/calls')) {
-        const created = await createCall(JSON.parse(body) as Parameters<typeof createCall>[0])
-        response.writeHead(201, { location: `/v1/realtime/calls/${created.callId}`, 'content-type': 'application/sdp' })
-        response.end(created.sdp)
-        return
-      }
-      response.writeHead(200, { 'content-type': 'text/event-stream' })
-      response.end(respond(JSON.parse(body) as Parameters<typeof respond>[0]))
-    })()
-  })
-  const sockets = new WebSocketServer({ server })
-  sockets.on('connection', (socket, request) => {
-    const call = calls.get(request.url?.split('/').at(-1) ?? '')
-    if (!call) return socket.close(4004)
-    call.socket = socket
-    socket.on('close', () => {
-      call.socket = null
-      void call.peer.close()
-    })
-    socket.on('message', (raw) => {
-      const event = JSON.parse(raw.toString()) as {
-        type: string
-        channel?: string
-        delegation_item_id?: string
-        content?: Array<{ text?: string }>
-      }
-      if (event.type === 'session.close') {
-        send(call, { type: 'session.closed', reason: 'client_request' })
-        socket.close(1000)
-        return
-      }
-      if (!event.type.endsWith('context.append')) return
-      const text = event.content?.map((part) => part.text ?? '').join('') ?? ''
-      fake.appends.push({ channel: event.channel ?? 'speakable', text, delegation: Boolean(event.delegation_item_id) })
-      if (event.channel !== 'speakable') return
-      speak(call, call.spoken++ === 0 ? fake.greeting : text)
-    })
-    // Like GPT-Live: the session starts once the media connection is up.
-    const started = () => socket.send(JSON.stringify({ type: 'session.started', session: { id: 'rtc_fake' } }))
-    if (call.peer.connectionState === 'connected') return started()
-    const subscription = call.peer.connectionStateChange.subscribe((state) => {
-      if (state !== 'connected') return
-      subscription.unSubscribe()
-      started()
-    })
-  })
-  await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve))
-  return fake
-}
-
-// gateway: the twin plays gateway-proxy (REST scope rules of rest_proxy.rs)
-// and accepts a clientId:secret token. KIMAKI_TEST_GATEWAY=1 runs every e2e
-// file in gateway mode, to find REST calls the proxy would reject.
 export async function startTwin({
   gateway = process.env['KIMAKI_TEST_GATEWAY'] === '1',
-  voice = false,
 }: {
   gateway?: boolean
-  // Discord voice server (wss + UDP) for voice call tests; trusts its certificate in this process.
-  voice?: boolean
 } = {}): Promise<TestTwin> {
   const channelId = '200000000000000100'
   const unregisteredChannelId = '200000000000000101'
@@ -491,7 +245,6 @@ export async function startTwin({
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kimaki-twin-'))
   const discord = new DigitalDiscord({
     dbUrl: `file:${path.join(root, 'twin.db')}`,
-    voice,
     ...(gateway && {
       gatewayProxy: true,
       botToken: `${crypto.randomUUID()}:${crypto.randomBytes(32).toString('hex')}`,
@@ -508,7 +261,6 @@ export async function startTwin({
     ],
   })
   await discord.start()
-  if (voice) discord.trustVoiceCertificate()
   return {
     discord,
     channelId,
@@ -549,11 +301,6 @@ export async function startTestBot({
   dataDir,
   twin,
   server,
-  geminiBaseUrl,
-  openaiBaseUrl,
-  chatgptBaseUrl,
-  opencodeDbFile = server.dbFile,
-  realtimeBaseUrls,
   lockPort,
   saveTwinCredentials = true,
   analytics,
@@ -563,14 +310,6 @@ export async function startTestBot({
   dataDir: string
   twin: TestTwin
   server: OpencodeTestServer
-  // Voice transcription against startFakeGemini() / startFakeOpenAI().
-  geminiBaseUrl?: string
-  openaiBaseUrl?: string
-  // ChatGPT subscription transcription against startFakeChatGPT(), with the credential in opencodeDbFile.
-  chatgptBaseUrl?: string
-  opencodeDbFile?: string
-  // Voice calls against startFakeLive().
-  realtimeBaseUrls?: RealtimeBaseUrls
   lockPort?: number
   // false: the data dir is used as is (a V1 database the bot start must import).
   saveTwinCredentials?: boolean
@@ -607,17 +346,10 @@ export async function startTestBot({
     discordRestUrl: twin.discord.restUrl,
     opencodeServiceFile: server.serviceFile,
     opencodeConfigDir: server.configDir,
-    opencodeDbFile,
     ensureOpencode: false,
     analytics: analytics ?? disabledAnalytics,
     ...(clock && { clock }),
     ...(schedulerIntervalMs !== undefined && { schedulerIntervalMs }),
-    ...(realtimeBaseUrls && { realtimeBaseUrls }),
-    transcriptionBaseUrls: {
-      ...(geminiBaseUrl && { gemini: geminiBaseUrl }),
-      ...(openaiBaseUrl && { openai: openaiBaseUrl }),
-      ...(chatgptBaseUrl && { chatgpt: chatgptBaseUrl }),
-    },
   })
   if (bot instanceof Error) throw bot
   return bot
@@ -702,186 +434,6 @@ export function schedulingKit({
       return [...(await threadIds())].filter((id) => !before.has(id))
     },
   }
-}
-
-export type FakeTranscription = { transcription: string; route?: string; agent?: string }
-
-// A voice message whose audio bytes are the transcription the fake returns.
-export function voiceUrl(result: FakeTranscription): string {
-  return `data:audio/ogg;base64,${Buffer.from(JSON.stringify(result)).toString('base64')}`
-}
-
-// The scaffolding every fake HTTP provider below shares: read the body, listen
-// on a free loopback port, and stop on request. `onBody` writes the reply.
-async function startFakeServer({
-  onBody,
-}: {
-  onBody: (body: Buffer, request: http.IncomingMessage, response: http.ServerResponse) => void | Promise<void>
-}): Promise<{ baseUrl: string; stop: () => Promise<void> }> {
-  const server = http.createServer((request, response) => {
-    const chunks: Buffer[] = []
-    request.on('data', (chunk: Buffer) => chunks.push(chunk))
-    request.on('end', () => void onBody(Buffer.concat(chunks), request, response))
-  })
-  const port = await freePort()
-  await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve))
-  return {
-    baseUrl: `http://127.0.0.1:${port}`,
-    stop: () => new Promise((resolve) => server.close(() => resolve())),
-  }
-}
-
-export type FakeGemini = {
-  baseUrl: string
-  // Route enum offered by each transcription request (tool schema), and the audio media type.
-  requests: Array<{ routes: unknown; mimeType: string }>
-  stop: () => Promise<void>
-}
-
-// Gemini generateContent over HTTP, deterministic: the "audio" is JSON of
-// the transcription tool call to return (see voiceUrl()). Exercises the real
-// request, schema and response parsing of voice.ts.
-export async function startFakeGemini(): Promise<FakeGemini> {
-  const requests: FakeGemini['requests'] = []
-  const server = await startFakeServer({
-    onBody: (raw, _request, response) => {
-      const body = JSON.parse(raw.toString('utf8')) as {
-        contents: Array<{ parts: Array<{ inlineData?: { data: string; mimeType: string } }> }>
-        tools: Array<{
-          functionDeclarations: Array<{ name: string; parameters: { properties: { route?: { enum?: unknown } } } }>
-        }>
-      }
-      const declaration = body.tools[0]!.functionDeclarations[0]!
-      const audio = body.contents[0]!.parts.find((part) => part.inlineData)!.inlineData!
-      requests.push({ routes: declaration.parameters.properties.route?.enum ?? null, mimeType: audio.mimeType })
-      const args = JSON.parse(Buffer.from(audio.data, 'base64').toString('utf8')) as FakeTranscription
-      response.setHeader('content-type', 'application/json')
-      response.end(
-        JSON.stringify({
-          candidates: [
-            { finishReason: 'STOP', content: { parts: [{ functionCall: { name: declaration.name, args } }] } },
-          ],
-        }),
-      )
-    },
-  })
-  return { ...server, requests }
-}
-
-export type FakeOpenAI = {
-  baseUrl: string
-  // Audio of each request, as OpenAI received it.
-  requests: Array<{ model: string; format: string; audio: Buffer; routes: unknown }>
-  // Reply status; tests set 401 to check the fallback to the next transcriber.
-  status: number
-  stop: () => Promise<void>
-}
-
-// OpenAI chat completions over HTTP, deterministic: every request gets the
-// same transcription tool call. Real Opus audio goes through the OGG -> WAV
-// conversion first, so the audio cannot carry the answer like voiceUrl().
-export async function startFakeOpenAI({ result }: { result: FakeTranscription }): Promise<FakeOpenAI> {
-  const fake: Omit<FakeOpenAI, 'baseUrl' | 'stop'> = { requests: [], status: 200 }
-  const server = await startFakeServer({
-    onBody: (raw, _request, response) => {
-      const body = JSON.parse(raw.toString('utf8')) as {
-        model: string
-        tools: Array<{ function: { name: string; parameters: { properties: { route?: { enum?: unknown } } } } }>
-        messages: Array<{ content: Array<{ type: string; input_audio?: { data: string; format: string } }> }>
-      }
-      const tool = body.tools[0]!.function
-      const audio = body.messages[0]!.content.find((part) => part.input_audio)!.input_audio!
-      fake.requests.push({
-        model: body.model,
-        format: audio.format,
-        audio: Buffer.from(audio.data, 'base64'),
-        routes: tool.parameters.properties.route?.enum ?? null,
-      })
-      response.setHeader('content-type', 'application/json')
-      if (fake.status !== 200) {
-        response.statusCode = fake.status
-        response.end(JSON.stringify({ error: { message: 'unauthorized' } }))
-        return
-      }
-      response.end(
-        JSON.stringify({
-          choices: [
-            {
-              finish_reason: 'tool_calls',
-              message: {
-                role: 'assistant',
-                content: null,
-                tool_calls: [{ type: 'function', function: { name: tool.name, arguments: JSON.stringify(result) } }],
-              },
-            },
-          ],
-        }),
-      )
-    },
-  })
-  return Object.assign(fake, server)
-}
-
-export type FakeChatGPT = {
-  baseUrl: string
-  // Each POST /transcribe, as ChatGPT received it.
-  requests: Array<{
-    authorization: string | null
-    accountId: string | null
-    filename: string
-    type: string
-    audio: Buffer
-  }>
-  // Reply status; tests set 401 to check the API key fallback.
-  status: number
-  stop: () => Promise<void>
-}
-
-// chatgpt.com/backend-api/transcribe: multipart `file` in, `{ text }` out.
-export async function startFakeChatGPT({ text }: { text: string }): Promise<FakeChatGPT> {
-  const fake: Omit<FakeChatGPT, 'baseUrl' | 'stop'> = { requests: [], status: 200 }
-  const server = await startFakeServer({
-    onBody: async (raw, request, response) => {
-      const headers = new Headers(
-        Object.entries(request.headers).flatMap(([key, value]) => (typeof value === 'string' ? [[key, value]] : [])),
-      )
-      const form = await new Request('http://fake/transcribe', { method: 'POST', headers, body: raw }).formData()
-      const file = form.get('file')
-      if (!(file instanceof File)) throw new Error('fake ChatGPT: no file field')
-      fake.requests.push({
-        authorization: headers.get('authorization'),
-        accountId: headers.get('chatgpt-account-id'),
-        filename: file.name,
-        type: file.type,
-        audio: Buffer.from(await file.arrayBuffer()),
-      })
-      response.statusCode = fake.status
-      response.setHeader('content-type', 'application/json')
-      response.end(JSON.stringify(fake.status === 200 ? { text } : { detail: 'unauthorized' }))
-    },
-  })
-  return Object.assign(fake, server)
-}
-
-// An OpenCode database with only the credential table and one ChatGPT OAuth row.
-export async function writeOpencodeCredential({
-  file,
-  access,
-  expires,
-}: {
-  file: string
-  access: string
-  expires: number
-}) {
-  const client = new Database(file)
-  client.run(
-    'CREATE TABLE credential (id text PRIMARY KEY, integration_id text, label text NOT NULL, value text NOT NULL, connector_id text, method_id text, active integer, time_created integer NOT NULL, time_updated integer NOT NULL)',
-  )
-  client.run(
-    `INSERT INTO credential (id, integration_id, label, value, time_created, time_updated) VALUES ('cred_test', 'openai', 'OAuth', ?, 0, 0)`,
-    [JSON.stringify({ type: 'oauth', methodID: 'chatgpt-browser', access, refresh: 'refresh-test', expires })],
-  )
-  client.close()
 }
 
 export function tempDataDir(): string {

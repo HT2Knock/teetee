@@ -1,7 +1,7 @@
 // Bot lifecycle and setup: the root command (start + onboarding), provider
-// login, tools (tts), and bot status, logs, credentials and keys.
-// main.ts, onboarding.ts, SQLite and voice are loaded only by the
-// commands that run them (see the note in shared.ts).
+// login, and bot status, logs and credentials.
+// main.ts, onboarding.ts and SQLite are loaded only by the commands that run
+// them (see the note in shared.ts).
 
 import { spawn, type ChildProcess } from 'node:child_process'
 import fs from 'node:fs'
@@ -16,8 +16,7 @@ import { callBot, DEFAULT_LOCK_PORT, RESTART_EXIT_CODE, startLockServer } from '
 import { parseDuration } from '../duration.ts'
 import { createLogger, setLogFile } from '../logger.ts'
 import { runtimeExecutable } from '../runtime.ts'
-import { parseFirst, type BotApiKeyRow } from '../rows.ts'
-import { action, DATA_DIR_HELP, dataDirOrDefault, discordApi, fail, openCliDb, printJson } from './shared.ts'
+import { action, DATA_DIR_HELP, dataDirOrDefault, discordApi, fail, printJson } from './shared.ts'
 
 const logger = createLogger('CLI')
 
@@ -101,10 +100,6 @@ export function registerStartCommand(cli: Goke) {
       'Every server member can use the bot (role "no-kimaki" still denies; provider login stays admin-only)',
     )
     .option(
-      '--voice <name>',
-      'Voice of voice calls, saved for later starts (e.g. cove, juniper, sol). "default" resets it',
-    )
-    .option(
       '--disable-skills <list>',
       `Built-in Kimaki skills to turn off: "all" or a comma separated list (${BUILTIN_SKILL_IDS.join(',')})`,
     )
@@ -131,9 +126,8 @@ export function registerStartCommand(cli: Goke) {
         },
         { openDb },
         { createAnalytics },
-        { opencodeConfigDir, opencodeDbFile },
+        { opencodeConfigDir },
         { defaultMachineName },
-        { ensureVoiceChannels, parseRealtimeVoice, saveVoiceCallVoice },
       ] = await Promise.all([
         import('../main.ts'),
         import('../onboarding.ts'),
@@ -142,7 +136,6 @@ export function registerStartCommand(cli: Goke) {
         import('../analytics.ts'),
         import('../opencode-server.ts'),
         import('../project.ts'),
-        import('../voice-call.ts'),
       ])
       // Non-TTY hosts get the failure as an `error` event too (programmatic onboarding).
       // Explicit type: TS narrows after a `never` call only for annotated consts.
@@ -156,14 +149,6 @@ export function registerStartCommand(cli: Goke) {
       const disabledSkills = parseDisabledSkills(options.disableSkills)
       if (disabledSkills instanceof Error) fail(disabledSkills)
       const machine = options.machineName ?? defaultMachineName()
-      // Validated before the lock, so a typo never stops the running bot. null: reset to the default.
-      const voice = (() => {
-        if (!options.voice) return undefined
-        if (options.voice.trim().toLowerCase() === 'default') return null
-        const parsed = parseRealtimeVoice(options.voice)
-        if (parsed instanceof Error) fail(parsed)
-        return parsed.voice
-      })()
 
       if (options.installUrl) {
         const opened = await openDb({ dataDir, migrate: true })
@@ -222,15 +207,8 @@ export function registerStartCommand(cli: Goke) {
         callbackUrl: options.gatewayCallbackUrl,
       })
       // Saved in SQLite, so restarts, crashes and autostart keep it without the flag.
-      const savedVoice =
-        resolved instanceof Error || voice === undefined
-          ? undefined
-          : await saveVoiceCallVoice({ db: opened.db, appId: resolved.credentials.appId, voice })
       await opened.close()
       if (resolved instanceof Error) failStartup(resolved)
-      if (savedVoice instanceof Error) failStartup(savedVoice)
-      if (voice !== undefined)
-        logger.log(`voice calls use ${voice === null ? 'the default voice' : `the voice ${voice}`}`)
       const { credentials, install } = resolved
       const installUrl = installUrlFor({ credentials, website: urls.website, callbackUrl: options.gatewayCallbackUrl })
       // The agent calls this same install. Prefer the built dist entry, so agent
@@ -252,7 +230,6 @@ export function registerStartCommand(cli: Goke) {
         opencodeServiceFile: process.env['KIMAKI_OPENCODE_SERVICE_FILE'],
         ensureOpencode: true,
         opencodeConfigDir: opencodeConfigDir(),
-        opencodeDbFile: opencodeDbFile(),
         analytics: createAnalytics({ dataDir, botMode: credentials.mode, enabled: !options.noAnalytics }),
         autoWorktrees: Boolean(options.worktrees),
         allowAllUsers: Boolean(options.allowAllUsers),
@@ -293,10 +270,8 @@ export function registerStartCommand(cli: Goke) {
         process.stderr.write(
           `Onboarding thread: https://discord.com/channels/${onboarded.guildId}/${onboarded.threadId}\n`,
         )
-      const voiceChannels = await ensureVoiceChannels(bot, { machine })
-      if (voiceChannels instanceof Error) logger.warn('cannot create the Kimaki voice channel', voiceChannels)
       // Only the default port: the plugin checks that one. Runtime flags only;
-      // credentials, onboarding and --voice are saved in SQLite.
+      // credentials and onboarding are saved in SQLite.
       if (lock.port === DEFAULT_LOCK_PORT) {
         const autostart = await writeAutostartScript({
           dataDir,
@@ -354,60 +329,7 @@ export function registerLoginCommands(cli: Goke) {
     })
 }
 
-// tts
-// Any stored bot_api_keys row (imported from V1 `transcription-key`); a missing
-// database only skips it. The db module is imported lazily: a CLI call must not
-// pay for SQLite at startup.
-async function storedApiKeys(dataDir: string): Promise<BotApiKeyRow | null> {
-  const { openDb } = await import('../db.ts')
-  const opened = await openDb({ dataDir, migrate: false })
-  if (opened instanceof Error) return null
-  const rows = await opened.db<BotApiKeyRow[]>`SELECT * FROM bot_api_keys LIMIT 1`.catch(() => null)
-  await opened.close()
-  if (rows === null) return null
-  return parseFirst<BotApiKeyRow>('bot_api_keys', rows) ?? null
-}
-
-export function registerToolCommands(cli: Goke) {
-  cli
-    .command('tts [text]', 'Text to speech with OpenAI or Gemini. Reads stdin if no text is given')
-    .option('--data-dir <path>', DATA_DIR_HELP)
-    .option('-o, --output <path>', 'Output file (default: speech.mp3 or speech.wav)')
-    .option('-p, --provider <name>', 'openai | gemini (default: from the stored key)')
-    .option('-v, --voice <voice>', 'Voice ID (default: alloy for OpenAI, Kore for Gemini)')
-    .option('-i, --instructions <text>', 'Style instructions (OpenAI only)')
-    .option('--speed <n>', '0.25 to 4.0 (OpenAI only, default: 1.25)')
-    .action(async (text, options) => {
-      const chunks: Buffer[] = []
-      if (!text && !process.stdin.isTTY) for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk))
-      const input = text ?? Buffer.concat(chunks).toString('utf8').trim()
-      if (!input) fail(new Error('Pass the text as an argument or pipe it via stdin'))
-      if (options.provider && options.provider !== 'openai' && options.provider !== 'gemini')
-        fail(new Error('--provider must be openai or gemini'))
-      const speed = options.speed ? Number(options.speed) : 1.25
-      if (!(speed >= 0.25 && speed <= 4)) fail(new Error('--speed must be between 0.25 and 4'))
-      const { audioKeyCandidates, generateSpeech } = await import('../voice.ts')
-      const stored = await storedApiKeys(dataDirOrDefault(options.dataDir))
-      const key = audioKeyCandidates(stored).find(
-        (candidate) => !options.provider || candidate.provider === options.provider,
-      )
-      if (!key) fail(new Error('No OpenAI or Gemini key. Set OPENAI_API_KEY or GEMINI_API_KEY'))
-      const result = await generateSpeech({
-        text: input,
-        apiKey: key.apiKey,
-        provider: key.provider,
-        voice: options.voice,
-        instructions: options.instructions,
-        speed,
-      })
-      if (result instanceof Error) fail(result)
-      const output = path.resolve(options.output ?? `speech.${result.mediaType === 'audio/mp3' ? 'mp3' : 'wav'}`)
-      await fs.promises.writeFile(output, result.audio)
-      process.stdout.write(`${output}\n`)
-    })
-}
-
-// status, logs, bot token / keys set / install-url
+// status, logs, bot token / install-url
 export function registerBotCommands(cli: Goke) {
   cli
     .command('status', 'Bot health: running, pid, runtime, uptime, OpenCode URL and version, guilds')
@@ -505,35 +427,6 @@ export function registerBotCommands(cli: Goke) {
     .command('bot token', 'Print saved bot credentials for automation')
     .option('--data-dir <path>', DATA_DIR_HELP)
     .action(async (options) => process.stdout.write(`${(await discordApi(options.dataDir)).credentials.token}\n`))
-
-  cli
-    .command('bot keys set', 'Store OpenAI or Gemini API keys for voice transcription and kimaki tts')
-    .option('--data-dir <path>', DATA_DIR_HELP)
-    .option('--openai <key>', 'OpenAI API key')
-    .option('--gemini <key>', 'Gemini API key')
-    .action(async (options) => {
-      const [{ readSavedCredentials }, { saveAudioKeys }] = await Promise.all([
-        import('../credentials.ts'),
-        import('../voice.ts'),
-      ])
-      const opened = await openCliDb(options.dataDir)
-      const result = await (async () => {
-        const credentials = await readSavedCredentials({ db: opened.db })
-        if (credentials instanceof Error) return credentials
-        if (!credentials) return new Error('No saved bot credentials. Start kimaki once to onboard.')
-        return saveAudioKeys({
-          db: opened.db,
-          token: credentials.token,
-          openai: options.openai,
-          gemini: options.gemini,
-        })
-      })()
-      await opened.close()
-      if (result instanceof Error) fail(result)
-      process.stdout.write(
-        `Saved ${[options.openai && 'OpenAI', options.gemini && 'Gemini'].filter(Boolean).join(' and ')} API key\n`,
-      )
-    })
 
   cli
     .command('bot install-url', 'Print the Discord bot install URL')

@@ -24,8 +24,6 @@ import { createPluginWait, refreshCliContext } from './session-context.ts'
 import { createInteractionRegistry, registerSlashCommands } from './slash-commands.ts'
 import { createSleepLock } from './sleeps.ts'
 import { createBotStore } from './store.ts'
-import type { TranscriptionBaseUrls } from './voice.ts'
-import { createVoiceCalls, type RealtimeBaseUrls } from './voice-call.ts'
 
 const logger = createLogger('MAIN')
 // The close handshake takes ~120ms to Discord and to gateway-proxy.
@@ -45,20 +43,12 @@ export type StartBotOptions = {
   opencodeServiceFile?: string
   // Start the service with Service.ensure() when none is running.
   ensureOpencode: boolean
-  // Global OpenCode config dir that gets plugins/kimaki/ (opencodeConfigDir()).
-  // Required, so no caller writes into the user's real config by accident.
+  // Global OpenCode config dir that gets plugins/teetee/ (opencodeConfigDir()).
   opencodeConfigDir: string
-  // OpenCode's SQLite file (opencodeDbFile()): voice transcription reads the ChatGPT credential from it.
-  // Required, so tests never read the developer's real credentials.
-  opencodeDbFile: string
-  // Shell command that runs this Kimaki install (given to agents), from kimakiShellCommand().
+  // Shell command that runs this install (given to agents), from kimakiShellCommand().
   kimakiCommand: string
   // Product analytics sink (createAnalytics or disabledAnalytics).
   analytics: Analytics
-  // Voice transcription API base URLs; tests point Gemini at a local fake.
-  transcriptionBaseUrls?: TranscriptionBaseUrls
-  // Voice call WebSocket URLs; tests point OpenAI at a local fake.
-  realtimeBaseUrls?: RealtimeBaseUrls
   // The scheduler's only source of time. Tests pass a manual clock.
   clock?: Clock
   // How often due tasks and wakes run; null: never (tests call scheduler.runDueTasks).
@@ -101,7 +91,6 @@ export async function startBot(options: StartBotOptions): Promise<Error | BotHan
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
-      GatewayIntentBits.GuildVoiceStates,
     ],
     partials: [Partials.Channel, Partials.Message, Partials.User, Partials.ThreadMember],
     ...(options.discordRestUrl && { rest: { api: options.discordRestUrl, version: '10' } }),
@@ -121,7 +110,7 @@ export async function startBot(options: StartBotOptions): Promise<Error | BotHan
     }
     return setToken(token)
   }
-  // Gateway lifecycle, to debug reconnects that break voice joins or event delivery.
+  // Gateway lifecycle, to debug reconnects that break event delivery.
   discord.on(Events.ShardDisconnect, (event, id) =>
     logger.warn(`gateway shard ${id} disconnected with code ${event.code}`),
   )
@@ -150,7 +139,6 @@ export async function startBot(options: StartBotOptions): Promise<Error | BotHan
     },
   })
   cleanup.defer(() => effects.stop())
-  const voiceCalls = createVoiceCalls({ opencodeConfigDir: options.opencodeConfigDir })
   const onTranscriptDue = (sessionId: string) => {
     void oc({ opencode }, 'sync transcript', (client) =>
       syncSessionTranscript({ client, dataDir: options.dataDir, sessionId }),
@@ -165,7 +153,6 @@ export async function startBot(options: StartBotOptions): Promise<Error | BotHan
     effects,
     recorder,
     analytics: options.analytics,
-    onRunEnded: voiceCalls.runEnded,
     onTranscriptDue,
   })
   const loaded = await eventLoop.load()
@@ -200,13 +187,10 @@ export async function startBot(options: StartBotOptions): Promise<Error | BotHan
     supervised: lock.supervised,
     token: options.token,
     appId: options.appId,
-    opencodeDbFile: options.opencodeDbFile,
-    transcriptionBaseUrls: options.transcriptionBaseUrls ?? {},
-    realtimeBaseUrls: options.realtimeBaseUrls ?? {},
     autoWorktrees: options.autoWorktrees ?? false,
     allowAllUsers: options.allowAllUsers ?? false,
     disabledSkills: options.disabledSkills ?? [],
-    features: { withSleepLock: createSleepLock(), waitForPlugin: createPluginWait({ opencode }), agentUi, voiceCalls },
+    features: { withSleepLock: createSleepLock(), waitForPlugin: createPluginWait({ opencode }), agentUi },
   }
   const scheduler = createScheduler({
     bot,
@@ -217,9 +201,6 @@ export async function startBot(options: StartBotOptions): Promise<Error | BotHan
   lock.handle((route, input, signal) => runLockRoute(bot, { route: route.slice('/kimaki/'.length), input, signal }))
   // Before login: gateway-proxy replays missed messages right after READY.
   registerIngress(bot)
-  voiceCalls.register(bot)
-  // Before discord.destroy() (registered earlier, so disposed later): leaving voice needs the gateway.
-  cleanup.defer(() => voiceCalls.stop(bot))
 
   // Resolves with the first fatal error, or null when both sides are ready.
   // Not Promise.all: a failed side must not wait for the other (Discord login
