@@ -181,7 +181,7 @@ async function handleMessage(bot: Bot, message: Message) {
   const channelId = thread ? thread.parentId : channel.id
   if (!channelId || !message.inGuild()) return
 
-  const project = await projectOf(bot, channelId)
+  const project = await runResult(projectOf(bot, channelId))
   if (project instanceof Error) return logger.warn(project)
   if (!project) return
   if (message.author.bot) {

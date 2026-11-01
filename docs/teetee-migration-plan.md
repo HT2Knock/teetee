@@ -399,6 +399,12 @@ functions on purpose: `shell` is fire and forget (the request returns when the
 command ends, output arrives as events) and `upload` waits on the effects
 runner, so both move with the `Queue` slice.
 
+Fourth slice, done: the shared lookups in `bot.ts` return `Effect`. `projectOf`,
+`textChannel`, `sessionDirectory` and `globalModel` report a failure in the
+error channel instead of as a value, which removes the `instanceof` check at
+every caller. `sessions.ts`, `session-context.ts`, the slash commands and the
+RPC routes are still promise-shaped and bridge these with `runResult`.
+
 Exit: zero cycles, core imports no `discord.js`, no `instanceof Error` in
 production code.
 

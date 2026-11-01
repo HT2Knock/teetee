@@ -18,6 +18,7 @@ import { Effect } from 'effect'
 import { type Message } from './adapters/discord/index.ts'
 
 import { ocEffect, projectOf, rootSession, type Author, type Bot, type PromptFile } from './bot.ts'
+import { runResult } from './effect-bridge.ts'
 import { ConfigError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
 import { formatError } from './format-parts.ts'
 import { createLogger } from './logger.ts'
@@ -355,7 +356,7 @@ export async function upload(bot: Bot, { id, files }: { id: string; files: Array
   const { sessionThreads, roots } = bot.store.getState()
   const sessionThread = sessionThreads[id] ?? (roots[id] ? id : undefined)
   // Voice calls have no session: they upload into the text chat of the voice channel.
-  const voice = sessionThread ? null : await projectOf(bot, id)
+  const voice = sessionThread ? null : await runResult(projectOf(bot, id))
   if (voice instanceof Error) return voice
   const threadId = sessionThread ?? (voice?.channel_type === 'voice' ? id : undefined)
   if (!threadId) return new ConfigError({ reason: 'No local session thread or Kimaki voice channel for this upload' })

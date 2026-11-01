@@ -533,7 +533,7 @@ export async function createTask(bot: Bot, { send: input, options }: { send: Sen
         .catch((cause) => new DiscordError({ operation: `fetch thread ${threadId}`, cause }))
       if (thread instanceof Error) return thread
       if (!thread?.isThread() || !thread.parentId) return null
-      return projectOf(bot, thread.parentId)
+      return runResult(projectOf(bot, thread.parentId))
     }
     const rows = await (
       input.channelId

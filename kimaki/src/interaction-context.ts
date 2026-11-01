@@ -20,6 +20,7 @@ import {
 } from './adapters/discord/index.ts'
 
 import { projectOf, sessionDirectory, type Author, type Bot } from './bot.ts'
+import { runResult } from './effect-bridge.ts'
 import { ConfigError, DiscordError } from './errors.ts'
 import { formatError, SILENT_MESSAGE_FLAGS } from './format-parts.ts'
 import { createLogger } from './logger.ts'
@@ -73,11 +74,11 @@ export async function resolveTarget(bot: Bot, channelId: string | null): Promise
   const thread = channel?.isThread() && channel.type !== ChannelType.AnnouncementThread ? channel : null
   const projectChannelId = thread ? thread.parentId : channel?.type === ChannelType.GuildText ? channel.id : null
   if (!projectChannelId) return new ConfigError({ reason: 'This command can only be used in text channels or threads' })
-  const row = await projectOf(bot, projectChannelId)
+  const row = await runResult(projectOf(bot, projectChannelId))
   if (row instanceof Error) return row
   if (!row) return new ConfigError({ reason: 'This channel is not configured with a project directory' })
   const sessionId = thread ? (bot.store.getState().roots[thread.id] ?? null) : null
-  const directory = sessionId ? await sessionDirectory(bot, sessionId) : row.directory
+  const directory = sessionId ? await runResult(sessionDirectory(bot, sessionId)) : row.directory
   if (directory instanceof Error) return directory
   return { channelId: projectChannelId, directory, projectDirectory: row.directory, thread, sessionId }
 }

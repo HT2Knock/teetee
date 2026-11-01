@@ -185,7 +185,7 @@ async function adoptSession(
 
 // The project channel whose directory holds this session.
 export async function channelForSession(bot: Bot, sessionId: string) {
-  const directory = await sessionDirectory(bot, sessionId)
+  const directory = await runResult(sessionDirectory(bot, sessionId))
   if (directory instanceof Error) return directory
   return channelForDirectory(bot, directory)
 }
@@ -214,7 +214,10 @@ export async function resume(
   bot: Bot,
   { channelId, sessionId, author }: { channelId: string; sessionId: string; author: Author },
 ) {
-  const [channel, project] = await Promise.all([textChannel(bot, channelId), projectOf(bot, channelId)])
+  const [channel, project] = await Promise.all([
+    runResult(textChannel(bot, channelId)),
+    runResult(projectOf(bot, channelId)),
+  ])
   if (channel instanceof Error) return channel
   if (project instanceof Error) return project
   if (!project) return new ConfigError({ reason: 'This channel is not configured with a project directory' })
@@ -285,7 +288,7 @@ export async function fork(
   }
   const project = await threadProject(bot, sourceThread)
   if (project instanceof Error) return project
-  const channel = await textChannel(bot, project.channelId)
+  const channel = await runResult(textChannel(bot, project.channelId))
   if (channel instanceof Error) return channel
   const forked = await oc(bot, 'session.fork', (client) =>
     client.session.fork({ sessionID: sessionId, ...(before && { before }) }),
@@ -375,7 +378,7 @@ export async function forkBtw(
   if (parentSessionId instanceof Error) return parentSessionId
   const project = await threadProject(bot, sourceThread)
   if (project instanceof Error) return project
-  const channel = await textChannel(bot, project.channelId)
+  const channel = await runResult(textChannel(bot, project.channelId))
   if (channel instanceof Error) return channel
 
   const [forked, thread] = await Promise.all([

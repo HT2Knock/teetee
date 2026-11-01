@@ -13,6 +13,7 @@ import {
   type ModalSubmitInteraction,
 } from './adapters/discord/index.ts'
 import { sessionDirectory, type Bot } from './bot.ts'
+import { runResult } from './effect-bridge.ts'
 import { ConfigError, DiscordError } from './errors.ts'
 import type { InteractionRoutes } from './interaction-context.ts'
 import { send } from './input.ts'
@@ -153,7 +154,7 @@ export function createAgentUi(bot: Pick<Bot, 'store' | 'eventLoop' | 'opencode'>
     const pending = uploads.get(id)
     if (!prompt || !pending) return interaction.editReply({ content: 'Upload request expired' })
     const active = () => uploads.get(id) === pending && !pending.controller.signal.aborted
-    const directory = await sessionDirectory(bot, prompt.sessionId)
+    const directory = await runResult(sessionDirectory(bot, prompt.sessionId))
     if (!active()) return interaction.editReply({ content: 'Upload cancelled' })
     if (directory instanceof Error) return interaction.editReply({ content: directory.message })
     const files = [...interaction.fields.getUploadedFiles('files', true).values()]

@@ -99,7 +99,7 @@ async function createSessionThread(
     author,
   }: { channelId: string; threadName: string; startMessageId: string | null; author: Author },
 ) {
-  const channel = await textChannel(bot, channelId)
+  const channel = await runResult(textChannel(bot, channelId))
   if (channel instanceof Error) return channel
   const thread = await channel.threads
     .create({ name: threadName, autoArchiveDuration: 1440, ...(startMessageId && { startMessage: startMessageId }) })
@@ -184,7 +184,7 @@ async function resolveAgentAndModel(
   const requestedAgent = (route.kind === 'steer' && route.agent) || defaults?.channel_agent?.agent_name
   const selected = requestedAgent ? await agentSelection(bot, { directory, agent: requestedAgent }) : null
   if (selected instanceof Error) return selected
-  const global = await globalModel(bot)
+  const global = await runResult(globalModel(bot))
   if (global instanceof Error) return global
   const choice = pickModel({
     explicitModel,
@@ -800,7 +800,7 @@ async function sendToThread(bot: Bot, input: SendInput, context: SendContext) {
   if (thread instanceof Error) return thread
   const sessionId = bot.store.getState().roots[thread.id]
   if (!sessionId) {
-    const project = thread.parentId ? await projectOf(bot, thread.parentId) : null
+    const project = thread.parentId ? await runResult(projectOf(bot, thread.parentId)) : null
     if (project instanceof Error) return project
     return !project && !context.localOnly
       ? remoteSend(bot, input)
@@ -825,7 +825,7 @@ async function sendToThread(bot: Bot, input: SendInput, context: SendContext) {
 }
 
 async function sendNotification(bot: Bot, project: ChannelDirectoryRow, input: SendInput, context: SendContext) {
-  const channel = await textChannel(bot, project.channel_id)
+  const channel = await runResult(textChannel(bot, project.channel_id))
   if (channel instanceof Error) return channel
   const thread = await channel.threads
     .create({ name: (input.name ?? input.prompt).replace(/\s+/g, ' ').slice(0, 100), autoArchiveDuration: 1440 })

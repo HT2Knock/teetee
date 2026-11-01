@@ -173,7 +173,7 @@ const channelTarget = {
 async function projectChannel(bot: Bot, input: { channelId?: string; directory?: string }) {
   const channelId = input.channelId ?? (await channelForDirectory(bot, path.resolve(input.directory ?? process.cwd())))
   if (channelId instanceof Error) return channelId
-  const project = await projectOf(bot, channelId)
+  const project = await runResult(projectOf(bot, channelId))
   if (project instanceof Error) return project
   if (!project) return new ConfigError({ reason: 'No local project channel. Pass --channel.' })
   return project.channel_id
@@ -839,7 +839,7 @@ const lockRoutes = {
   'channel.directory': route({
     input: z.object({ channelId: text('channelId') }, { error: 'Expected a channel' }),
     run: async (bot, input) => {
-      const row = await projectOf(bot, input.channelId)
+      const row = await runResult(projectOf(bot, input.channelId))
       if (row instanceof Error) return row
       if (!row) return new ConfigError({ reason: `No project directory for channel ${input.channelId}` })
       return { directory: row.directory }
