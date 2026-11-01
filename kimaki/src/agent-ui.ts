@@ -47,7 +47,7 @@ type AgentUiInput = {
 }
 
 export type AgentUi = {
-  // Lock routes `buttons` and `upload-request` (lock-routes.ts). Buttons answer
+  // Lock routes `buttons` and `upload-request` (adapters/http/routes.ts). Buttons answer
   // at once; an upload request waits until the user uploads or it is dismissed.
   request: (input: AgentUiInput) => Promise<ConfigError | { shown: true } | UploadResult>
   // The upload modal: saves the files under <session cwd>/uploads/<id>/ and answers the waiting call.

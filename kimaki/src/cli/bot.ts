@@ -12,7 +12,7 @@ import type { Goke } from 'goke'
 
 import { distCliEntry, writeAutostartScript } from '../autostart.ts'
 import { BUILTIN_SKILL_IDS, parseDisabledSkills } from '../builtin-skills.ts'
-import { callBot, DEFAULT_LOCK_PORT, RESTART_EXIT_CODE, startLockServer } from '../lock-server.ts'
+import { callBot, DEFAULT_LOCK_PORT, RESTART_EXIT_CODE, startLockServer } from '../adapters/http/rpc.ts'
 import { parseDuration } from '../duration.ts'
 import { createLogger, setLogFile } from '../logger.ts'
 import { runtimeExecutable } from '../runtime.ts'

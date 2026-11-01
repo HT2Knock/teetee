@@ -1,5 +1,5 @@
 // Worktrees and working directories: /cwd, /new-worktree, /worktrees,
-// /merge-worktree, and the same writes for `kimaki worktree` (lock-routes.ts).
+// /merge-worktree, and the same writes for `kimaki worktree` (adapters/http/routes.ts).
 //
 //   /new-worktree in a channel ─▶ startSession(run: false) in a new checkout
 //   /new-worktree in a thread  ─▶ fork into a new checkout

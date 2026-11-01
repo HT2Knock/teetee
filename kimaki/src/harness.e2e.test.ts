@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process'
 import dedent from 'string-dedent'
 import { afterAll, beforeAll, expect, onTestFinished, test } from 'bun:test'
 
-import { startLockServer } from './lock-server.ts'
+import { startLockServer } from './adapters/http/rpc.ts'
 import type { BotHandle } from './main.ts'
 import { evalArgv } from './runtime.ts'
 import {
@@ -91,7 +91,7 @@ test('a second bot on the same lock port stops the running one and takes over', 
   })
   const code = dedent`
     import { startBot } from ${JSON.stringify(path.resolve('src/main.ts'))}
-    import { startLockServer } from ${JSON.stringify(path.resolve('src/lock-server.ts'))}
+    import { startLockServer } from ${JSON.stringify(path.resolve('src/adapters/http/rpc.ts'))}
     const lock = await startLockServer({ port: ${port}, dataDir: ${JSON.stringify(otherData)} })
     if (lock instanceof Error) throw lock
     const result = await startBot({ lock, ...${JSON.stringify({ dataDir: otherData, token: twin.discord.botToken, appId: twin.discord.botUserId, discordRestUrl: twin.discord.restUrl, opencodeServiceFile: server.serviceFile, opencodeConfigDir: server.configDir, ensureOpencode: false, kimakiCommand: 'kimaki' })} })

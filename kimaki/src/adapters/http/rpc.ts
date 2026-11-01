@@ -15,10 +15,11 @@ import path from 'node:path'
 import crypto from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-import { DEFAULT_LOCK_PORT } from './autostart.ts'
-import { BotNotRunningError, ConfigError, LockPortError, attempt } from './errors.ts'
-import type { LockRouteInput, LockRouteName, LockRouteOutput } from './lock-routes.ts'
-import { createLogger } from './logger.ts'
+import { DEFAULT_LOCK_PORT } from '../../autostart.ts'
+import { BotNotRunningError, ConfigError, LockPortError, attempt } from '../../errors.ts'
+import type { LockRouteInput, LockRouteName, LockRouteOutput } from './routes.ts'
+import { createLogger } from '../../logger.ts'
+import { mcpScopeFor, type BotTokens, type McpScope } from './tokens.ts'
 
 const logger = createLogger('LOCK')
 
@@ -51,15 +52,26 @@ export async function installShim({
     .catch((cause) => new ConfigError({ reason: 'Cannot install Kimaki command shim', cause }))
 }
 
+export type { BotTokens } from './tokens.ts'
+
 export type LockServer = {
   port: number
   // Started by the `kimaki` supervisor (cli/bot.ts): `kimaki restart` can respawn it.
   supervised: boolean
+  tokens: BotTokens
   handle: (handler: LockHandler) => void
+  // The MCP handler, attached once the bot exists. Requests before that get 503.
+  mcp: (handler: McpHandler) => void
   close: () => Promise<void>
 }
 
 export type LockHandler = (route: string, input: unknown, signal: AbortSignal) => Promise<Error | { data: unknown }>
+
+export type McpHandler = (request: {
+  scope: McpScope
+  body: unknown
+  signal: AbortSignal
+}) => Promise<{ status: number; body: unknown }>
 
 function listen(server: http.Server, port: number): Promise<NodeJS.ErrnoException | void> {
   return new Promise((resolve) => {
@@ -147,35 +159,59 @@ export async function startLockServer({
   supervised?: boolean
   evict?: boolean
 }): Promise<LockPortError | LockServer> {
-  const token = crypto.randomBytes(32).toString('hex')
-  const state: { handler: LockHandler | null } = { handler: null }
-  async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
-    const json = (status: number, value: unknown) => {
-      res.writeHead(status, { 'content-type': 'application/json' })
-      res.end(JSON.stringify(value))
-    }
-    if (req.headers.authorization !== `Bearer ${token}`)
-      return json(401, { error: 'Not authorized. Use the lock-token of this bot.' })
-    if (req.method !== 'POST') return json(405, { error: 'Use POST' })
-    if (!state.handler) return json(503, { error: 'Kimaki is starting. Try again.' })
+  const tokens: BotTokens = {
+    control: crypto.randomBytes(32).toString('hex'),
+    notify: crypto.randomBytes(32).toString('hex'),
+  }
+  const state: { handler: LockHandler | null; mcp: McpHandler | null } = { handler: null, mcp: null }
+  const json = (res: http.ServerResponse, status: number, value: unknown) => {
+    res.writeHead(status, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(value))
+  }
+  async function readBody(req: http.IncomingMessage): Promise<Error | unknown> {
     const chunks: Buffer[] = []
     let size = 0
     for await (const chunk of req) {
       size += chunk.length
-      if (size > 1_048_576) return json(413, { error: 'Request is larger than 1 MiB' })
+      if (size > 1_048_576) return new ConfigError({ reason: 'Request is larger than 1 MiB' })
       chunks.push(Buffer.from(chunk))
     }
-    const parsed = attempt(
-      () => ({ input: JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown }),
+    return attempt(
+      () => JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown,
       (cause) => new ConfigError({ reason: 'Invalid JSON request', cause }),
     )
-    if (parsed instanceof Error) return json(400, { error: parsed.message })
+  }
+  async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
+    if (req.headers.authorization !== `Bearer ${tokens.control}`)
+      return json(res, 401, { error: 'Not authorized. Use the lock-token of this bot.' })
+    if (req.method !== 'POST') return json(res, 405, { error: 'Use POST' })
+    if (!state.handler) return json(res, 503, { error: 'Kimaki is starting. Try again.' })
+    const input = await readBody(req)
+    if (input instanceof Error) return json(res, 400, { error: input.message })
     const controller = new AbortController()
     res.once('close', () => controller.abort())
-    const result = await state.handler(req.url ?? '', parsed.input, controller.signal)
+    const result = await state.handler(req.url ?? '', input, controller.signal)
     if (res.destroyed) return
-    if (result instanceof Error) return json(result instanceof ConfigError ? 400 : 500, { error: result.message })
-    json(200, result.data)
+    if (result instanceof Error) return json(res, result instanceof ConfigError ? 400 : 500, { error: result.message })
+    json(res, 200, result.data)
+  }
+  async function handleMcp(req: http.IncomingMessage, res: http.ServerResponse) {
+    const scope = mcpScopeFor({ authorization: req.headers.authorization, tokens })
+    if (!scope) return json(res, 401, { error: 'Not authorized. Use the control or notify token of this bot.' })
+    if (req.method !== 'POST') return json(res, 405, { error: 'Use POST' })
+    if (!state.mcp) return json(res, 503, { error: 'Kimaki is starting. Try again.' })
+    const body = await readBody(req)
+    if (body instanceof Error) return json(res, 400, { error: body.message })
+    const controller = new AbortController()
+    res.once('close', () => controller.abort())
+    const result = await state.mcp({ scope, body, signal: controller.signal })
+    if (res.destroyed) return
+    if (result.body === null) {
+      res.writeHead(result.status)
+      res.end()
+      return
+    }
+    json(res, result.status, result.body)
   }
   const server = http.createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
@@ -183,13 +219,16 @@ export async function startLockServer({
       res.end(JSON.stringify({ status: 'ok', pid: process.pid, wrapperPid: wrapperPid(supervised) }))
       return
     }
-    if (!req.url?.startsWith('/kimaki/')) {
+    const pathname = (req.url ?? '').split('?')[0] ?? ''
+    const handler =
+      pathname === '/mcp' ? handleMcp : pathname.startsWith('/rpc/') || pathname.startsWith('/kimaki/') ? handle : null
+    if (!handler) {
       res.writeHead(404)
       res.end()
       return
     }
-    void handle(req, res).catch((cause) => {
-      logger.error('lock request failed', cause)
+    void handler(req, res).catch((cause) => {
+      logger.error('http request failed', cause)
       if (!res.headersSent) res.writeHead(500)
       res.end(JSON.stringify({ error: 'Kimaki request failed. Check kimaki logs.' }))
     })
@@ -208,12 +247,17 @@ export async function startLockServer({
   }
 
   logger.info(`lock server listening on 127.0.0.1:${port}`)
-  const tokenFile = path.join(dataDir, 'lock-token')
+  const controlFile = path.join(dataDir, 'lock-token')
+  const notifyFile = path.join(dataDir, 'notify-token')
   const written = await fs.promises
     .mkdir(dataDir, { recursive: true, mode: 0o700 })
-    .then(() => fs.promises.writeFile(tokenFile, token, { mode: 0o600 }))
-    .then(() => fs.promises.chmod(tokenFile, 0o600))
-    .catch((cause) => new LockPortError({ port, reason: 'cannot write lock-token', cause }))
+    .then(async () => {
+      await fs.promises.writeFile(controlFile, tokens.control, { mode: 0o600 })
+      await fs.promises.chmod(controlFile, 0o600)
+      await fs.promises.writeFile(notifyFile, tokens.notify, { mode: 0o600 })
+      await fs.promises.chmod(notifyFile, 0o600)
+    })
+    .catch((cause) => new LockPortError({ port, reason: 'cannot write the bot tokens', cause }))
   if (written instanceof Error) {
     await new Promise<void>((resolve) => server.close(() => resolve()))
     return written
@@ -221,14 +265,23 @@ export async function startLockServer({
   return {
     port,
     supervised,
+    tokens,
     handle: (handler) => {
       state.handler = handler
+    },
+    mcp: (handler) => {
+      state.mcp = handler
     },
     close: async () => {
       server.closeAllConnections()
       await new Promise<void>((resolve) => server.close(() => resolve()))
-      const saved = await fs.promises.readFile(tokenFile, 'utf8').catch(() => null)
-      if (saved === token) await fs.promises.unlink(tokenFile).catch((cause) => logger.warn('remove token', cause))
+      for (const [file, token] of [
+        [controlFile, tokens.control],
+        [notifyFile, tokens.notify],
+      ] as const) {
+        const saved = await fs.promises.readFile(file, 'utf8').catch(() => null)
+        if (saved === token) await fs.promises.unlink(file).catch((cause) => logger.warn('remove token', cause))
+      }
     },
   }
 }
@@ -250,7 +303,7 @@ export async function callBot<N extends LockRouteName>({
     .catch((cause) => new BotNotRunningError({ cause }))
   if (token instanceof Error) return token
   const port = Number(process.env['KIMAKI_LOCK_PORT'] || DEFAULT_LOCK_PORT)
-  const response = await fetch(`http://127.0.0.1:${port}/kimaki/${route}`, {
+  const response = await fetch(`http://127.0.0.1:${port}/rpc/${route}`, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify(input),
