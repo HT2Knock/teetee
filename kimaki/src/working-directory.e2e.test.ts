@@ -24,7 +24,7 @@ import {
   type TestTwin,
 } from './test/harness.ts'
 import { manageWorktree, newWorktree, setAutoWorktrees } from './commands/worktree-commands.ts'
-import { runLockRoute } from './lock-routes.ts'
+import { runLockRoute } from './adapters/http/routes.ts'
 import { send } from './input.ts'
 import { forkBtw } from './sessions.ts'
 

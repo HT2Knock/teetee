@@ -82,7 +82,7 @@ function modelLabel(model: { providerID: string; id: string; variant?: string | 
   return `${model.providerID}/${model.id}${model.variant ? ` (${model.variant})` : ''}`
 }
 
-// --- Writes, shared with `kimaki channel` (lock-routes.ts) and `kimaki send --model`.
+// --- Writes, shared with `kimaki channel` (adapters/http/routes.ts) and `kimaki send --model`.
 
 // From the next step of the session.
 // Default model of new sessions in the channel.

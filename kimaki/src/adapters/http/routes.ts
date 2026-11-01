@@ -10,21 +10,39 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import v8 from 'node:v8'
 import { z } from 'zod'
 
-import { parseButton } from './agent-ui.ts'
-import { fetchThread, oc, parseModel, projectOf, type Bot } from './bot.ts'
-import { credential, loginCli } from './commands/login-commands.ts'
-import { setChannelAgent, setChannelModel, setGlobalModel, setVerbosity } from './commands/preference-commands.ts'
-import { channelWorktrees, manageWorktree, newWorktree, setAutoWorktrees } from './commands/worktree-commands.ts'
-import { ConfigError, DbError, DiscordError, FilesystemError, OpenCodeUnavailableError, attempt } from './errors.ts'
-import { RESTART_EXIT_CODE } from './lock-server.ts'
-import { send } from './input.ts'
-import { abort, cancelQueuedPrompt, clearQueue, shell, upload } from './prompt.ts'
-import { RUNTIME_NAME } from './runtime.ts'
-import { createTask, deleteTask, editTask, runTaskNow } from './scheduler.ts'
-import { channelForDirectory, channelForSession, fork, resume } from './sessions.ts'
-import { sessionCwd } from './session-context.ts'
-import { createSleep } from './sleeps.ts'
-import { worktreeName } from './worktrees.ts'
+import { parseButton } from '../../agent-ui.ts'
+import { fetchThread, oc, parseModel, projectOf, type Bot } from '../../bot.ts'
+import { credential, loginCli } from '../../commands/login-commands.ts'
+import { setChannelAgent, setChannelModel, setGlobalModel, setVerbosity } from '../../commands/preference-commands.ts'
+import { channelWorktrees, manageWorktree, newWorktree, setAutoWorktrees } from '../../commands/worktree-commands.ts'
+import { envCredentials, installUrlFor, readSavedCredentials } from '../../credentials.ts'
+import {
+  ConfigError,
+  DbError,
+  DiscordError,
+  FilesystemError,
+  OpenCodeError,
+  OpenCodeUnavailableError,
+  attempt,
+} from '../../errors.ts'
+import { send } from '../../input.ts'
+import { addProjectChannel, createApi, defaultMachineName, listProjects, resolveGuildId } from '../../project.ts'
+import { abort, cancelQueuedPrompt, clearQueue, shell, upload } from '../../prompt.ts'
+import { parseRows, type ThreadSessionRow } from '../../rows.ts'
+import { RUNTIME_NAME } from '../../runtime.ts'
+import { createTask, deleteTask, editTask, listTasks, runTaskNow } from '../../scheduler.ts'
+import {
+  allMessages,
+  allSessions,
+  readSessionMarkdown,
+  resolveSession,
+  type ResolvedSession,
+} from '../../session-events.ts'
+import { channelForDirectory, channelForSession, fork, resume } from '../../sessions.ts'
+import { sessionCwd } from '../../session-context.ts'
+import { createSleep } from '../../sleeps.ts'
+import { worktreeName } from '../../worktrees.ts'
+import { RESTART_EXIT_CODE } from './rpc.ts'
 
 type LockRoute<S extends z.ZodType, R> = {
   input: S
@@ -247,6 +265,18 @@ const sessionInput = <T extends z.ZodRawShape>(shape: T) =>
 const sessionText = sessionInput({ text: text('text') })
 
 const cliAuthor = (bot: Bot) => ({ id: bot.discord.user!.id, username: 'CLI' })
+
+// A session or thread ID from the CLI; a subagent session has no row, so its ID
+// stays and threadId is null.
+async function resolveTargetId(
+  bot: Bot,
+  id: string,
+): Promise<ResolvedSession | { sessionId: string; threadId: null } | Error> {
+  const resolved = await resolveSession({ db: bot.db, id })
+  if (!(resolved instanceof Error)) return resolved
+  if (id.startsWith('ses_')) return { sessionId: id, threadId: null }
+  return resolved
+}
 
 // --- Agent UI (`kimaki buttons`, `kimaki upload-request`).
 
@@ -754,6 +784,192 @@ const lockRoutes = {
       const target = localSession(bot, input)
       if (target instanceof Error) return target
       return clearQueue(bot, { threadId: target.threadId })
+    },
+  }),
+
+  // --- Reads the CLI makes without opening kimaki.db: the bot owns the file.
+
+  'project.list': route({
+    input: z.object({}),
+    run: async (bot) => {
+      const rows = await listProjects({ db: bot.db })
+      if (rows instanceof Error) return rows
+      return rows.map((row) => ({
+        channelId: row.channel_id,
+        directory: row.directory,
+        guildId: row.guild_id,
+      }))
+    },
+  }),
+  'project.add': route({
+    input: z.object(
+      {
+        directory: text('directory'),
+        guild: text('guild').optional(),
+        machine: text('machine').optional(),
+      },
+      { error: 'Expected a project directory' },
+    ),
+    run: async (bot, input) => {
+      const fromEnv = envCredentials()
+      if (fromEnv instanceof Error) return fromEnv
+      const credentials = fromEnv ?? (await readSavedCredentials({ db: bot.db }))
+      if (credentials instanceof Error) return credentials
+      if (!credentials) return new ConfigError({ reason: 'No saved bot credentials. Start kimaki once to onboard.' })
+      const guildId = await resolveGuildId({ db: bot.db, guildId: input.guild })
+      if (guildId instanceof Error) return guildId
+      const api = createApi({
+        token: credentials.token,
+        restUrl: bot.restUrl ?? process.env['KIMAKI_DISCORD_REST_URL'] ?? null,
+      })
+      return addProjectChannel({
+        api,
+        db: bot.db,
+        guildId,
+        directory: path.resolve(input.directory),
+        machine: input.machine ?? defaultMachineName(),
+      })
+    },
+  }),
+  'channel.directory': route({
+    input: z.object({ channelId: text('channelId') }, { error: 'Expected a channel' }),
+    run: async (bot, input) => {
+      const row = await projectOf(bot, input.channelId)
+      if (row instanceof Error) return row
+      if (!row) return new ConfigError({ reason: `No project directory for channel ${input.channelId}` })
+      return { directory: row.directory }
+    },
+  }),
+  'session.resolve': route({
+    input: z.object({ id: text('id') }, { error: 'Expected a session ID' }),
+    run: async (bot, { id }) => resolveTargetId(bot, id),
+  }),
+  'session.titles': route({
+    input: z.object(
+      { sessionIds: z.array(z.string(), { error: 'sessionIds must be strings' }) },
+      { error: 'Expected session IDs' },
+    ),
+    run: async (bot, { sessionIds }) => {
+      if (sessionIds.length === 0) return { titles: {} }
+      const rows = await bot.db<
+        ThreadSessionRow[]
+      >`SELECT * FROM thread_sessions WHERE session_id IN ${bot.db(sessionIds)} ORDER BY updated_at DESC`.catch(
+        (cause) => new DbError({ operation: 'read thread_sessions', cause }),
+      )
+      if (rows instanceof Error) return rows
+      const titles: Record<string, string> = {}
+      for (const row of parseRows<ThreadSessionRow>('thread_sessions', rows))
+        if (!titles[row.session_id] && row.last_synced_name) titles[row.session_id] = row.last_synced_name
+      return { titles }
+    },
+  }),
+  'session.list': route({
+    input: z.object(
+      {
+        project: text('project').optional(),
+        all: z.boolean().optional(),
+        active: z.boolean().optional(),
+        exclude: z.array(z.string()).optional(),
+      },
+      { error: 'Expected session list options' },
+    ),
+    run: async (bot, input) => {
+      const client = bot.opencode.endpoint?.client
+      if (!client) return new OpenCodeUnavailableError({ reason: 'not connected' })
+      const directory = input.all ? undefined : path.resolve(input.project ?? process.cwd())
+      const active = await client.session
+        .active()
+        .catch((cause: Error) => new OpenCodeError({ operation: 'session.active', cause }))
+      if (active instanceof Error) return active
+      const forms = await client.form
+        .list()
+        .catch((cause: Error) => new OpenCodeError({ operation: 'form.list', cause }))
+      if (forms instanceof Error) return forms
+      const permissions = await client.permission.request
+        .list()
+        .catch((cause: Error) => new OpenCodeError({ operation: 'permission.request.list', cause }))
+      if (permissions instanceof Error) return permissions
+      const sessions = await allSessions({ client, directory })
+      if (sessions instanceof Error) return sessions
+      const waiting = new Set([
+        ...forms.data.map((form) => form.sessionID),
+        ...permissions.data.map((permission) => permission.sessionID),
+      ])
+      const excluded = input.exclude ?? []
+      const rows = sessions
+        .filter((session) => !excluded.includes(session.id) && (!input.active || session.id in active))
+        .map((session) => ({
+          ...session,
+          status: waiting.has(session.id) ? 'waiting' : session.id in active ? 'busy' : 'idle',
+        }))
+      return rows
+    },
+  }),
+  'session.read': route({
+    input: z.object(
+      {
+        id: text('id'),
+        thinking: z.boolean().optional(),
+        verbose: z.boolean().optional(),
+        json: z.boolean().optional(),
+      },
+      { error: 'Expected a session ID' },
+    ),
+    run: async (bot, input) => {
+      const target = await resolveTargetId(bot, input.id)
+      if (target instanceof Error) return target
+      const client = bot.opencode.endpoint?.client
+      if (!client) return new OpenCodeUnavailableError({ reason: 'not connected' })
+      if (input.json) {
+        const messages = await allMessages({ client, sessionId: target.sessionId })
+        if (messages instanceof Error) return messages
+        return { sessionId: target.sessionId, threadId: target.threadId, messages }
+      }
+      const markdown = await readSessionMarkdown({
+        client,
+        sessionId: target.sessionId,
+        thinking: input.thinking,
+        verbose: input.verbose,
+      })
+      if (markdown instanceof Error) return markdown
+      return { sessionId: target.sessionId, threadId: target.threadId, markdown }
+    },
+  }),
+  'bot.credentials': route({
+    input: z.object({}),
+    run: async (bot) => {
+      const fromEnv = envCredentials()
+      if (fromEnv instanceof Error) return fromEnv
+      const credentials = fromEnv ?? (await readSavedCredentials({ db: bot.db }))
+      if (credentials instanceof Error) return credentials
+      if (!credentials) return new ConfigError({ reason: 'No saved bot credentials. Start kimaki once to onboard.' })
+      return { ...credentials, installUrl: installUrlFor({ credentials }) }
+    },
+  }),
+  'routine.list': route({
+    input: z.object({ all: z.boolean().optional() }),
+    run: async (bot, input) => listTasks({ db: bot.db, all: input.all === true }),
+  }),
+  'user.list': route({
+    input: z.object({ guild: text('guild'), query: text('query').optional() }, { error: 'Expected a guild ID' }),
+    run: async (bot, input) => {
+      const api = createApi({
+        token: bot.token,
+        restUrl: bot.restUrl ?? process.env['KIMAKI_DISCORD_REST_URL'] ?? null,
+      })
+      const members = input.query
+        ? await api.guilds
+            .searchForMembers(input.guild, { query: input.query, limit: 1000 })
+            .catch((cause: Error) => new DiscordError({ operation: 'search guild members', cause }))
+        : await api.guilds
+            .getMembers(input.guild, { limit: 1000 })
+            .catch((cause: Error) => new DiscordError({ operation: 'list guild members', cause }))
+      if (members instanceof Error) return members
+      return members.map((member) => ({
+        id: member.user.id,
+        username: member.user.username,
+        name: member.nick ?? member.user.global_name ?? null,
+      }))
     },
   }),
 }

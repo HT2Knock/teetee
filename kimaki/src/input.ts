@@ -26,7 +26,7 @@ import {
 import { ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
 import { NOTIFY_MESSAGE_FLAGS, SILENT_MESSAGE_FLAGS } from './format-parts.ts'
 import { createLogger } from './logger.ts'
-import type { SendInput } from './lock-routes.ts'
+import type { SendInput } from './adapters/http/routes.ts'
 import type { OpenCodeClient } from './adapters/opencode/index.ts'
 import { splitPromptFiles } from './prompt-files.ts'
 import { cancelPendingUi, interrupt, prompt, shell, steer } from './prompt.ts'

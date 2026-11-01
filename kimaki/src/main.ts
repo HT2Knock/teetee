@@ -15,8 +15,9 @@ import { Database, openDb } from './db.ts'
 import { createEffectsRunner } from './effects.ts'
 import { createEventLoop } from './event-loop.ts'
 import { registerIngress } from './ingress.ts'
-import { runLockRoute } from './lock-routes.ts'
-import { installShim, type LockServer } from './lock-server.ts'
+import { handleMcp, type McpRequest } from './adapters/http/mcp.ts'
+import { runLockRoute } from './adapters/http/routes.ts'
+import { installShim, type LockServer } from './adapters/http/rpc.ts'
 import { createLogger } from './logger.ts'
 import { installPluginShim, watchOpencode, type OpencodeEndpoint } from './adapters/opencode/index.ts'
 import { createScheduler } from './scheduler.ts'
@@ -92,6 +93,8 @@ function settingsOf(options: StartBotOptions): BotSettings {
   return {
     dataDir: options.dataDir,
     lockPort: options.lock.port,
+    controlToken: options.lock.tokens.control,
+    notifyToken: options.lock.tokens.notify,
     restUrl: options.discordRestUrl ?? null,
     appId: options.appId,
     supervised: options.lock.supervised,
@@ -206,6 +209,8 @@ const runBot = ({ options, settings, clock, store, cleanup }: BuildInput) =>
       clock,
       dataDir: settings.dataDir,
       lockPort: settings.lockPort,
+      controlToken: settings.controlToken,
+      notifyToken: settings.notifyToken,
       restUrl: settings.restUrl,
       supervised: settings.supervised,
       token: options.token,
@@ -220,8 +225,17 @@ const runBot = ({ options, settings, clock, store, cleanup }: BuildInput) =>
       intervalMs: options.schedulerIntervalMs === undefined ? 5_000 : options.schedulerIntervalMs,
     })
     cleanup.defer(() => scheduler.stop())
-    // The lock server only passes /kimaki/* paths.
-    lock.handle((route, input, signal) => runLockRoute(bot, { route: route.slice('/kimaki/'.length), input, signal }))
+    // The HTTP adapter strips /rpc/ (or the older /kimaki/ path).
+    lock.handle((route, input, signal) =>
+      runLockRoute(bot, { route: route.replace(/^\/(?:rpc|kimaki)\//, ''), input, signal }),
+    )
+    lock.mcp(({ scope, body, signal }) => {
+      const request = body as Partial<McpRequest> | null
+      if (!request || typeof request !== 'object' || typeof request.method !== 'string') {
+        return Promise.resolve({ status: 400, body: { error: 'Expected a JSON-RPC request with a method' } })
+      }
+      return handleMcp({ bot, scope, request: request as McpRequest, signal })
+    })
     // Before login: gateway-proxy replays missed messages right after READY.
     registerIngress(bot)
 
