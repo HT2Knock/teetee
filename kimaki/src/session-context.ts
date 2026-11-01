@@ -246,8 +246,16 @@ export function createPluginWait(bot: Pick<Bot, 'opencode'>): PluginWait {
         .list({ location })
         .catch((cause) => new OpenCodeError({ operation: 'plugin.list', cause }))
       if (plugins instanceof Error) return plugins
+      const servers = await endpoint.client.mcp
+        .list({ location })
+        .catch((cause) => new OpenCodeError({ operation: 'mcp.list', cause }))
+      if (servers instanceof Error) return servers
       if (bot.opencode.endpoint !== endpoint) continue
-      if (plugins.data.some((plugin) => plugin.id === 'kimaki' && plugin.state.status === 'active')) {
+      const pluginActive = plugins.data.some((plugin) => plugin.id === 'kimaki' && plugin.state.status === 'active')
+      // Plugin setup registers MCP after the module is active. Waiting for it
+      // here keeps the transform's reload out of the first turn.
+      const mcpRegistered = servers.data.some((server) => server.name === 'teetee')
+      if (pluginActive && mcpRegistered) {
         active.set(endpoint, (active.get(endpoint) ?? new Set()).add(directory))
         return
       }

@@ -39,6 +39,9 @@ export default Plugin.define({
     if (state) {
       await ctx.mcp
         .transform((editor) => {
+          // A new location inherits the entry from the global config; setting
+          // the same value again would reload that location mid-turn.
+          if (editor.get('teetee')) return
           editor.set('teetee', {
             type: 'remote',
             url: state.url,
