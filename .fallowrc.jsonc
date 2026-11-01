@@ -30,9 +30,9 @@
   ],
 
   "duplicates": {
-    // A pair of cloned blocks is worth reporting here: the codebase is small and
-    // the fork audit gate reads every group.
-    "minOccurrences": 2,
+    // A block copied four or more times is a pattern worth a helper. Pairs and
+    // triples often mirror the shape of an external API, as the test twin does.
+    "minOccurrences": 4,
   },
 
   "rules": {},

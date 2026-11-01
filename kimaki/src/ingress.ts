@@ -207,8 +207,7 @@ async function handleMessage(bot: Bot, message: Message) {
   })
   if (files instanceof Error) return reportError(files)
   const route =
-    parseTextMessage({ content: message.content }) ??
-    (files.length > 0 ? { kind: 'steer' as const, text: '' } : null)
+    parseTextMessage({ content: message.content }) ?? (files.length > 0 ? { kind: 'steer' as const, text: '' } : null)
   if (route instanceof Error) return reportError(route)
   if (!route) return
   const detail = route.kind === 'command' ? ` /${route.name}` : route.kind === 'skill' ? ` ${route.id}` : ''

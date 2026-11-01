@@ -95,8 +95,7 @@ test('onboarding thread adds a project channel through the kimaki CLI, which ans
     dataDir,
     guild,
     kimaki,
-    
-    
+
     machine: 'test-machine',
   })
   if (!onboarded || onboarded instanceof Error)
@@ -155,7 +154,7 @@ test('onboarding thread adds a project channel through the kimaki CLI, which ans
   await waitForFooter({ discord, threadId: thread.id })
 
   // Second start: nothing is created again.
-  expect(await runOnboarding({ bot, dataDir, guild, kimaki,  machine: 'test-machine' })).toBe(null)
+  expect(await runOnboarding({ bot, dataDir, guild, kimaki, machine: 'test-machine' })).toBe(null)
   await waitFor({ label: 'no extra channels', check: async () => (await guildChannels()).length === 6 })
 
   // An empty default channel means an earlier onboarding failed: retry in the same channel.
@@ -168,8 +167,7 @@ test('onboarding thread adds a project channel through the kimaki CLI, which ans
     dataDir,
     guild,
     kimaki,
-    
-    
+
     machine: 'test-machine',
   })
   if (retried instanceof Error || !retried) throw new Error(`expected a retried onboarding, got ${retried}`)
@@ -185,7 +183,7 @@ test('an upgraded setup with project mappings skips onboarding without selecting
       bot,
       dataDir: path.join(dataDir, 'upgraded-layout'),
       kimaki,
-      
+
       machine: 'test-machine',
     }),
   ).toBe(null)

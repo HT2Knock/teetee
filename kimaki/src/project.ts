@@ -183,4 +183,3 @@ export async function listProjects({ db }: { db: KimakiDb }) {
   if (rows instanceof Error) return rows
   return parseRows<ChannelDirectoryRow>('channel_directories', rows)
 }
-

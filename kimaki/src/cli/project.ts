@@ -21,8 +21,10 @@ async function addProject({
   directory: string
   machine: string
 }) {
-  const [{ readSavedCredentials }, { addProjectChannel, createApi, resolveGuildId }] =
-    await Promise.all([import('../credentials.ts'), import('../project.ts')])
+  const [{ readSavedCredentials }, { addProjectChannel, createApi, resolveGuildId }] = await Promise.all([
+    import('../credentials.ts'),
+    import('../project.ts'),
+  ])
   const credentials = await readSavedCredentials({ db })
   if (credentials instanceof Error) return credentials
   if (!credentials) return new Error('No saved bot credentials. Start kimaki once to onboard.')
