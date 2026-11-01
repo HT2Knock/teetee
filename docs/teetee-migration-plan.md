@@ -146,10 +146,15 @@ same job without the dependency.
 
 ### 2.7 Persistence
 
-Adopt `@effect/sql-sqlite-bun` and rewrite all 55 queries. This removes
+Adopt `@effect/sql-sqlite-bun` for every query. This removes
 `import { SQL } from 'bun'` from the core, gives typed errors, and makes the
 database a Layer that tests can replace. Keep the schema and its migrations
 unchanged, including columns of removed features.
+
+Done in Phase 2 as a vertical slice: the connection, the error type and the
+Layer are Effect's, and the queries still return `T | Error` promises until
+Phase 4 turns each call into `yield* sql\`...\``. `migrations.ts` stays on
+`bun:sqlite` because the V1 import needs `ATTACH DATABASE`.
 
 ## 3. Toolchain and gates
 
@@ -285,26 +290,35 @@ Suite: 160 tests across 42 files.
 
 ### Phase 2: core skeleton
 
-Status: first slice done, the rest is open.
-
-Landed:
+Status: done. See the Phase 2 commits on `main`.
 
 - `effect@4.1.1`, with a root override so the OpenCode plugin's pinned
   `4.0.1` does not create two SchemaAST types.
-- `zustand` removed. `store.ts` is a 40-line observable with the same
-  `getState`/`setState`/`subscribe` shape, so the Ref swap needs no call-site
-  changes.
+- `zustand` removed. `store.ts` is an observable with the same
+  `getState`/`setState`/`subscribe` shape, now the `ThreadRegistry` service
+  over an Effect `Ref`. Call sites read it synchronously, so Phase 4 can move
+  them to `Ref` effects one slice at a time.
+- `Settings` and `Clock` are service tags (`settings.ts`, `clock.ts`).
+  `main.ts` provides them in the app Layer; a test replaces them with
+  `Layer.succeed` (`services.test.ts`).
+- `Database` runs every query on `@effect/sql-sqlite-bun` 4.1.1
+  (`db-client.ts`). Its peer range is `effect: ^4.1.1`, and the override makes
+  that the only effect in the program.
+  - The handle keeps the promise shape (`db\`...\``, `db.unsafe`,
+    `db.begin`, `db(list)`), so every production query keeps its call site and
+    its `T | Error` return until Phase 4.
+  - `bun:sqlite` stays for `migrations.ts` only: the V1 import is
+    `ATTACH DATABASE ... ?mode=ro` plus DDL, which the query client does not
+    offer.
+- `main.ts` is one `Effect.gen` program. `appLayer()` composes settings,
+  clock and registry; the database layer is provided per start because the bot
+  owns the connection until `stop()`.
+- `kimaki/tsconfig.json` names its ambient types (`bun`, `node`): `bun check`
+  stopped resolving `bun:*` once the `@effect/sql` types joined the program,
+  while `tsc` was clean.
 
-Open:
-
-- `ThreadRegistry` as a `Context.Tag` over a `Ref`.
-- `Settings` and `Clock` service tags, with `Layer.succeed` in tests.
-- `Database` on `@effect/sql-sqlite-bun`: 55 queries.
-  Check first whether `@effect/sql-sqlite-bun` accepts effect 4.1.1 while the
-  OpenCode plugin pins 4.0.1; otherwise keep `bun` SQL behind a tag.
-- `main.ts` as an `Effect.gen` program with Layer composition.
-
-Exit: the bot starts, the e2e suite passes, no behavior change.
+Exit met: the bot starts, hello-thread and the full suite pass with no
+behavior change. Suite: 163 tests across 43 files.
 
 ### Phase 3: adapters
 
