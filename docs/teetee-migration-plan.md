@@ -285,10 +285,24 @@ Suite: 160 tests across 42 files.
 
 ### Phase 2: core skeleton
 
-- `effect@4.1.1`.
-- `Settings`, `Database` (Effect SQL), `ThreadRegistry`, `Scheduler`, `Clock`.
-- Rewrite `main.ts` as an `Effect.gen` program with `Layer.launch`.
-- Keep the existing behavior inside the layers at first.
+Status: first slice done, the rest is open.
+
+Landed:
+
+- `effect@4.1.1`, with a root override so the OpenCode plugin's pinned
+  `4.0.1` does not create two SchemaAST types.
+- `zustand` removed. `store.ts` is a 40-line observable with the same
+  `getState`/`setState`/`subscribe` shape, so the Ref swap needs no call-site
+  changes.
+
+Open:
+
+- `ThreadRegistry` as a `Context.Tag` over a `Ref`.
+- `Settings` and `Clock` service tags, with `Layer.succeed` in tests.
+- `Database` on `@effect/sql-sqlite-bun`: 55 queries.
+  Check first whether `@effect/sql-sqlite-bun` accepts effect 4.1.1 while the
+  OpenCode plugin pins 4.0.1; otherwise keep `bun` SQL behind a tag.
+- `main.ts` as an `Effect.gen` program with Layer composition.
 
 Exit: the bot starts, the e2e suite passes, no behavior change.
 

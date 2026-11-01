@@ -7,3 +7,5 @@ time	phase	decision	reason	evidence	result
 2026-11-01T15:15	1	duplicates at 4+	fixing 2-3 copy route shapes in the test twin is low value; production had 3 tiny pairs left	minOccurrences 4, 0 groups	landed
 2026-11-01T15:20	1	docs cleanup	240 KB spec and upstream release docs describe a flow this fork does not use	verify green	landed
 2026-11-01T15:25	1	close Phase 1	finish condition script passes and the full suite is green	160 tests, 42 files	done
+2026-11-01T15:40	2	zustand out first	the store is the one module with no async edges, so it is the safest first Effect seam	58 unit tests, CI green	landed
+2026-11-01T15:45	2	override effect to 4.1.1	@opencode/plugin pins 4.0.1, which creates two SchemaAST types in one program	type check green, plugin e2e green	landed
