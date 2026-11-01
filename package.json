@@ -13,7 +13,7 @@
   "devDependencies": {
     "typescript": "^5.9.2"
   },
-  "repository": "https://github.com/HT2Knock/kimaki-bot",
+  "repository": "https://github.com/HT2Knock/teetee",
   "author": "remorses <beats.by.morse@gmail.com>",
   "license": "",
   "dependencies": {},
