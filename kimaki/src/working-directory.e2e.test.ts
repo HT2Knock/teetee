@@ -6,7 +6,7 @@ import { ComponentType } from './adapters/discord/index.ts'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
-import { git } from './worktrees.ts'
+import { git, listWorktrees } from './worktrees.ts'
 import {
   cliCommand,
   TEST_USER_ID,
@@ -273,7 +273,24 @@ test('new-worktree forks context, and CLI creation and worktree toggle use the s
   if (disabled instanceof Error) throw disabled
 })
 
+// A retried test (bun --retry) must not hit the branch of a failed attempt:
+// the branch lives in the shared project repo, the checkout in this file's data dir.
+async function resetIsolatedWorktree() {
+  const entries = await listWorktrees({ projectDirectory: server.projectDirectory })
+  if (entries instanceof Error) throw entries
+  for (const entry of entries.filter((candidate) => candidate.branch === 'opencode/kimaki-isolated')) {
+    const removed = await git({
+      directory: server.projectDirectory,
+      args: ['worktree', 'remove', '--force', entry.directory],
+    })
+    if (removed instanceof Error) throw removed
+  }
+  // The first attempt has no such branch: git reports that and nothing else changes.
+  await git({ directory: server.projectDirectory, args: ['branch', '-D', 'opencode/kimaki-isolated'] })
+}
+
 test('send worktree creates an isolated named checkout, while explicit cwd reuses it', async () => {
+  await resetIsolatedWorktree()
   const sent = await send(bot, {
     channelId: twin.channelId,
     prompt: 'write-cwd-marker',
