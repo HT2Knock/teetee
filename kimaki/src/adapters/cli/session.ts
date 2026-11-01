@@ -8,18 +8,17 @@ import { pipeline } from 'node:stream/promises'
 import { promisify } from 'node:util'
 import { wrapJsonSchema, type Goke } from 'goke'
 
-import { parseDuration } from '../duration.ts'
-import { OpenCodeError } from '../errors.ts'
-import { editorsForFile, loadFileEditEvents } from '../file-edit-log.ts'
-import { parseRows, type ThreadSessionRow } from '../rows.ts'
+import { parseDuration } from '../../duration.ts'
+import { OpenCodeError } from '../../errors.ts'
+import { editorsForFile, loadFileEditEvents } from '../../file-edit-log.ts'
 import {
   allMessages,
-  allSessions,
   readSessionMarkdown,
   sessionEventsFile,
   syncTranscripts,
   transcriptsDir,
-} from '../session-events.ts'
+} from '../../session-events.ts'
+import { callBot } from '../http/rpc.ts'
 import {
   action,
   DATA_DIR_HELP,
@@ -58,33 +57,23 @@ export function registerSessionQueryCommands(cli: Goke) {
     .option('--json', 'Output as JSON')
     .action(async (options) => {
       const errorCode = options.active ? 64 : 1
-      const client = await readClient(errorCode)
       const directory = options.all
         ? undefined
         : await projectDirectory({ project: options.project, channel: undefined, dataDir: options.dataDir })
-      const [sessions, active, forms, permissions] = await Promise.all([
-        allSessions({ client, directory }),
-        client.session.active().catch((error: Error) => error),
-        client.form.list().catch((error: Error) => error),
-        client.permission.request.list().catch((error: Error) => error),
-      ])
-      if (sessions instanceof Error) fail(sessions, errorCode)
-      if (active instanceof Error) fail(active, errorCode)
-      if (forms instanceof Error) fail(forms, errorCode)
-      if (permissions instanceof Error) fail(permissions, errorCode)
-      const waiting = new Set([
-        ...forms.data.map((form) => form.sessionID),
-        ...permissions.data.map((permission) => permission.sessionID),
-      ])
       // an agent waiting for active sessions must not wait for itself
       const self = options.active ? process.env['OPENCODE_SESSION_ID'] : undefined
-      const excluded = [...(options.exclude ?? []), ...(self ? [self] : [])]
-      const rows = sessions
-        .filter((session) => !excluded.includes(session.id) && (!options.active || session.id in active))
-        .map((session) => ({
-          ...session,
-          status: waiting.has(session.id) ? 'waiting' : session.id in active ? 'busy' : 'idle',
-        }))
+      const result = await callBot({
+        dataDir: dataDirOrDefault(options.dataDir),
+        route: 'session.list',
+        input: {
+          project: directory,
+          all: options.all,
+          active: options.active,
+          exclude: [...(options.exclude ?? []), ...(self ? [self] : [])],
+        },
+      })
+      if (result instanceof Error) fail(result, errorCode)
+      const rows = result.data
       printRows({
         json: options.json,
         rows,
@@ -146,25 +135,16 @@ export function registerSessionQueryCommands(cli: Goke) {
       if (events instanceof Error) fail(events)
       const editors = (await editorsForFile({ events, filePath: file, cwd: process.cwd() })).slice(0, limit)
       if (editors.length === 0) fail(new Error(`No recorded editors for ${path.resolve(file)}`))
-      // Titles are optional: a missing database only hides them.
-      const titles = new Map<string, string>()
-      const { openDb } = await import('../db.ts')
-      const opened = await openDb({ dataDir: dataDirOrDefault(options.dataDir), migrate: false })
-      if (!(opened instanceof Error)) {
-        const sessionIds = editors.map((editor) => editor.sessionId)
-        const rows = await opened.db<
-          ThreadSessionRow[]
-        >`SELECT * FROM thread_sessions WHERE session_id IN ${opened.db(sessionIds)} ORDER BY updated_at DESC`.catch(
-          () => [],
-        )
-        for (const thread of parseRows<ThreadSessionRow>('thread_sessions', rows))
-          if (!titles.has(thread.session_id) && thread.last_synced_name)
-            titles.set(thread.session_id, thread.last_synced_name)
-        await opened.close()
-      }
+      // Titles are optional: a bot that is not running only hides them.
+      const titled = await callBot({
+        dataDir: dataDirOrDefault(options.dataDir),
+        route: 'session.titles',
+        input: { sessionIds: editors.map((editor) => editor.sessionId) },
+      })
+      const titles = titled instanceof Error ? {} : titled.data.titles
       const rows = editors.map((editor) => ({
         sessionId: editor.sessionId,
-        title: titles.get(editor.sessionId) ?? '-',
+        title: titles[editor.sessionId] ?? '-',
         editedAt: new Date(editor.at).toISOString(),
       }))
       printRows({ json: options.json, rows, line: (row) => `${row.sessionId} | ${row.title} | ${row.editedAt}` })

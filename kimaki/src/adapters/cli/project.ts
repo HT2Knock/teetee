@@ -1,39 +1,13 @@
-// Project, channel and worktree commands. `project` reads SQLite and the
-// Discord REST API directly; channel settings and worktrees go through the bot.
+// Project, channel and worktree commands. `project` changes and reads through
+// the running bot; channel settings and worktrees go through the bot too.
 
 import path from 'node:path'
 import type { Goke } from 'goke'
 
-import type { KimakiDb } from '../db.ts'
-import { action, DATA_DIR_HELP, fail, openCliDb, printJson } from './shared.ts'
+import { callBot } from '../http/rpc.ts'
+import { action, DATA_DIR_HELP, dataDirOrDefault, fail, printJson } from './shared.ts'
 
 const WORKTREE_TIMEOUT_MS = 25 * 60_000
-
-// SQLite and Discord helpers load lazily: see the note in shared.ts.
-async function addProject({
-  db,
-  guild,
-  directory,
-  machine,
-}: {
-  db: KimakiDb
-  guild: string | undefined
-  directory: string
-  machine: string
-}) {
-  const [{ readSavedCredentials }, { addProjectChannel, createApi, resolveGuildId }] = await Promise.all([
-    import('../credentials.ts'),
-    import('../project.ts'),
-  ])
-  const credentials = await readSavedCredentials({ db })
-  if (credentials instanceof Error) return credentials
-  if (!credentials) return new Error('No saved bot credentials. Start kimaki once to onboard.')
-  const guildId = await resolveGuildId({ db, guildId: guild })
-  if (guildId instanceof Error) return guildId
-  const api = createApi({ token: credentials.token, restUrl: process.env['KIMAKI_DISCORD_REST_URL'] ?? null })
-  const added = await addProjectChannel({ api, db, guildId, directory, machine })
-  return added
-}
 
 export function registerProjectCommands(cli: Goke) {
   cli
@@ -41,16 +15,11 @@ export function registerProjectCommands(cli: Goke) {
     .option('--data-dir <path>', DATA_DIR_HELP)
     .option('--json', 'Output as JSON')
     .action(async (options) => {
-      const { listProjects } = await import('../project.ts')
-      const opened = await openCliDb(options.dataDir)
-      const rows = await listProjects({ db: opened.db })
-      await opened.close()
-      if (rows instanceof Error) fail(rows)
-      if (options.json)
-        return printJson(
-          rows.map((row) => ({ channelId: row.channel_id, directory: row.directory, guildId: row.guild_id })),
-        )
-      for (const row of rows) process.stdout.write(`<#${row.channel_id}> ${row.directory}\n`)
+      const result = await callBot({ dataDir: dataDirOrDefault(options.dataDir), route: 'project.list', input: {} })
+      if (result instanceof Error) fail(result)
+      const rows = result.data
+      if (options.json) return printJson(rows)
+      for (const row of rows) process.stdout.write(`<#${row.channelId}> ${row.directory}\n`)
     })
 
   cli
@@ -59,18 +28,18 @@ export function registerProjectCommands(cli: Goke) {
     .option('-g, --guild <guildId>', 'Server (default: the one with Kimaki channels)')
     .option('--machine-name <name>', 'Machine name of a new category and of a channel name suffix (default: hostname)')
     .action(async (directory, options) => {
-      const { defaultMachineName } = await import('../project.ts')
-      const opened = await openCliDb(options.dataDir)
-      const result = await addProject({
-        db: opened.db,
-        guild: options.guild,
-        directory: path.resolve(directory ?? process.cwd()),
-        machine: options.machineName ?? defaultMachineName(),
+      const result = await callBot({
+        dataDir: dataDirOrDefault(options.dataDir),
+        route: 'project.add',
+        input: {
+          directory: path.resolve(directory ?? process.cwd()),
+          guild: options.guild,
+          machine: options.machineName,
+        },
       })
-      await opened.close()
       if (result instanceof Error) fail(result)
       process.stdout.write(
-        `${result.created ? 'Added' : 'Already added'} <#${result.channelId}> for ${result.directory}\n`,
+        `${result.data.created ? 'Added' : 'Already added'} <#${result.data.channelId}> for ${result.data.directory}\n`,
       )
     })
 }

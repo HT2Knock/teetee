@@ -1,25 +1,26 @@
 #!/usr/bin/env bun
 // kimaki entrypoint. `kimaki` starts the bot and onboards on first start;
-// the subcommands live in src/cli/*.ts, one module per job.
+// the subcommands live in src/adapters/cli/*.ts, one module per job.
 // Startup must stay light: bot modules (main.ts, onboarding.ts, scheduler.ts)
 // are imported lazily inside the commands that need them.
 
 import { goke } from 'goke'
 
-import { registerBotCommands, registerLoginCommands, registerStartCommand } from './cli/bot.ts'
-import { registerAgentUiCommands, registerDiscordCommands } from './cli/discord.ts'
+import { registerBotCommands, registerLoginCommands } from './adapters/cli/bot.ts'
+import { registerAgentUiCommands, registerDiscordCommands } from './adapters/cli/discord.ts'
 import {
   registerChannelPreferenceCommands,
   registerChannelWorktreeCommand,
   registerProjectCommands,
   registerWorktreeCommands,
-} from './cli/project.ts'
-import { registerScheduleCommands, registerSendCommand } from './cli/schedule.ts'
+} from './adapters/cli/project.ts'
+import { registerScheduleCommands, registerSendCommand } from './adapters/cli/schedule.ts'
+import { registerStartCommand } from './adapters/cli/start.ts'
 import {
   registerSessionActionCommands,
   registerSessionHistoryCommands,
   registerSessionQueryCommands,
-} from './cli/session.ts'
+} from './adapters/cli/session.ts'
 
 const cli = goke('kimaki')
 
