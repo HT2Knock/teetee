@@ -21,10 +21,23 @@ import dedent from 'string-dedent'
 
 import { API } from '@discordjs/core/http-only'
 
-import { ConfigError, DbError, DiscordError, OpenCodeMissingError, type OpenCodeV1Error, type OpenCodeVersionError, attempt } from './errors.ts'
+import {
+  ConfigError,
+  DbError,
+  DiscordError,
+  OpenCodeMissingError,
+  type OpenCodeV1Error,
+  type OpenCodeVersionError,
+  attempt,
+} from './errors.ts'
 import { NOTIFY_MESSAGE_FLAGS } from './format-parts.ts'
 import { createLogger } from './logger.ts'
-import { checkOpencode, findOpencodeBinary, installedOpencodeBinary, OPENCODE_INSTALL_COMMAND } from './opencode-server.ts'
+import {
+  checkOpencode,
+  findOpencodeBinary,
+  installedOpencodeBinary,
+  OPENCODE_INSTALL_COMMAND,
+} from './opencode-server.ts'
 import type { Bot } from './bot.ts'
 import { startSession } from './input.ts'
 import { addProjectChannel, defaultChannelName, defaultProjectDirectory } from './project.ts'
@@ -39,11 +52,21 @@ const DEFAULT_CHANNEL_TOPIC =
 // Waits until a self-hosted bot is in at least one server. A gateway client
 // in no server cannot be fixed by waiting: the install URL must be opened
 // again (V1 behavior), so that is an error with the URL.
-async function waitForGuild({ discord, installUrl, gateway }: { discord: Client; installUrl: string; gateway: boolean }): Promise<ConfigError | Guild> {
+async function waitForGuild({
+  discord,
+  installUrl,
+  gateway,
+}: {
+  discord: Client
+  installUrl: string
+  gateway: boolean
+}): Promise<ConfigError | Guild> {
   const first = discord.guilds.cache.first()
   if (first) return first
   if (gateway) {
-    return new ConfigError({ reason: `The Kimaki bot is in no Discord server. Open this URL to add it (do not share it, it contains your credentials), then run kimaki again: ${installUrl}` })
+    return new ConfigError({
+      reason: `The Kimaki bot is in no Discord server. Open this URL to add it (do not share it, it contains your credentials), then run kimaki again: ${installUrl}`,
+    })
   }
   logger.log(`bot is in no server yet, install it: ${installUrl}`)
   process.stderr.write(`\nAdd the bot to your Discord server:\n${installUrl}\n\nWaiting...\n`)
@@ -96,22 +119,31 @@ export async function ensureOpencode({
   // The script is bash-only; OPENCODE_PATH points at a binary the user chose.
   if (process.platform === 'win32' || process.env['OPENCODE_PATH']) return missing
   if (process.stdin.isTTY) {
-    const confirmed = await clack.confirm({ message: `Kimaki requires OpenCode 2. Install it now with \`${OPENCODE_INSTALL_COMMAND}\`?` })
+    const confirmed = await clack.confirm({
+      message: `Kimaki requires OpenCode 2. Install it now with \`${OPENCODE_INSTALL_COMMAND}\`?`,
+    })
     if (clack.isCancel(confirmed) || !confirmed) return missing
   } else {
     logger.log(`OpenCode 2 not found, installing: ${OPENCODE_INSTALL_COMMAND}`)
   }
   // Script output goes to stderr: stdout is for `data:` events (logging rules in AGENTS.md).
   const exitCode = await new Promise<number | ConfigError>((resolve) => {
-    const child = spawn('/bin/bash', ['-c', OPENCODE_INSTALL_COMMAND], { stdio: ['ignore', 2, 2], signal: AbortSignal.timeout(600_000) })
+    const child = spawn('/bin/bash', ['-c', OPENCODE_INSTALL_COMMAND], {
+      stdio: ['ignore', 2, 2],
+      signal: AbortSignal.timeout(600_000),
+    })
     child.on('error', (cause) => resolve(new ConfigError({ reason: 'OpenCode install failed to run', cause })))
     child.on('close', (code) => resolve(code ?? 1))
   })
   if (exitCode instanceof Error) return exitCode
-  if (exitCode !== 0) return new ConfigError({ reason: `OpenCode install exited with code ${exitCode}. ${missing.message}` })
+  if (exitCode !== 0)
+    return new ConfigError({ reason: `OpenCode install exited with code ${exitCode}. ${missing.message}` })
   const installed = await findOpencodeBinary()
   if (installed instanceof Error) return installed
-  if (installed === null) return new ConfigError({ reason: `OpenCode install finished but ${installedOpencodeBinary()} does not run. ${missing.message}` })
+  if (installed === null)
+    return new ConfigError({
+      reason: `OpenCode install finished but ${installedOpencodeBinary()} does not run. ${missing.message}`,
+    })
   logger.info(`installed OpenCode 2 at ${installed}`)
 }
 
@@ -210,13 +242,14 @@ export async function runOnboarding({
   machine: string
   // Gateway installs report who installed the bot; else the guild owner.
   installerId?: string | null
-}): Promise<
-  Error | OnboardingResult
-> {
+}): Promise<Error | OnboardingResult> {
   const { db } = bot
   const directory = defaultProjectDirectory({ dataDir })
-  const projectRows = await db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories WHERE channel_type = ${'text'}`
-    .catch((e) => new DbError({ operation: 'read channel_directories', cause: e }))
+  const projectRows = await db<
+    ChannelDirectoryRow[]
+  >`SELECT * FROM channel_directories WHERE channel_type = ${'text'}`.catch(
+    (e) => new DbError({ operation: 'read channel_directories', cause: e }),
+  )
   if (projectRows instanceof Error) return projectRows
   const projects = parseRows<ChannelDirectoryRow>('channel_directories', projectRows)
   const mapped = projects.find((project) => project.directory === directory)

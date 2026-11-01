@@ -20,10 +20,7 @@ import { OpenCode, type OpenCodeClient } from '@opencode/client'
 import { Service } from '@opencode/client/service'
 import { ChannelType, ComponentType, type APIMessage } from 'discord.js'
 import { DigitalDiscord } from 'discord-digital-twin/src'
-import {
-  buildDeterministicOpencode2Config,
-  type DeterministicMatcher,
-} from 'opencode-deterministic-provider'
+import { buildDeterministicOpencode2Config, type DeterministicMatcher } from 'opencode-deterministic-provider'
 
 import { disabledAnalytics, type Analytics } from '../analytics.ts'
 import { GATEWAY_APP_ID, saveCredentials, type Credentials } from '../credentials.ts'
@@ -106,7 +103,10 @@ export async function startOpencodeTestServer({
   // More deterministic models next to TEST_MODEL, e.g. with thinking variants.
   models?: Record<string, { name: string; variants?: Array<{ id: string }> }>
   // Agent overrides and custom agents (config `agents`).
-  agents?: Record<string, { description?: string; mode?: 'primary' | 'subagent' | 'all'; hidden?: boolean; model?: string }>
+  agents?: Record<
+    string,
+    { description?: string; mode?: 'primary' | 'subagent' | 'all'; hidden?: boolean; model?: string }
+  >
   // MCP servers (config `mcp.servers`).
   mcp?: { servers: Record<string, { type: 'local'; command: string[] }> }
   plugins?: string[]
@@ -141,7 +141,10 @@ export async function startOpencodeTestServer({
     OPENCODE_CONFIG_CONTENT: JSON.stringify({
       ...config,
       providers: Object.fromEntries(
-        Object.entries(config.providers).map(([id, provider]) => [id, { ...provider, models: { ...provider.models, ...models } }]),
+        Object.entries(config.providers).map(([id, provider]) => [
+          id,
+          { ...provider, models: { ...provider.models, ...models } },
+        ]),
       ),
       commands,
       agents,
@@ -164,11 +167,10 @@ export async function startOpencodeTestServer({
   async function start() {
     // A fresh port per start, like a restarted or upgraded user service.
     const port = await freePort()
-    current.child = spawn(
-      opencodeBinary(),
-      ['serve', '--service', '--port', String(port), '--hostname', '127.0.0.1'],
-      { env, stdio: 'ignore' },
-    )
+    current.child = spawn(opencodeBinary(), ['serve', '--service', '--port', String(port), '--hostname', '127.0.0.1'], {
+      env,
+      stdio: 'ignore',
+    })
     const deadline = Date.now() + 60_000
     while (Date.now() < deadline) {
       const endpoint = await Service.discover({ file: serviceFile }).catch(() => undefined)
@@ -266,7 +268,11 @@ export type FakeLive = {
 // - The sideband speaks every speakable append verbatim: an assistant turn plus tone RTP.
 // - POST /responses streams the next scripted reply as Responses SSE.
 export async function startFakeLive(): Promise<FakeLive> {
-  const [{ WebSocketServer }, werift, { default: OpusScript }] = await Promise.all([import('ws'), import('werift'), import('opusscript')])
+  const [{ WebSocketServer }, werift, { default: OpusScript }] = await Promise.all([
+    import('ws'),
+    import('werift'),
+    import('opusscript'),
+  ])
   const port = await freePort()
   const counter = { id: 0, voiced: 0 }
   const nextId = (prefix: string) => `${prefix}_${++counter.id}`
@@ -282,7 +288,12 @@ export async function startFakeLive(): Promise<FakeLive> {
     return Buffer.from(encoder.encode(pcm, 960))
   })
   encoder.delete()
-  type FakeCall = { peer: InstanceType<typeof werift.RTCPeerConnection>; socket: import('ws').WebSocket | null; spoken: number; rtp: { sequence: number; timestamp: number } }
+  type FakeCall = {
+    peer: InstanceType<typeof werift.RTCPeerConnection>
+    socket: import('ws').WebSocket | null
+    spoken: number
+    rtp: { sequence: number; timestamp: number }
+  }
   const calls = new Map<string, FakeCall>()
   const seenOutputs = new Set<string>()
 
@@ -314,7 +325,12 @@ export async function startFakeLive(): Promise<FakeLive> {
     send(call, { type: 'turn.done', turn: { id: nextId('turn'), role: 'assistant', transcript: text } })
     const [transceiver] = call.peer.getTransceivers()
     for (const opus of tone) {
-      const header = new werift.RtpHeader({ payloadType: 111, sequenceNumber: call.rtp.sequence, timestamp: call.rtp.timestamp, marker: false })
+      const header = new werift.RtpHeader({
+        payloadType: 111,
+        sequenceNumber: call.rtp.sequence,
+        timestamp: call.rtp.timestamp,
+        marker: false,
+      })
       call.rtp.sequence = (call.rtp.sequence + 1) & 0xffff
       call.rtp.timestamp = (call.rtp.timestamp + 960) >>> 0
       void transceiver?.sender.sendRtp(new werift.RtpPacket(header, opus))
@@ -332,7 +348,9 @@ export async function startFakeLive(): Promise<FakeLive> {
     const speech = { active: false, silentFrames: 0 }
     peer.getTransceivers()[0]!.receiver.track.onReceiveRtp.subscribe((rtp) => {
       const pcm = Buffer.from(decoder.decode(rtp.payload))
-      const loud = Array.from({ length: pcm.length / 2 }, (_, i) => Math.abs(pcm.readInt16LE(i * 2))).some((sample) => sample > 500)
+      const loud = Array.from({ length: pcm.length / 2 }, (_, i) => Math.abs(pcm.readInt16LE(i * 2))).some(
+        (sample) => sample > 500,
+      )
       if (loud) {
         counter.voiced++
         speech.active = true
@@ -343,17 +361,32 @@ export async function startFakeLive(): Promise<FakeLive> {
       speech.active = false
       const text = fake.transcripts.shift() ?? ''
       send(call, { type: 'turn.done', turn: { id: nextId('turn'), role: 'user', transcript: text } })
-      send(call, { type: 'delegation.created', item: { id: nextId('item'), type: 'delegation', target: 'client', content: [{ type: 'input_text', text }] } })
+      send(call, {
+        type: 'delegation.created',
+        item: { id: nextId('item'), type: 'delegation', target: 'client', content: [{ type: 'input_text', text }] },
+      })
     })
     await peer.setLocalDescription(await peer.createAnswer())
     return { callId, sdp: peer.localDescription!.sdp }
   }
 
   // Responses SSE for one request: the next scripted reply, as finished output items.
-  function respond(body: { instructions?: string; input?: Array<{ type?: string; role?: string; call_id?: string; output?: string; name?: string; content?: Array<{ text?: string }> }> }) {
+  function respond(body: {
+    instructions?: string
+    input?: Array<{
+      type?: string
+      role?: string
+      call_id?: string
+      output?: string
+      name?: string
+      content?: Array<{ text?: string }>
+    }>
+  }) {
     fake.backendInstructions.push(body.instructions ?? '')
     const input = body.input ?? []
-    const names = new Map(input.flatMap((item) => (item.type === 'function_call' && item.call_id ? [[item.call_id, item.name ?? '']] : [])))
+    const names = new Map(
+      input.flatMap((item) => (item.type === 'function_call' && item.call_id ? [[item.call_id, item.name ?? '']] : [])),
+    )
     for (const item of input) {
       if (item.type !== 'function_call_output' || !item.call_id || seenOutputs.has(item.call_id)) continue
       seenOutputs.add(item.call_id)
@@ -363,10 +396,20 @@ export async function startFakeLive(): Promise<FakeLive> {
     if (last?.type === 'message' && last.role === 'user') fake.backendInputs.push(last.content?.[0]?.text ?? '')
     const reply = fake.replies.shift()
     const items: ToolInput[] = []
-    if (reply?.type === 'say') items.push({ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: reply.text }] })
+    if (reply?.type === 'say')
+      items.push({ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: reply.text }] })
     const call = reply?.type === 'call' ? reply : reply?.then
-    if (call) items.push({ type: 'function_call', call_id: nextId('call'), name: call.name, arguments: JSON.stringify(call.args) })
-    const events = [...items.map((item) => ({ type: 'response.output_item.done', item })), { type: 'response.completed', response: {} }]
+    if (call)
+      items.push({
+        type: 'function_call',
+        call_id: nextId('call'),
+        name: call.name,
+        arguments: JSON.stringify(call.args),
+      })
+    const events = [
+      ...items.map((item) => ({ type: 'response.output_item.done', item })),
+      { type: 'response.completed', response: {} },
+    ]
     return events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('')
   }
 
@@ -399,7 +442,12 @@ export async function startFakeLive(): Promise<FakeLive> {
       void call.peer.close()
     })
     socket.on('message', (raw) => {
-      const event = JSON.parse(raw.toString()) as { type: string; channel?: string; delegation_item_id?: string; content?: Array<{ text?: string }> }
+      const event = JSON.parse(raw.toString()) as {
+        type: string
+        channel?: string
+        delegation_item_id?: string
+        content?: Array<{ text?: string }>
+      }
       if (event.type === 'session.close') {
         send(call, { type: 'session.closed', reason: 'client_request' })
         socket.close(1000)
@@ -444,7 +492,10 @@ export async function startTwin({
   const discord = new DigitalDiscord({
     dbUrl: `file:${path.join(root, 'twin.db')}`,
     voice,
-    ...(gateway && { gatewayProxy: true, botToken: `${crypto.randomUUID()}:${crypto.randomBytes(32).toString('hex')}` }),
+    ...(gateway && {
+      gatewayProxy: true,
+      botToken: `${crypto.randomUUID()}:${crypto.randomBytes(32).toString('hex')}`,
+    }),
     guild: { name: 'Kimaki Test', ownerId: TEST_USER_ID },
     channels: [
       { id: channelId, name: 'project', type: ChannelType.GuildText },
@@ -531,7 +582,12 @@ export async function startTestBot({
 }): Promise<BotHandle> {
   // What credential resolution saves in production; `kimaki project add` reads it.
   const credentials: Credentials = twin.discord.botToken.includes(':')
-    ? { mode: 'gateway', appId: GATEWAY_APP_ID, token: twin.discord.botToken, baseUrl: new URL('/', twin.discord.restUrl).toString() }
+    ? {
+        mode: 'gateway',
+        appId: GATEWAY_APP_ID,
+        token: twin.discord.botToken,
+        baseUrl: new URL('/', twin.discord.restUrl).toString(),
+      }
     : { mode: 'self_hosted', appId: twin.discord.botUserId, token: twin.discord.botToken, baseUrl: null }
   if (saveTwinCredentials) {
     const opened = await openDb({ dataDir, migrate: true })
@@ -540,7 +596,7 @@ export async function startTestBot({
     opened.close()
     if (saved instanceof Error) throw saved
   }
-  const lock = await startLockServer({ port: lockPort ?? await freePort(), dataDir })
+  const lock = await startLockServer({ port: lockPort ?? (await freePort()), dataDir })
   if (lock instanceof Error) throw lock
   const bot = await startBot({
     dataDir,
@@ -573,14 +629,22 @@ export function manualClock(start: number): Clock & { set: (ms: number) => void;
   const state = { now: start }
   return {
     now: () => state.now,
-    set: (ms) => { state.now = ms },
-    advance: (ms) => { state.now += ms },
+    set: (ms) => {
+      state.now = ms
+    },
+    advance: (ms) => {
+      state.now += ms
+    },
   }
 }
 
 // Scheduling e2e helpers. `request` is the lock-server call the CLI makes,
 // without paying a CLI process start; `cli` runs the real command.
-export function schedulingKit({ suite, dataDir, clock }: {
+export function schedulingKit({
+  suite,
+  dataDir,
+  clock,
+}: {
   suite: () => { bot: BotHandle; twin: TestTwin; server: OpencodeTestServer }
   dataDir: string
   clock: ReturnType<typeof manualClock>
@@ -588,7 +652,11 @@ export function schedulingKit({ suite, dataDir, clock }: {
   async function request<N extends LockRouteName>(route: N, input: LockRouteInput<N>): Promise<unknown> {
     const { bot } = suite()
     const token = fs.readFileSync(path.join(dataDir, 'lock-token'), 'utf8')
-    const response = await fetch(`http://127.0.0.1:${bot.lock.port}/kimaki/${route}`, { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.stringify(input) })
+    const response = await fetch(`http://127.0.0.1:${bot.lock.port}/kimaki/${route}`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}` },
+      body: JSON.stringify(input),
+    })
     const body: unknown = await response.json()
     if (!response.ok) throw new Error(`${route} failed: ${JSON.stringify(body)}`)
     return body
@@ -603,13 +671,20 @@ export function schedulingKit({ suite, dataDir, clock }: {
     async cli(args: string[]): Promise<string> {
       const { bot, server } = suite()
       const result = await promisify(execFile)(...cliCommand([...args, '--data-dir', dataDir]), {
-        env: { ...process.env, KIMAKI_LOCK_PORT: String(bot.lock.port), KIMAKI_OPENCODE_SERVICE_FILE: server.serviceFile },
+        env: {
+          ...process.env,
+          KIMAKI_LOCK_PORT: String(bot.lock.port),
+          KIMAKI_OPENCODE_SERVICE_FILE: server.serviceFile,
+        },
       })
       return result.stdout
     },
     // `kimaki send --channel <project> --send-at …`
     async schedule(input: Omit<LockRouteInput<'send'>, 'channelId'>) {
-      return (await request('send', { channelId: suite().twin.channelId, ...input })) as { routineId: number; nextRunAt: string }
+      return (await request('send', { channelId: suite().twin.channelId, ...input })) as {
+        routineId: number
+        nextRunAt: string
+      }
     },
     async listTasks() {
       const opened = await openDb({ dataDir, migrate: false })
@@ -672,7 +747,9 @@ export async function startFakeGemini(): Promise<FakeGemini> {
     onBody: (raw, _request, response) => {
       const body = JSON.parse(raw.toString('utf8')) as {
         contents: Array<{ parts: Array<{ inlineData?: { data: string; mimeType: string } }> }>
-        tools: Array<{ functionDeclarations: Array<{ name: string; parameters: { properties: { route?: { enum?: unknown } } } }> }>
+        tools: Array<{
+          functionDeclarations: Array<{ name: string; parameters: { properties: { route?: { enum?: unknown } } } }>
+        }>
       }
       const declaration = body.tools[0]!.functionDeclarations[0]!
       const audio = body.contents[0]!.parts.find((part) => part.inlineData)!.inlineData!
@@ -681,7 +758,9 @@ export async function startFakeGemini(): Promise<FakeGemini> {
       response.setHeader('content-type', 'application/json')
       response.end(
         JSON.stringify({
-          candidates: [{ finishReason: 'STOP', content: { parts: [{ functionCall: { name: declaration.name, args } }] } }],
+          candidates: [
+            { finishReason: 'STOP', content: { parts: [{ functionCall: { name: declaration.name, args } }] } },
+          ],
         }),
       )
     },
@@ -729,7 +808,11 @@ export async function startFakeOpenAI({ result }: { result: FakeTranscription })
           choices: [
             {
               finish_reason: 'tool_calls',
-              message: { role: 'assistant', content: null, tool_calls: [{ type: 'function', function: { name: tool.name, arguments: JSON.stringify(result) } }] },
+              message: {
+                role: 'assistant',
+                content: null,
+                tool_calls: [{ type: 'function', function: { name: tool.name, arguments: JSON.stringify(result) } }],
+              },
             },
           ],
         }),
@@ -742,7 +825,13 @@ export async function startFakeOpenAI({ result }: { result: FakeTranscription })
 export type FakeChatGPT = {
   baseUrl: string
   // Each POST /transcribe, as ChatGPT received it.
-  requests: Array<{ authorization: string | null; accountId: string | null; filename: string; type: string; audio: Buffer }>
+  requests: Array<{
+    authorization: string | null
+    accountId: string | null
+    filename: string
+    type: string
+    audio: Buffer
+  }>
   // Reply status; tests set 401 to check the API key fallback.
   status: number
   stop: () => Promise<void>
@@ -753,7 +842,9 @@ export async function startFakeChatGPT({ text }: { text: string }): Promise<Fake
   const fake: Omit<FakeChatGPT, 'baseUrl' | 'stop'> = { requests: [], status: 200 }
   const server = await startFakeServer({
     onBody: async (raw, request, response) => {
-      const headers = new Headers(Object.entries(request.headers).flatMap(([key, value]) => (typeof value === 'string' ? [[key, value]] : [])))
+      const headers = new Headers(
+        Object.entries(request.headers).flatMap(([key, value]) => (typeof value === 'string' ? [[key, value]] : [])),
+      )
       const form = await new Request('http://fake/transcribe', { method: 'POST', headers, body: raw }).formData()
       const file = form.get('file')
       if (!(file instanceof File)) throw new Error('fake ChatGPT: no file field')
@@ -773,9 +864,19 @@ export async function startFakeChatGPT({ text }: { text: string }): Promise<Fake
 }
 
 // An OpenCode database with only the credential table and one ChatGPT OAuth row.
-export async function writeOpencodeCredential({ file, access, expires }: { file: string; access: string; expires: number }) {
+export async function writeOpencodeCredential({
+  file,
+  access,
+  expires,
+}: {
+  file: string
+  access: string
+  expires: number
+}) {
   const client = new Database(file)
-  client.run('CREATE TABLE credential (id text PRIMARY KEY, integration_id text, label text NOT NULL, value text NOT NULL, connector_id text, method_id text, active integer, time_created integer NOT NULL, time_updated integer NOT NULL)')
+  client.run(
+    'CREATE TABLE credential (id text PRIMARY KEY, integration_id text, label text NOT NULL, value text NOT NULL, connector_id text, method_id text, active integer, time_created integer NOT NULL, time_updated integer NOT NULL)',
+  )
   client.run(
     `INSERT INTO credential (id, integration_id, label, value, time_created, time_updated) VALUES ('cred_test', 'openai', 'OAuth', ?, 0, 0)`,
     [JSON.stringify({ type: 'oauth', methodID: 'chatgpt-browser', access, refresh: 'refresh-test', expires })],

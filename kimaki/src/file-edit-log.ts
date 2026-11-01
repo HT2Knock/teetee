@@ -31,7 +31,15 @@ function resolveToolPath(directory: string, file: string): string {
 }
 
 // Absolute paths a tool call wrote. v2 inputs: edit/write `path`, patch `patchText`.
-export function extractEditedFiles({ tool, input, directory }: { tool: string; input: unknown; directory: string }): string[] {
+export function extractEditedFiles({
+  tool,
+  input,
+  directory,
+}: {
+  tool: string
+  input: unknown
+  directory: string
+}): string[] {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return []
   const fields = new Map(Object.entries(input))
   const name = fileEditTool(tool)
@@ -41,8 +49,13 @@ export function extractEditedFiles({ tool, input, directory }: { tool: string; i
   }
   const patchText = fields.get('patchText')
   if (name !== 'apply_patch' || typeof patchText !== 'string') return []
-  const headers = [...patchText.matchAll(/^\*\*\* (?:Add|Update|Delete) File:\s+(.+)$/gm), ...patchText.matchAll(/^\*\*\* Move to:\s+(.+)$/gm)]
-  return [...new Set(headers.map((match) => match[1]!.trim()).filter(Boolean))].map((file) => resolveToolPath(directory, file))
+  const headers = [
+    ...patchText.matchAll(/^\*\*\* (?:Add|Update|Delete) File:\s+(.+)$/gm),
+    ...patchText.matchAll(/^\*\*\* Move to:\s+(.+)$/gm),
+  ]
+  return [...new Set(headers.map((match) => match[1]!.trim()).filter(Boolean))].map((file) =>
+    resolveToolPath(directory, file),
+  )
 }
 
 // Absolute path with symlinks resolved, like the real paths OpenCode reports. A missing
@@ -57,7 +70,15 @@ export async function canonicalPath(file: string): Promise<string> {
 }
 
 // Sessions that edited `filePath`, newest edit first.
-export async function editorsForFile({ events, filePath, cwd }: { events: FileEditEvent[]; filePath: string; cwd: string }) {
+export async function editorsForFile({
+  events,
+  filePath,
+  cwd,
+}: {
+  events: FileEditEvent[]
+  filePath: string
+  cwd: string
+}) {
   const target = await canonicalPath(path.resolve(cwd, filePath))
   const latest = new Map<string, number>()
   for (const event of events) {
@@ -93,9 +114,13 @@ function parseEvent(line: string): FileEditEvent | undefined {
 export async function loadFileEditEvents({ dataDir }: { dataDir: string }): Promise<FilesystemError | FileEditEvent[]> {
   const raw = await fs.promises
     .readFile(path.join(dataDir, FILE_EDIT_EVENTS_FILENAME), 'utf8')
-    .catch((cause: NodeJS.ErrnoException) => (cause.code === 'ENOENT' ? '' : new FilesystemError({ operation: 'read file edit log', cause })))
+    .catch((cause: NodeJS.ErrnoException) =>
+      cause.code === 'ENOENT' ? '' : new FilesystemError({ operation: 'read file edit log', cause }),
+    )
   if (raw instanceof Error) return raw
-  return raw.split('\n').flatMap((line) => (line.trim() ? [parseEvent(line)].filter((event) => event !== undefined) : []))
+  return raw
+    .split('\n')
+    .flatMap((line) => (line.trim() ? [parseEvent(line)].filter((event) => event !== undefined) : []))
 }
 
 // Keeps the newest event per (session, file), then the newest `maxEvents`.
@@ -141,7 +166,9 @@ export async function appendFileEditEvents({
       .then(() => fs.promises.appendFile(logPath, events.map((event) => `${JSON.stringify(event)}\n`).join('')))
       .catch((cause) => new FilesystemError({ operation: 'append file edit log', cause }))
     if (appended instanceof Error) return appended
-    const stats = await fs.promises.stat(logPath).catch((cause) => new FilesystemError({ operation: 'stat file edit log', cause }))
+    const stats = await fs.promises
+      .stat(logPath)
+      .catch((cause) => new FilesystemError({ operation: 'stat file edit log', cause }))
     if (stats instanceof Error) return stats
     if (stats.size >= compactAfterBytes) return compact({ dataDir, maxEvents })
   }
@@ -151,10 +178,28 @@ export async function appendFileEditEvents({
 }
 
 // Records the files a completed tool call edited. Other tools are ignored.
-export async function recordToolEdits({ dataDir, directory, sessionId, tool, input }: { dataDir: string; directory: string; sessionId: string; tool: string; input: unknown }) {
+export async function recordToolEdits({
+  dataDir,
+  directory,
+  sessionId,
+  tool,
+  input,
+}: {
+  dataDir: string
+  directory: string
+  sessionId: string
+  tool: string
+  input: unknown
+}) {
   const name = fileEditTool(tool)
   if (!name) return
   const at = Date.now()
-  const events = extractEditedFiles({ tool, input, directory }).map((file): FileEditEvent => ({ v: 1, at, sessionId, file, tool: name }))
+  const events = extractEditedFiles({ tool, input, directory }).map((file): FileEditEvent => ({
+    v: 1,
+    at,
+    sessionId,
+    file,
+    tool: name,
+  }))
   return appendFileEditEvents({ dataDir, events })
 }

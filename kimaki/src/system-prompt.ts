@@ -45,7 +45,9 @@ export function baseInstructions({
   const userArg = ` --user '${userId}'`
   const parentArg = ` --parent-session ${sessionId}`
   const topic = channelTopic?.trim()
-  const agentList = agents.map((agent) => `- \`${agent.name}\`${agent.description ? `: ${agent.description}` : ''}`).join('\n')
+  const agentList = agents
+    .map((agent) => `- \`${agent.name}\`${agent.description ? `: ${agent.description}` : ''}`)
+    .join('\n')
   const sections = [
     dedent`
       The user is reading your messages from inside Discord, via kimaki.dev.
@@ -539,7 +541,9 @@ export type PromptAttachment = z.infer<typeof PromptAttachmentSchema>
 // model can refer to "image 2". Inline ones are already in the message.
 export function attachmentsBlock(attachments: readonly PromptAttachment[]): string {
   if (attachments.length === 0) return ''
-  const lines = attachments.map((file, index) => `${index + 1}. ${file.name}${file.inline ? ' (inline)' : ''}: ${file.path}`)
+  const lines = attachments.map(
+    (file, index) => `${index + 1}. ${file.name}${file.inline ? ' (inline)' : ''}: ${file.path}`,
+  )
   return `<attachments>\nFiles of this message in the order the user attached them, saved on disk. Read the ones not marked inline with tools.\n${lines.join('\n')}\n</attachments>\n`
 }
 
@@ -585,7 +589,15 @@ function shortDescription(description: string, max = 160): string {
 
 // compact: skills as one short line each. GPT-Live instructions are capped at 16,384 tokens
 // (https://developers.openai.com/api/docs/guides/live-conversations#configuration-fields).
-function voiceCallContext({ agentsMd, skills, compact }: { agentsMd: { path: string; content: string } | null; skills: readonly VoiceCallSkill[]; compact: boolean }) {
+function voiceCallContext({
+  agentsMd,
+  skills,
+  compact,
+}: {
+  agentsMd: { path: string; content: string } | null
+  skills: readonly VoiceCallSkill[]
+  compact: boolean
+}) {
   const agentsBlock = agentsMd
     ? dedent`
         ## user instructions
@@ -603,8 +615,9 @@ function voiceCallContext({ agentsMd, skills, compact }: { agentsMd: { path: str
     if (compact) return `  <skill name="${escapeAttribute(skill.id)}">${description}</skill>`
     return `  <skill name="${escapeAttribute(skill.id)}" path="${escapeAttribute(skill.path)}">${description}</skill>`
   })
-  const skillsBlock = skills.length > 0
-    ? dedent`
+  const skillsBlock =
+    skills.length > 0
+      ? dedent`
         ## skills
 
         Skills are instruction files for specific tasks. Before you use a skill, read its SKILL.md with the shell tool (cat <path>) and follow it.
@@ -613,7 +626,7 @@ function voiceCallContext({ agentsMd, skills, compact }: { agentsMd: { path: str
         ${skillLines.join('\n')}
         </available-skills>
       `
-    : ''
+      : ''
   return [agentsBlock, skillsBlock].filter((block) => block !== '')
 }
 
@@ -707,8 +720,12 @@ function voiceCallReference({
 }: VoiceCallContext & { compact: boolean }): string[] {
   const userArgs = users.map((user) => `--user '${user.id}'`).join(' ')
   const userList = users.map((user) => `- ${user.username} (Discord ID ${user.id})`).join('\n')
-  const projectList = projects.map((project) => `- #${project.channelName}: channel ${project.channelId}, folder ${project.directory}`).join('\n')
-  const agentList = agents.map((agent) => `- ${agent.name}${agent.description ? `: ${agent.description}` : ''}`).join('\n')
+  const projectList = projects
+    .map((project) => `- #${project.channelName}: channel ${project.channelId}, folder ${project.directory}`)
+    .join('\n')
+  const agentList = agents
+    .map((agent) => `- ${agent.name}${agent.description ? `: ${agent.description}` : ''}`)
+    .join('\n')
   const base = dedent`
     ## users in the call
 

@@ -9,7 +9,20 @@ import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import { openDb } from './db.ts'
 import type { BotHandle } from './main.ts'
-import { cliCommand, scriptedTurn, seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, textParts, waitForFooter, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
+import {
+  cliCommand,
+  scriptedTurn,
+  seedProjectChannel,
+  startOpencodeTestServer,
+  startTestBot,
+  startTwin,
+  tempDataDir,
+  textParts,
+  waitForFooter,
+  warmUp,
+  type OpencodeTestServer,
+  type TestTwin,
+} from './test/harness.ts'
 import { send } from './input.ts'
 
 const exec = promisify(execFile)
@@ -23,14 +36,32 @@ beforeAll(async () => {
     startOpencodeTestServer({
       commands: { review: { template: 'Review this change: $ARGUMENTS' } },
       matchers: [
-        { id: 'review', priority: 500, when: { latestUserTextIncludes: 'Review this change: focus --focus security' }, then: { parts: textParts('reviewed with passthrough') } },
-        ...scriptedTurn({ marker: 'editor-marker', steps: [{ id: 'edit-write-1', tool: 'write', input: { path: 'edited.txt', content: 'by the agent\n' } }], finalText: 'wrote edited.txt' }),
-        ...scriptedTurn({ marker: 'fail-marker', steps: [{ id: 'fail-edit-1', tool: 'edit', input: { path: 'missing.txt', oldString: 'a', newString: 'b' } }], finalText: 'edit failed' }),
+        {
+          id: 'review',
+          priority: 500,
+          when: { latestUserTextIncludes: 'Review this change: focus --focus security' },
+          then: { parts: textParts('reviewed with passthrough') },
+        },
+        ...scriptedTurn({
+          marker: 'editor-marker',
+          steps: [{ id: 'edit-write-1', tool: 'write', input: { path: 'edited.txt', content: 'by the agent\n' } }],
+          finalText: 'wrote edited.txt',
+        }),
+        ...scriptedTurn({
+          marker: 'fail-marker',
+          steps: [{ id: 'fail-edit-1', tool: 'edit', input: { path: 'missing.txt', oldString: 'a', newString: 'b' } }],
+          finalText: 'edit failed',
+        }),
       ],
     }),
     startTwin(),
   ])
-  await seedProjectChannel({ dataDir, channelId: twin.channelId, guildId: twin.discord.guildId, directory: server.projectDirectory })
+  await seedProjectChannel({
+    dataDir,
+    channelId: twin.channelId,
+    guildId: twin.discord.guildId,
+    directory: server.projectDirectory,
+  })
   bot = await startTestBot({ dataDir, twin, server })
   await warmUp({ server })
 }, 60_000)
@@ -44,10 +75,18 @@ afterAll(async () => {
 function cli(args: string[]) {
   // Options must precede `--`: everything after it is passthrough.
   const separator = args.indexOf('--')
-  const withDataDir = separator === -1 ? [...args, '--data-dir', dataDir] : [...args.slice(0, separator), '--data-dir', dataDir, ...args.slice(separator)]
+  const withDataDir =
+    separator === -1
+      ? [...args, '--data-dir', dataDir]
+      : [...args.slice(0, separator), '--data-dir', dataDir, ...args.slice(separator)]
   return exec(...cliCommand(withDataDir), {
     cwd: server.projectDirectory,
-    env: { ...process.env, KIMAKI_LOCK_PORT: String(bot.lock.port), KIMAKI_OPENCODE_SERVICE_FILE: server.serviceFile, KIMAKI_DISCORD_REST_URL: twin.discord.restUrl },
+    env: {
+      ...process.env,
+      KIMAKI_LOCK_PORT: String(bot.lock.port),
+      KIMAKI_OPENCODE_SERVICE_FILE: server.serviceFile,
+      KIMAKI_DISCORD_REST_URL: twin.discord.restUrl,
+    },
   })
 }
 
@@ -70,7 +109,9 @@ test('session editors lists sessions that wrote a file, skips failed tool calls'
   // An edit of a missing file fails and must not be recorded.
   await newSession('fail-marker edit')
   const written = await cli(['session', 'editors', 'edited.txt', '--json'])
-  const failed = await cli(['session', 'editors', path.join(server.projectDirectory, 'missing.txt')]).catch((error: Error & { code: number }) => error)
+  const failed = await cli(['session', 'editors', path.join(server.projectDirectory, 'missing.txt')]).catch(
+    (error: Error & { code: number }) => error,
+  )
   expect(JSON.parse(written.stdout).map((row: { sessionId: string }) => row.sessionId)).toEqual([writer.sessionId])
   expect(failed instanceof Error && failed.code).toBe(1)
 })
@@ -103,15 +144,19 @@ test('session resume finds the project channel when SQLite stores a symlink alia
   if (opened instanceof Error) throw opened
   await opened.db`UPDATE channel_directories SET directory = ${alias} WHERE channel_id = ${twin.channelId}`
   opened.close()
+  let failure: unknown = null
   try {
     const source = await newSession('alias-source')
     const resumed = JSON.parse((await cli(['session', 'resume', source.sessionId])).stdout)
     expect(resumed.sessionId).toBe(source.sessionId)
-  } finally {
-    const restore = await openDb({ dataDir, migrate: false })
-    if (restore instanceof Error) throw restore
+  } catch (error) {
+    failure = error
+  }
+  const restore = await openDb({ dataDir, migrate: false })
+  if (!(restore instanceof Error)) {
     await restore.db`UPDATE channel_directories SET directory = ${server.projectDirectory} WHERE channel_id = ${twin.channelId}`
     restore.close()
-    fs.rmSync(path.dirname(alias), { recursive: true, force: true })
   }
+  fs.rmSync(path.dirname(alias), { recursive: true, force: true })
+  if (failure) throw failure
 })

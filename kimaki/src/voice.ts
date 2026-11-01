@@ -49,7 +49,11 @@ const TOOL_NAME = 'transcriptionResult'
 const MAX_ATTEMPTS = 3
 const RETRY_DELAY_MS = 500
 
-class TranscriptionError extends Data.TaggedError('TranscriptionError')<{ reason: string; message: string; cause?: unknown }> {
+class TranscriptionError extends Data.TaggedError('TranscriptionError')<{
+  reason: string
+  message: string
+  cause?: unknown
+}> {
   constructor({ reason, cause }: { reason: string; cause?: unknown }) {
     super({ reason, cause, message: `Transcription failed: ${reason}` })
   }
@@ -76,13 +80,19 @@ class TranscriptionBlockedError extends Data.TaggedError('TranscriptionBlockedEr
   }
 }
 
-class EmptyTranscriptionError extends Data.TaggedError('EmptyTranscriptionError')<{ message: string; cause?: unknown }> {
+class EmptyTranscriptionError extends Data.TaggedError('EmptyTranscriptionError')<{
+  message: string
+  cause?: unknown
+}> {
   constructor({ cause }: { cause?: unknown } = {}) {
     super({ cause, message: 'No request was transcribed. Record another voice message with the task to send.' })
   }
 }
 
-class NoTranscriptionKeyError extends Data.TaggedError('NoTranscriptionKeyError')<{ message: string; cause?: unknown }> {
+class NoTranscriptionKeyError extends Data.TaggedError('NoTranscriptionKeyError')<{
+  message: string
+  cause?: unknown
+}> {
   constructor({ cause }: { cause?: unknown } = {}) {
     super({
       cause,
@@ -92,7 +102,11 @@ class NoTranscriptionKeyError extends Data.TaggedError('NoTranscriptionKeyError'
   }
 }
 
-type TranscriptionFailure = TranscriptionError | TranscriptionApiError | TranscriptionBlockedError | EmptyTranscriptionError
+type TranscriptionFailure =
+  | TranscriptionError
+  | TranscriptionApiError
+  | TranscriptionBlockedError
+  | EmptyTranscriptionError
 
 export type VoiceRoute = 'steer' | 'queue' | 'btw' | 'new-session'
 
@@ -209,8 +223,16 @@ function buildTranscriptionTool({ agentNames, inSession }: { agentNames: readonl
   }
 }
 
-function transcriptionPrompt({ fileTree, agents }: { fileTree: string; agents: ReadonlyArray<{ name: string; description: string }> }) {
-  const agentList = agents.map((agent) => `- ${agent.name}${agent.description ? `: ${agent.description}` : ''}`).join('\n')
+function transcriptionPrompt({
+  fileTree,
+  agents,
+}: {
+  fileTree: string
+  agents: ReadonlyArray<{ name: string; description: string }>
+}) {
+  const agentList = agents
+    .map((agent) => `- ${agent.name}${agent.description ? `: ${agent.description}` : ''}`)
+    .join('\n')
   return dedent`
     Transcribe this audio for a coding agent. You MUST call the "${TOOL_NAME}" tool; text responses are ignored.
 
@@ -280,7 +302,9 @@ function geminiFinishError(finishReason: string | null): TranscriptionFailure | 
 }
 
 // The tool call or plain text of the answer parts.
-function geminiPartsResult(parts: ReadonlyArray<Record<string, unknown>>): TranscriptionFailure | TranscriptionResult | null {
+function geminiPartsResult(
+  parts: ReadonlyArray<Record<string, unknown>>,
+): TranscriptionFailure | TranscriptionResult | null {
   const call = parts.map((part) => part['functionCall']).find(isRecord)
   if (call?.['name'] === TOOL_NAME) return fromToolArguments(isRecord(call['args']) ? call['args'] : {})
   const text = parts.find((part) => typeof part['text'] === 'string' && part['thought'] !== true)?.['text']
@@ -295,7 +319,8 @@ function parseGeminiResponse(body: string): TranscriptionFailure | Transcription
   const candidate = (Array.isArray(parsed['candidates']) ? parsed['candidates'] : []).find(isRecord)
   if (!candidate) {
     const feedback = parsed['promptFeedback']
-    const blockReason = isRecord(feedback) && typeof feedback['blockReason'] === 'string' ? feedback['blockReason'] : null
+    const blockReason =
+      isRecord(feedback) && typeof feedback['blockReason'] === 'string' ? feedback['blockReason'] : null
     if (blockReason) return new TranscriptionBlockedError({ reason: blockReason })
     return new TranscriptionError({ reason: `Gemini returned no candidates: ${body.slice(0, 300)}` })
   }
@@ -346,7 +371,13 @@ function wavHeader({ dataLength, sampleRate, channels }: { dataLength: number; s
 }
 
 // PCM s16le 48 kHz mono from a prism stream -> WAV.
-function pcmToWav({ stream, label }: { stream: NodeJS.ReadableStream; label: string }): Promise<TranscriptionError | Buffer> {
+function pcmToWav({
+  stream,
+  label,
+}: {
+  stream: NodeJS.ReadableStream
+  label: string
+}): Promise<TranscriptionError | Buffer> {
   return new Promise((resolve) => {
     const chunks: Buffer[] = []
     stream.on('data', (chunk: Buffer) => chunks.push(chunk))
@@ -358,7 +389,9 @@ function pcmToWav({ stream, label }: { stream: NodeJS.ReadableStream; label: str
       }
       resolve(Buffer.concat([wavHeader({ dataLength: pcm.length, sampleRate: 48_000, channels: 1 }), pcm]))
     })
-    stream.on('error', (error: Error) => resolve(new TranscriptionError({ reason: `${label} failed: ${error.message}`, cause: error })))
+    stream.on('error', (error: Error) =>
+      resolve(new TranscriptionError({ reason: `${label} failed: ${error.message}`, cause: error })),
+    )
   })
 }
 
@@ -382,7 +415,10 @@ async function oggToWav(input: Buffer): Promise<TranscriptionError | Buffer> {
 async function m4aToWav(input: Buffer): Promise<TranscriptionError | Buffer> {
   const args = ['-analyzeduration', '0', '-loglevel', '0', '-f', 'mp4', '-i', 'pipe:0']
   const transcoder = attempt(
-    () => new prism.FFmpeg({ args: [...args, '-f', 's16le', '-acodec', 'pcm_s16le', '-ac', '1', '-ar', '48000', 'pipe:1'] }),
+    () =>
+      new prism.FFmpeg({
+        args: [...args, '-f', 's16le', '-acodec', 'pcm_s16le', '-ac', '1', '-ar', '48000', 'pipe:1'],
+      }),
     (cause) =>
       new TranscriptionError({
         reason: 'M4A voice messages with OpenAI need ffmpeg. Install it (brew install ffmpeg) or use a Gemini key',
@@ -415,7 +451,9 @@ async function postJson({ url, headers, body }: { url: string; headers: Record<s
     body: JSON.stringify(body),
   }).catch((cause) => new TranscriptionError({ reason: `request to ${url} failed`, cause }))
   if (response instanceof Error) return response
-  const text = await response.text().catch((cause) => new TranscriptionError({ reason: 'reading the response failed', cause }))
+  const text = await response
+    .text()
+    .catch((cause) => new TranscriptionError({ reason: 'reading the response failed', cause }))
   if (text instanceof Error) return text
   if (!response.ok) return new TranscriptionApiError({ status: String(response.status), body: text.slice(0, 500) })
   return text
@@ -428,8 +466,15 @@ async function requestGemini({ apiKey, baseUrl, prompt, audio, mediaType, tool }
     url: `${baseUrl}/models/${GEMINI_MODEL}:generateContent`,
     headers: { 'x-goog-api-key': apiKey },
     body: {
-      contents: [{ role: 'user', parts: [{ text: prompt }, { inlineData: { mimeType: mediaType, data: audio.toString('base64') } }] }],
-      tools: [{ functionDeclarations: [{ name: tool.name, description: tool.description, parameters: tool.inputSchema }] }],
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: prompt }, { inlineData: { mimeType: mediaType, data: audio.toString('base64') } }],
+        },
+      ],
+      tools: [
+        { functionDeclarations: [{ name: tool.name, description: tool.description, parameters: tool.inputSchema }] },
+      ],
       toolConfig: { functionCallingConfig: { mode: 'ANY', allowedFunctionNames: [TOOL_NAME] } },
       generationConfig: { temperature: 0.3, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 1024 } },
     },
@@ -450,7 +495,12 @@ async function requestOpenAI({ apiKey, baseUrl, prompt, audio, mediaType, tool }
       model: OPENAI_AUDIO_MODEL,
       temperature: 0.3,
       max_completion_tokens: 2048,
-      tools: [{ type: 'function', function: { name: tool.name, description: tool.description, parameters: tool.inputSchema } }],
+      tools: [
+        {
+          type: 'function',
+          function: { name: tool.name, description: tool.description, parameters: tool.inputSchema },
+        },
+      ],
       tool_choice: { type: 'function', function: { name: TOOL_NAME } },
       messages: [
         {
@@ -478,9 +528,9 @@ function isRetryable(error: TranscriptionFailure): boolean {
   return status === 408 || status === 409 || status === 429 || status >= 500
 }
 
-async function withRetries(attempt: () => Promise<TranscriptionFailure | TranscriptionResult>) {
+async function withRetries(run: () => Promise<TranscriptionFailure | TranscriptionResult>) {
   for (let number = 1; ; number++) {
-    const result = await attempt()
+    const result = await run()
     if (!(result instanceof Error)) return result
     const retry = number < MAX_ATTEMPTS && isRetryable(result)
     logger.warn(`transcription attempt ${number}/${MAX_ATTEMPTS} failed${retry ? ', retrying' : ''}`, result)
@@ -501,7 +551,12 @@ async function transcriptionFromResponse(response: Response): Promise<Transcript
 
 // Free Whisper through kimaki.dev, authenticated with the gateway client
 // credentials (website POST /api/transcribe). No routing: always steer.
-async function transcribeViaGateway({ audio, mediaType, clientId, clientSecret }: {
+async function transcribeViaGateway({
+  audio,
+  mediaType,
+  clientId,
+  clientSecret,
+}: {
   audio: Buffer
   mediaType: string
   clientId: string
@@ -527,25 +582,42 @@ async function transcribeViaGateway({ audio, mediaType, clientId, clientSecret }
 
 type ChatGPTCredential = { accessToken: string; accountId: string | null }
 
-const CHATGPT_EXTENSIONS: Record<string, string> = { 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/mpeg': 'mp3', 'audio/wav': 'wav' }
+const CHATGPT_EXTENSIONS: Record<string, string> = {
+  'audio/ogg': 'ogg',
+  'audio/mp4': 'm4a',
+  'audio/mpeg': 'mp3',
+  'audio/wav': 'wav',
+}
 
 // Same claim the Codex CLI sends as chatgpt-account-id.
 function chatGPTAccountId(accessToken: string): string | null {
   const payload = accessToken.split('.')[1] ?? ''
-  const claims = attempt(() => JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as unknown, () => null)
+  const claims = attempt(
+    () => JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as unknown,
+    () => null,
+  )
   const auth = isRecord(claims) ? claims['https://api.openai.com/auth'] : null
   return isRecord(auth) && typeof auth['chatgpt_account_id'] === 'string' ? auth['chatgpt_account_id'] : null
 }
 
 // The active (else newest) OpenAI OAuth credential, if not expired. null when OpenCode has none.
-export async function chatGPTCredential({ dbFile, now = Date.now() }: { dbFile: string; now?: number }): Promise<TranscriptionError | ChatGPTCredential | null> {
+export async function chatGPTCredential({
+  dbFile,
+  now = Date.now(),
+}: {
+  dbFile: string
+  now?: number
+}): Promise<TranscriptionError | ChatGPTCredential | null> {
   if (!fs.existsSync(dbFile)) return null
   const rows = attempt(
     () => {
       // A read-only connection is instant and writes nothing. It needs the -shm
       // file of a WAL database, so a database whose owner is not running falls
       // back to a snapshot copy.
-      const direct = attempt(() => credentialRows(dbFile), () => null)
+      const direct = attempt(
+        () => credentialRows(dbFile),
+        () => null,
+      )
       return direct ?? withSqliteCopy({ file: dbFile, read: credentialRows })
     },
     (cause) => new TranscriptionError({ reason: `reading OpenCode credentials from ${dbFile} failed`, cause }),
@@ -553,7 +625,13 @@ export async function chatGPTCredential({ dbFile, now = Date.now() }: { dbFile: 
   if (rows instanceof Error) return rows
   for (const row of rows) {
     const raw = row.value
-    const value = typeof raw === 'string' ? attempt(() => JSON.parse(raw) as unknown, () => null) : null
+    const value =
+      typeof raw === 'string'
+        ? attempt(
+            () => JSON.parse(raw) as unknown,
+            () => null,
+          )
+        : null
     if (!isRecord(value) || value['type'] !== 'oauth' || typeof value['access'] !== 'string') continue
     if (typeof value['expires'] === 'number' && value['expires'] <= now + 60_000) {
       logger.log('OpenCode ChatGPT token expired, skipping it until OpenCode refreshes it')
@@ -569,21 +647,31 @@ function credentialRows(file: string) {
   const client = new Database(file, { readonly: true })
   try {
     return client
-      .query<{ value: unknown }, []>(`SELECT value FROM credential WHERE integration_id = 'openai' ORDER BY active DESC, time_updated DESC`)
+      .query<{ value: unknown }, []>(
+        `SELECT value FROM credential WHERE integration_id = 'openai' ORDER BY active DESC, time_updated DESC`,
+      )
       .all()
   } finally {
     client.close()
   }
 }
 
-async function transcribeViaChatGPT({ credential, baseUrl, audio, mediaType }: {
+async function transcribeViaChatGPT({
+  credential,
+  baseUrl,
+  audio,
+  mediaType,
+}: {
   credential: ChatGPTCredential
   baseUrl: string
   audio: Buffer
   mediaType: string
 }): Promise<TranscriptionFailure | TranscriptionResult> {
   const form = new FormData()
-  form.append('file', new File([new Uint8Array(audio)], `voice.${CHATGPT_EXTENSIONS[mediaType] ?? 'ogg'}`, { type: mediaType }))
+  form.append(
+    'file',
+    new File([new Uint8Array(audio)], `voice.${CHATGPT_EXTENSIONS[mediaType] ?? 'ogg'}`, { type: mediaType }),
+  )
   const response = await fetch(`${baseUrl}/transcribe`, {
     method: 'POST',
     headers: {
@@ -603,9 +691,11 @@ export function parseVoiceMessage(result: TranscriptionResult): Route {
 }
 
 async function projectFileTree(directory: string): Promise<string> {
-  const result = await execFileAsync('git', ['ls-files'], { cwd: directory, timeout: 5_000, maxBuffer: 10_000_000 }).catch(
-    () => null,
-  )
+  const result = await execFileAsync('git', ['ls-files'], {
+    cwd: directory,
+    timeout: 5_000,
+    maxBuffer: 10_000_000,
+  }).catch(() => null)
   return result?.stdout.split('\n').slice(0, 400).join('\n') ?? ''
 }
 
@@ -614,7 +704,9 @@ export type TranscriptionBaseUrls = { chatgpt?: string; openai?: string; gemini?
 // Usable audio API keys, best first: any OpenAI key (stored, then env) before any Gemini key.
 // Gemini's content filter blocks harmless voice messages, so a stored Gemini key must not win over env OpenAI.
 // Callers choose the bot_api_keys row: transcription by bot token, `kimaki tts` any row.
-export function audioKeyCandidates(stored: { openai_api_key: string | null; gemini_api_key: string | null } | null | undefined) {
+export function audioKeyCandidates(
+  stored: { openai_api_key: string | null; gemini_api_key: string | null } | null | undefined,
+) {
   const candidates = [
     { provider: 'openai' as const, apiKey: stored?.openai_api_key },
     { provider: 'openai' as const, apiKey: process.env['OPENAI_API_KEY'] },
@@ -634,21 +726,30 @@ type Transcriber =
 // bot_tokens joined with its bot_api_keys row: the old `with: { api_keys: true }` (one row or none).
 type BotTokenWithKeys = BotTokenRow & { key_openai_api_key: string | null; key_gemini_api_key: string | null }
 
-async function transcribers({ db, token, opencodeDbFile }: { db: KimakiDb; token: string; opencodeDbFile: string }): Promise<DbError | Transcriber[]> {
+async function transcribers({
+  db,
+  token,
+  opencodeDbFile,
+}: {
+  db: KimakiDb
+  token: string
+  opencodeDbFile: string
+}): Promise<DbError | Transcriber[]> {
   const [tokenRows, credential] = await Promise.all([
     db<BotTokenWithKeys[]>`
       SELECT t.*, k.openai_api_key AS key_openai_api_key, k.gemini_api_key AS key_gemini_api_key
       FROM bot_tokens t
       LEFT JOIN bot_api_keys k ON k.app_id = t.app_id
       WHERE t.token = ${token}
-      LIMIT 1`
-      .catch((e) => new DbError({ operation: 'read transcription keys', cause: e })),
+      LIMIT 1`.catch((e) => new DbError({ operation: 'read transcription keys', cause: e })),
     chatGPTCredential({ dbFile: opencodeDbFile }),
   ])
   if (tokenRows instanceof Error) return tokenRows
   if (credential instanceof Error) logger.warn('ChatGPT credential not readable', credential)
   const row = parseFirst<BotTokenWithKeys>('bot_tokens', tokenRows)
-  const keys = audioKeyCandidates(row ? { openai_api_key: row.key_openai_api_key, gemini_api_key: row.key_gemini_api_key } : null)
+  const keys = audioKeyCandidates(
+    row ? { openai_api_key: row.key_openai_api_key, gemini_api_key: row.key_gemini_api_key } : null,
+  )
   const openai = keys.find((key) => key.provider === 'openai')
   const gemini = keys.find((key) => key.provider === 'gemini')
   const credentials = row ? credentialsFromRow(row) : null
@@ -695,16 +796,28 @@ export async function transcribe({
     : ''
   const run = (entry: Transcriber) => {
     if (entry.kind === 'gateway') return transcribeViaGateway({ audio, mediaType, ...entry })
-    if (entry.kind === 'chatgpt') return withRetries(() => transcribeViaChatGPT({ credential: entry.credential, baseUrl: baseUrls.chatgpt ?? CHATGPT_BASE_URL, audio, mediaType }))
+    if (entry.kind === 'chatgpt')
+      return withRetries(() =>
+        transcribeViaChatGPT({
+          credential: entry.credential,
+          baseUrl: baseUrls.chatgpt ?? CHATGPT_BASE_URL,
+          audio,
+          mediaType,
+        }),
+      )
     const request = { apiKey: entry.apiKey, prompt, audio, mediaType, tool }
-    if (entry.kind === 'openai') return withRetries(() => requestOpenAI({ ...request, baseUrl: baseUrls.openai ?? OPENAI_BASE_URL }))
+    if (entry.kind === 'openai')
+      return withRetries(() => requestOpenAI({ ...request, baseUrl: baseUrls.openai ?? OPENAI_BASE_URL }))
     return withRetries(() => requestGemini({ ...request, baseUrl: baseUrls.gemini ?? GEMINI_BASE_URL }))
   }
   let last: TranscriptionFailure | NoTranscriptionKeyError = new NoTranscriptionKeyError()
   for (const entry of list) {
     const result = await run(entry)
     if (!(result instanceof Error) || result instanceof EmptyTranscriptionError) return result
-    logger.warn(`${entry.kind} transcription failed${entry === list.at(-1) ? '' : ', trying the next provider'}`, result)
+    logger.warn(
+      `${entry.kind} transcription failed${entry === list.at(-1) ? '' : ', trying the next provider'}`,
+      result,
+    )
     last = result
   }
   return last
@@ -730,9 +843,20 @@ const DEFAULT_VOICES: Record<SpeechProvider, string> = { openai: 'alloy', gemini
 const OPENAI_TTS_MODEL = 'gpt-4o-mini-tts'
 const GEMINI_TTS_MODEL = 'gemini-2.5-flash-preview-tts'
 
-async function postSpeech({ url, headers, body }: { url: string; headers: Record<string, string>; body: string }): Promise<SpeechError | Response> {
-  const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body })
-    .catch((cause) => new SpeechError({ reason: `request to ${url} failed`, cause }))
+async function postSpeech({
+  url,
+  headers,
+  body,
+}: {
+  url: string
+  headers: Record<string, string>
+  body: string
+}): Promise<SpeechError | Response> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...headers },
+    body,
+  }).catch((cause) => new SpeechError({ reason: `request to ${url} failed`, cause }))
   if (response instanceof Error) return response
   if (response.ok) return response
   const text = await response.text().catch(() => '')
@@ -764,10 +888,20 @@ export async function generateSpeech({
     const response = await postSpeech({
       url: `${baseUrls.openai ?? OPENAI_BASE_URL}/audio/speech`,
       headers: { authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: OPENAI_TTS_MODEL, input: text, voice: voice || DEFAULT_VOICES.openai, response_format: 'mp3', ...(instructions && { instructions }), ...(speed && { speed }) }),
+      body: JSON.stringify({
+        model: OPENAI_TTS_MODEL,
+        input: text,
+        voice: voice || DEFAULT_VOICES.openai,
+        response_format: 'mp3',
+        ...(instructions && { instructions }),
+        ...(speed && { speed }),
+      }),
     })
     if (response instanceof Error) return response
-    const audio = await response.arrayBuffer().then((buffer) => Buffer.from(buffer), (cause) => new SpeechError({ reason: 'reading OpenAI audio failed', cause }))
+    const audio = await response.arrayBuffer().then(
+      (buffer) => Buffer.from(buffer),
+      (cause) => new SpeechError({ reason: 'reading OpenAI audio failed', cause }),
+    )
     if (audio instanceof Error) return audio
     if (audio.length === 0) return new SpeechError({ reason: 'OpenAI returned empty audio' })
     return { audio, mediaType: 'audio/mp3' }
@@ -778,24 +912,35 @@ export async function generateSpeech({
     headers: { 'x-goog-api-key': apiKey },
     body: JSON.stringify({
       contents: [{ role: 'user', parts: [{ text }] }],
-      generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice || DEFAULT_VOICES.gemini } } } },
+      generationConfig: {
+        responseModalities: ['AUDIO'],
+        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice || DEFAULT_VOICES.gemini } } },
+      },
     }),
   })
   if (response instanceof Error) return response
-  const raw = await response.text().catch((cause) => new SpeechError({ reason: 'reading Gemini response failed', cause }))
+  const raw = await response
+    .text()
+    .catch((cause) => new SpeechError({ reason: 'reading Gemini response failed', cause }))
   if (raw instanceof Error) return raw
   const parsed = parseJsonObject(raw)
   if (parsed instanceof Error) return new SpeechError({ reason: parsed.message, cause: parsed })
   const candidate = (Array.isArray(parsed['candidates']) ? parsed['candidates'] : []).find(isRecord)
   const content = isRecord(candidate?.['content']) ? candidate['content'] : {}
-  const inline = (Array.isArray(content['parts']) ? content['parts'] : []).filter(isRecord).map((part) => part['inlineData']).find(isRecord)
+  const inline = (Array.isArray(content['parts']) ? content['parts'] : [])
+    .filter(isRecord)
+    .map((part) => part['inlineData'])
+    .find(isRecord)
   const data = typeof inline?.['data'] === 'string' ? Buffer.from(inline['data'], 'base64') : null
   if (!data?.length) return new SpeechError({ reason: `Gemini returned no audio: ${raw.slice(0, 300)}` })
   const mediaType = (typeof inline?.['mimeType'] === 'string' ? inline['mimeType'] : 'audio/wav').toLowerCase()
   // Raw PCM plays nowhere; a WAV header makes it a normal audio file.
   if (!mediaType.startsWith('audio/l16') && !mediaType.startsWith('audio/pcm')) return { audio: data, mediaType }
   const sampleRate = Number(/rate=(\d+)/.exec(mediaType)?.[1] ?? 24_000)
-  return { audio: Buffer.concat([wavHeader({ dataLength: data.length, sampleRate, channels: 1 }), data]), mediaType: 'audio/wav' }
+  return {
+    audio: Buffer.concat([wavHeader({ dataLength: data.length, sampleRate, channels: 1 }), data]),
+    mediaType: 'audio/wav',
+  }
 }
 
 // --- Audio API keys (/transcription-key, `kimaki bot keys set`). Stored per
@@ -804,11 +949,22 @@ export async function generateSpeech({
 export const TRANSCRIPTION_KEY_MODAL = 'transcription_key_modal'
 
 // Writes only the given keys of the bot that uses `token`.
-export async function saveAudioKeys({ db, token, openai, gemini }: { db: KimakiDb; token: string; openai?: string; gemini?: string }): Promise<DbError | ConfigError | void> {
+export async function saveAudioKeys({
+  db,
+  token,
+  openai,
+  gemini,
+}: {
+  db: KimakiDb
+  token: string
+  openai?: string
+  gemini?: string
+}): Promise<DbError | ConfigError | void> {
   const values = { ...(openai && { openai_api_key: openai }), ...(gemini && { gemini_api_key: gemini }) }
   if (Object.keys(values).length === 0) return new ConfigError({ reason: 'Pass --openai <key> or --gemini <key>' })
-  const tokenRows = await db<BotTokenRow[]>`SELECT * FROM bot_tokens WHERE token = ${token} LIMIT 1`
-    .catch((cause) => new DbError({ operation: 'read bot_tokens', cause }))
+  const tokenRows = await db<BotTokenRow[]>`SELECT * FROM bot_tokens WHERE token = ${token} LIMIT 1`.catch(
+    (cause) => new DbError({ operation: 'read bot_tokens', cause }),
+  )
   if (tokenRows instanceof Error) return tokenRows
   const bot = parseFirst<BotTokenRow>('bot_tokens', tokenRows)
   if (!bot) return new ConfigError({ reason: 'No saved bot credentials. Start kimaki once to onboard.' })
@@ -833,7 +989,13 @@ export function transcriptionKeyModal(): ModalBuilder {
 }
 
 // The provider follows the key prefix, like V1: sk-* is OpenAI, anything else Gemini.
-export async function handleTranscriptionKeyModal({ interaction, db }: { interaction: ModalSubmitInteraction; db: KimakiDb }): Promise<void> {
+export async function handleTranscriptionKeyModal({
+  interaction,
+  db,
+}: {
+  interaction: ModalSubmitInteraction
+  db: KimakiDb
+}): Promise<void> {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral })
   const key = interaction.fields.getTextInputValue('apikey').trim()
   if (!key) {
@@ -847,5 +1009,7 @@ export async function handleTranscriptionKeyModal({ interaction, db }: { interac
     await interaction.editReply({ content: saved.message })
     return
   }
-  await interaction.editReply({ content: `${{ openai: 'OpenAI', gemini: 'Gemini' }[provider]} API key saved. Voice transcription and speech generation are now enabled.` })
+  await interaction.editReply({
+    content: `${{ openai: 'OpenAI', gemini: 'Gemini' }[provider]} API key saved. Voice transcription and speech generation are now enabled.`,
+  })
 }

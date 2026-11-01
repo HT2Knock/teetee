@@ -54,7 +54,15 @@ import {
 } from './format-parts.ts'
 import { closePermission, hydratePermissions, showPermission, STATUS, type PendingPermission } from './permissions.ts'
 import { closeForm, formatAnswer, hydrateForms, showForm, withAnswer, type PendingForm } from './questions.ts'
-import { cancelQueued, deliverQueued, enqueueInput, hydrateQueue, promoteQueued, queuedItems, type PendingInput } from './queue.ts'
+import {
+  cancelQueued,
+  deliverQueued,
+  enqueueInput,
+  hydrateQueue,
+  promoteQueued,
+  queuedItems,
+  type PendingInput,
+} from './queue.ts'
 
 export type Turn = {
   startedAt: number
@@ -136,7 +144,15 @@ export type Effect =
   // answers the waiting CLI call: null once posted, or why not.
   | { type: 'attachments'; files: readonly UploadFile[]; settle: (error: Error | null) => void }
   // The executor adds folder and git branch of `directory` when it posts.
-  | { type: 'footer'; directory: string; durationMs: number; contextPercent: number | null; model: ModelRef; agent: string | null; notify: boolean }
+  | {
+      type: 'footer'
+      directory: string
+      durationMs: number
+      contextPercent: number | null
+      model: ModelRef
+      agent: string | null
+      notify: boolean
+    }
   // Posts the messages in order; the first replies to `replyTo` when set.
   | { type: 'show'; key: string; messages: readonly UiMessage[]; replyTo: string | null; notify: boolean }
   // Edits the messages `show` posted under `key` (by index; the last one covers the rest).
@@ -175,7 +191,13 @@ export type KimakiEvent =
   | { type: 'kimaki.replay'; messages: readonly SessionMessageInfo[]; note: string }
   // After a (re)connect: which sessions of the thread run, and what they wait on.
   // `directory`: the root session's location now, null when it could not be read.
-  | { type: 'kimaki.snapshot'; at: number; directory: string | null; activeSessionIds: readonly string[]; sessions: readonly SessionSnapshot[] }
+  | {
+      type: 'kimaki.snapshot'
+      at: number
+      directory: string | null
+      activeSessionIds: readonly string[]
+      sessions: readonly SessionSnapshot[]
+    }
 
 export type ThreadEvent = V2Event | KimakiEvent
 
@@ -281,7 +303,14 @@ function contextPercent({ turn, prefs }: { turn: Draft<Turn>; prefs: Prefs }): n
 }
 
 // The footer closing the answer of `turn` at `at`.
-function emitFooter({ draft, prefs, emit, turn, at, notify }: Context & { turn: Draft<Turn>; at: number; notify: boolean }) {
+function emitFooter({
+  draft,
+  prefs,
+  emit,
+  turn,
+  at,
+  notify,
+}: Context & { turn: Draft<Turn>; at: number; notify: boolean }) {
   // No model step ran (a compaction-only execution): nothing to summarize.
   if (!turn.model) return
   // A child still runs: the answer comes later.
@@ -305,14 +334,23 @@ function applyOpencode({ draft, event, prefs, emit }: Context & { event: V2Event
     const { sessionID, parentID } = event.data
     if (!parentID || draft.children[sessionID]) return
     if (parentID !== draft.sessionId && !draft.children[parentID]) return
-    draft.children[sessionID] = { agent: event.data.agent ?? 'subagent', description: '', background: false, running: false }
+    draft.children[sessionID] = {
+      agent: event.data.agent ?? 'subagent',
+      description: '',
+      background: false,
+      running: false,
+    }
     // A subagent command prompts its child, never the root.
     if (parentID === draft.sessionId) draft.commandPending = null
     return
   }
   // A new user message dismisses the agent's pending buttons and upload requests.
   if (event.type === 'session.inbox.enqueued' && event.data.item.type === 'user') {
-    dismissAgentPrompts({ draft, emit, ids: draft.agentUi.filter((prompt) => prompt.sessionId === event.data.sessionID).map((prompt) => prompt.id) })
+    dismissAgentPrompts({
+      draft,
+      emit,
+      ids: draft.agentUi.filter((prompt) => prompt.sessionId === event.data.sessionID).map((prompt) => prompt.id),
+    })
   }
   const sessionId = eventSessionId(event)
   if (!sessionId) return
@@ -327,7 +365,13 @@ function applyOpencode({ draft, event, prefs, emit }: Context & { event: V2Event
     case 'form.created':
       return showForm({ draft, emit, form: event.data.form, label })
     case 'form.replied':
-      return closeForm({ draft, emit, formID: event.data.id, render: (field, text) => withAnswer({ header: text, answer: formatAnswer({ field, value: event.data.answer[field.key] }) }) })
+      return closeForm({
+        draft,
+        emit,
+        formID: event.data.id,
+        render: (field, text) =>
+          withAnswer({ header: text, answer: formatAnswer({ field, value: event.data.answer[field.key] }) }),
+      })
     case 'form.cancelled':
       return closeForm({ draft, emit, formID: event.data.id, render: (_field, text) => `${text}\n✗ _cancelled_` })
     case 'permission.asked':
@@ -340,7 +384,7 @@ function applyOpencode({ draft, event, prefs, emit }: Context & { event: V2Event
 }
 
 function applyRoot(context: Context & { event: V2Event }) {
-  const { draft, event, prefs, emit } = context
+  const { draft, event, prefs: _prefs, emit } = context
   switch (event.type) {
     case 'session.moved':
       draft.directory = event.data.location.directory
@@ -354,7 +398,8 @@ function applyRoot(context: Context & { event: V2Event }) {
       draft.turn ??= { startedAt: event.created, model: null, agent: null, tokens: 0, slept: false }
       draft.turn.model = model
       draft.turn.agent = event.data.agent
-      if (draft.bannerPending) emit({ type: 'send', text: formatBanner({ model: event.data.model, agent: event.data.agent }) })
+      if (draft.bannerPending)
+        emit({ type: 'send', text: formatBanner({ model: event.data.model, agent: event.data.agent }) })
       draft.bannerPending = false
       return
     }
@@ -366,7 +411,10 @@ function applyRoot(context: Context & { event: V2Event }) {
       // re-read it: changed prefix, other model, or cache expired (TTL). The slack absorbs cache block rounding.
       const previous = draft.cached
       if (previous && tokens.cache.read + CACHE_MISS_SLACK < previous.tokens) {
-        toolLine(context, formatCacheMiss({ read: tokens.cache.read, expected: previous.tokens, idleMs: event.created - previous.at }))
+        toolLine(
+          context,
+          formatCacheMiss({ read: tokens.cache.read, expected: previous.tokens, idleMs: event.created - previous.at }),
+        )
       }
       draft.cached = { tokens: tokens.cache.read + tokens.cache.write, at: event.created }
       return
@@ -381,7 +429,14 @@ function applyRoot(context: Context & { event: V2Event }) {
     case 'session.retry.scheduled':
       if (draft.lastRetryAt !== null && event.created - draft.lastRetryAt < RETRY_NOTICE_INTERVAL_MS) return
       draft.lastRetryAt = event.created
-      emit({ type: 'send', text: formatRetry({ attempt: event.data.attempt, delayMs: event.data.at - event.created, message: event.data.error.message }) })
+      emit({
+        type: 'send',
+        text: formatRetry({
+          attempt: event.data.attempt,
+          delayMs: event.data.at - event.created,
+          message: event.data.error.message,
+        }),
+      })
       return
     // User `!cmd` (session.shell): shown at every verbosity.
     case 'session.shell.started':
@@ -449,13 +504,7 @@ function applyRoot(context: Context & { event: V2Event }) {
   }
 }
 
-function applyChild({
-  draft,
-  prefs,
-  emit,
-  event,
-  child,
-}: Context & { event: V2Event; child: Draft<Child> }) {
+function applyChild({ draft, prefs, emit, event, child }: Context & { event: V2Event; child: Draft<Child> }) {
   switch (event.type) {
     case 'session.execution.started':
       child.running = true
@@ -479,23 +528,37 @@ function applyTool(context: Context & { event: V2Event; label: string | undefine
   const { draft, event, prefs, label, render } = context
   switch (event.type) {
     case 'session.tool.input.started':
-      draft.tools[toolKey(event.data)] = { name: event.data.name, phase: 'input', subagent: null, innerCalls: 0, backgroundShell: null }
+      draft.tools[toolKey(event.data)] = {
+        name: event.data.name,
+        phase: 'input',
+        subagent: null,
+        innerCalls: 0,
+        backgroundShell: null,
+      }
       return
     case 'session.tool.called': {
       const key = toolKey(event.data)
       const name = draft.tools[key]?.name ?? 'tool'
       const input = event.data.input
-      const backgroundShell = name === 'shell' && input['background'] === true ? stringInput(input, 'description') || stringInput(input, 'command') : null
+      const backgroundShell =
+        name === 'shell' && input['background'] === true
+          ? stringInput(input, 'description') || stringInput(input, 'command')
+          : null
       const tool: RunningToolCall = { name, phase: 'called', subagent: null, innerCalls: 0, backgroundShell }
       if (name === 'subagent') {
         const reused = typeof input['sessionID'] === 'string' ? draft.children[input['sessionID']] : undefined
-        const call = { agent: stringInput(input, 'agent'), description: stringInput(input, 'description'), background: input['background'] === true }
+        const call = {
+          agent: stringInput(input, 'agent'),
+          description: stringInput(input, 'description'),
+          background: input['background'] === true,
+        }
         if (typeof input['sessionID'] !== 'string') tool.subagent = { ...call, agent: call.agent || 'subagent' }
         // Reusing a child session: its mode and label follow the new call.
         if (reused) Object.assign(reused, { ...call, agent: call.agent || reused.agent })
       }
       draft.tools[key] = tool
-      if (render && isToolVisible({ name, input }, prefs.verbosity)) toolLine(context, formatToolLine({ name, input }, { label }))
+      if (render && isToolVisible({ name, input }, prefs.verbosity))
+        toolLine(context, formatToolLine({ name, input }, { label }))
       return
     }
     case 'session.tool.progress': {
@@ -522,7 +585,8 @@ function applyTool(context: Context & { event: V2Event; label: string | undefine
         const { metadata } = event.data
         showInnerCalls({ ...context, tool, metadata })
         if (render && event.type === 'session.tool.success') {
-          for (const line of formatExecuteFailures({ metadata, content: event.data.content, label })) toolLine(context, line)
+          for (const line of formatExecuteFailures({ metadata, content: event.data.content, label }))
+            toolLine(context, line)
         }
       }
       delete draft.tools[key]
@@ -541,7 +605,12 @@ function showInnerCalls({
   label,
   render,
   ...context
-}: Context & { tool: Draft<RunningToolCall>; metadata: Readonly<Record<string, unknown>> | undefined; label: string | undefined; render: boolean }) {
+}: Context & {
+  tool: Draft<RunningToolCall>
+  metadata: Readonly<Record<string, unknown>> | undefined
+  label: string | undefined
+  render: boolean
+}) {
   const calls = executeCalls(metadata).slice(tool.innerCalls)
   tool.innerCalls += calls.length
   if (!render) return
@@ -562,24 +631,44 @@ function showShellFinished({
   const description = context.draft.shells[shellID] ?? null
   delete context.draft.shells[shellID]
   if (context.prefs.verbosity === 'text') return
-  toolLine(context, formatShellFinished({
-    description,
-    state: typeof state === 'string' ? state : null,
-    exit: typeof exit === 'number' ? exit : null,
-    label: label ?? undefined,
-  }))
+  toolLine(
+    context,
+    formatShellFinished({
+      description,
+      state: typeof state === 'string' ? state : null,
+      exit: typeof exit === 'number' ? exit : null,
+      label: label ?? undefined,
+    }),
+  )
 }
 
-const BUTTON_STYLES = { white: ButtonStyle.Secondary, blue: ButtonStyle.Primary, green: ButtonStyle.Success, red: ButtonStyle.Danger } as const
+const BUTTON_STYLES = {
+  white: ButtonStyle.Secondary,
+  blue: ButtonStyle.Primary,
+  green: ButtonStyle.Success,
+  red: ButtonStyle.Danger,
+} as const
 
 function showAgentPrompt({ draft, emit, prompt }: Pick<Context, 'draft' | 'emit'> & { prompt: AgentPrompt }) {
-  const buttons = prompt.buttons?.map((item, index) => button({ customId: `action_button:${prompt.id}:${index}`, label: item.label, style: BUTTON_STYLES[item.color] }))
-    ?? [button({ customId: `file_upload_btn:${prompt.id}`, label: 'Upload files' })]
+  const buttons = prompt.buttons?.map((item, index) =>
+    button({ customId: `action_button:${prompt.id}:${index}`, label: item.label, style: BUTTON_STYLES[item.color] }),
+  ) ?? [button({ customId: `file_upload_btn:${prompt.id}`, label: 'Upload files' })]
   draft.agentUi.push(prompt)
-  emit({ type: 'show', key: `agent:${prompt.id}`, replyTo: null, notify: true, messages: [{ content: prompt.prompt ?? '', components: [buttonRow(buttons)] }] })
+  emit({
+    type: 'show',
+    key: `agent:${prompt.id}`,
+    replyTo: null,
+    notify: true,
+    messages: [{ content: prompt.prompt ?? '', components: [buttonRow(buttons)] }],
+  })
 }
 
-function dismissAgentPrompts({ draft, emit, ids, result = 'dismissed' }: Pick<Context, 'draft' | 'emit'> & { ids: readonly string[]; result?: string }) {
+function dismissAgentPrompts({
+  draft,
+  emit,
+  ids,
+  result = 'dismissed',
+}: Pick<Context, 'draft' | 'emit'> & { ids: readonly string[]; result?: string }) {
   if (ids.length === 0) return
   draft.agentUi = draft.agentUi.filter((prompt) => !ids.includes(prompt.id))
   for (const id of ids) emit({ type: 'edit', key: `agent:${id}`, messages: [textOnly(asSubtext(`⬦ ${result}`))] })
@@ -653,7 +742,10 @@ function replayEffects({
       const lines = [{ name: part.name, input }, ...(isExecute ? executeCalls(metadata) : [])]
         .filter((call) => isToolVisible(call, prefs.verbosity))
         .map((call) => formatToolLine(call))
-      const failures = isExecute && part.state.status === 'completed' ? formatExecuteFailures({ metadata, content: part.state.content }) : []
+      const failures =
+        isExecute && part.state.status === 'completed'
+          ? formatExecuteFailures({ metadata, content: part.state.content })
+          : []
       return [...lines, ...failures].map((text): Block => ({ kind: 'tool', text }))
     })
   })

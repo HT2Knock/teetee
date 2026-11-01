@@ -93,7 +93,11 @@ function splitCallouts(text: string): Piece[] {
       continue
     }
     flush()
-    const body = [afterOpen, ...lines.slice(index + 1, closeIndex), (lines[closeIndex] ?? '').replace(CALLOUT_CLOSE_RE, '')]
+    const body = [
+      afterOpen,
+      ...lines.slice(index + 1, closeIndex),
+      (lines[closeIndex] ?? '').replace(CALLOUT_CLOSE_RE, ''),
+    ]
     pieces.push({ kind: 'callout', accent, text: body.join('\n').trim() })
     index = closeIndex
   }
@@ -169,7 +173,9 @@ function splitText(text: string, limit: number): string[] {
   const byWords = units.flatMap((unit) => (unit.length <= limit ? [unit] : unit.split(/(?<=\s)/)))
   const parts = byWords.flatMap((unit) => {
     if (unit.length <= limit) return [unit]
-    return Array.from({ length: Math.ceil(unit.length / limit) }, (_, index) => unit.slice(index * limit, (index + 1) * limit))
+    return Array.from({ length: Math.ceil(unit.length / limit) }, (_, index) =>
+      unit.slice(index * limit, (index + 1) * limit),
+    )
   })
   return pack(parts, limit, ' ')
 }
@@ -214,7 +220,9 @@ function nodePieces(source: string, node: RootContent, limit: number): string[] 
     return splitText(slice(source, node).replace(/^\s*#{4,6}/, '###'), limit)
   }
   if (node.type === 'list' && hasCodeInItems(node)) {
-    return unnestList(source, node, limit).flatMap((piece) => (piece.length <= limit ? [piece] : splitText(piece, limit)))
+    return unnestList(source, node, limit).flatMap((piece) =>
+      piece.length <= limit ? [piece] : splitText(piece, limit),
+    )
   }
   if (node.type === 'code') return codePieces(source, node, limit)
   const text = slice(source, node)

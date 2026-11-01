@@ -39,7 +39,9 @@ const execFileAsync = promisify(execFile)
 export const SKIPPED_COMMANDS = new Set(['init'])
 
 // A command that only works in a session thread; others get told where it works.
-function inThread(run: (bot: Bot, interaction: ChatInputCommandInteraction, target: SessionTarget) => Promise<unknown>) {
+function inThread(
+  run: (bot: Bot, interaction: ChatInputCommandInteraction, target: SessionTarget) => Promise<unknown>,
+) {
   return async (bot: Bot, interaction: ChatInputCommandInteraction) => {
     const target = await sessionTarget(bot, interaction)
     if (!target) return
@@ -56,7 +58,9 @@ function sessionIdReply({
   threadId: string
   directory: string | null
 }): string {
-  const attach = directory ? `opencode ${shellQuote(directory)} --session ${sessionId}` : `opencode --session ${sessionId}`
+  const attach = directory
+    ? `opencode ${shellQuote(directory)} --session ${sessionId}`
+    : `opencode --session ${sessionId}`
   return dedent`
     **Session ID:** \`${sessionId}\`
     **Thread ID:** \`${threadId}\`
@@ -68,7 +72,9 @@ function sessionIdReply({
 }
 
 // critique --json prints { url, id } or { error } on one stdout line.
-function parseCritiqueOutput(output: string): { ok: true; url: string; id: string } | { ok: false; error: string } | null {
+function parseCritiqueOutput(
+  output: string,
+): { ok: true; url: string; id: string } | { ok: false; error: string } | null {
   for (const line of output.trim().split('\n')) {
     if (!line.startsWith('{')) continue
     const parsed = attempt(
@@ -100,7 +106,15 @@ async function abortCommand(bot: Bot, interaction: ChatInputCommandInteraction, 
 }
 
 // /queue and /queue-command: the echo reply is the queued message the ack points at.
-async function queueInput(bot: Bot, { interaction, thread, route, echo }: { interaction: ChatInputCommandInteraction; thread: SessionTarget['thread']; route: Route; echo: string }) {
+async function queueInput(
+  bot: Bot,
+  {
+    interaction,
+    thread,
+    route,
+    echo,
+  }: { interaction: ChatInputCommandInteraction; thread: SessionTarget['thread']; route: Route; echo: string },
+) {
   const author = authorOf(interaction)
   const reply = await replyWithEcho(interaction, { author, text: echo })
   if (reply instanceof Error) return replyError(interaction, reply)
@@ -116,7 +130,11 @@ async function queueCommand(bot: Bot, interaction: ChatInputCommandInteraction, 
 async function queueOpencodeCommand(bot: Bot, interaction: ChatInputCommandInteraction, { thread }: SessionTarget) {
   const name = interaction.options.getString('command')?.trim().replace(/^\//, '') ?? ''
   const args = (interaction.options.getString('arguments') ?? '').trim()
-  if (!name) return replyError(interaction, new ConfigError({ reason: 'Pass a command name, for example /queue-command command:review' }))
+  if (!name)
+    return replyError(
+      interaction,
+      new ConfigError({ reason: 'Pass a command name, for example /queue-command command:review' }),
+    )
   const echo = `/${name} ${args}`.trim()
   return queueInput(bot, { interaction, thread, route: { kind: 'command', name, arguments: args, queue: true }, echo })
 }
@@ -124,14 +142,19 @@ async function queueOpencodeCommand(bot: Bot, interaction: ChatInputCommandInter
 async function queueCommandChoices(bot: Bot, interaction: AutocompleteInteraction) {
   const target = await resolveTarget(bot, interaction.channelId)
   if (target instanceof Error) return respondChoices(interaction, target)
-  const commands = await oc(bot, 'command.list', (client) => client.command.list({ location: { directory: target.directory } }))
+  const commands = await oc(bot, 'command.list', (client) =>
+    client.command.list({ location: { directory: target.directory } }),
+  )
   if (commands instanceof Error) return respondChoices(interaction, commands)
   const query = interaction.options.getFocused().toLowerCase()
   return respondChoices(
     interaction,
     commands.data
       .filter((command) => !SKIPPED_COMMANDS.has(command.name) && command.name.toLowerCase().includes(query))
-      .map((command) => ({ name: `/${command.name}${command.description ? ` - ${command.description}` : ''}`, value: command.name })),
+      .map((command) => ({
+        name: `/${command.name}${command.description ? ` - ${command.description}` : ''}`,
+        value: command.name,
+      })),
   )
 }
 
@@ -140,14 +163,21 @@ async function clearQueueCommand(bot: Bot, interaction: ChatInputCommandInteract
   const result = await clearQueue(bot, { threadId: thread.id, position: interaction.options.getInteger('position') })
   if (result instanceof Error) return replyError(interaction, result)
   const content =
-    result.cleared === 0 ? 'No queued messages' : `-# Cleared ${result.cleared} queued message${result.cleared > 1 ? 's' : ''}`
+    result.cleared === 0
+      ? 'No queued messages'
+      : `-# Cleared ${result.cleared} queued message${result.cleared > 1 ? 's' : ''}`
   await interaction.editReply({ content })
 }
 
 async function btwCommand(bot: Bot, interaction: ChatInputCommandInteraction, { thread }: SessionTarget) {
   const text = interaction.options.getString('prompt', true).trim()
   await interaction.deferReply()
-  const result = await forkBtw(bot, { sourceThread: thread, text, author: authorOf(interaction), messageId: interaction.id })
+  const result = await forkBtw(bot, {
+    sourceThread: thread,
+    text,
+    author: authorOf(interaction),
+    messageId: interaction.id,
+  })
   if (result instanceof Error) return replyError(interaction, result)
   await interaction.editReply({ content: `Session forked! Continue in <#${result.threadId}>` })
 }
@@ -186,11 +216,17 @@ async function redoCommand(bot: Bot, interaction: ChatInputCommandInteraction, {
 
 // --- Info
 
-async function contextUsageCommand(bot: Bot, interaction: ChatInputCommandInteraction, { sessionId, directory }: SessionTarget) {
+async function contextUsageCommand(
+  bot: Bot,
+  interaction: ChatInputCommandInteraction,
+  { sessionId, directory }: SessionTarget,
+) {
   await interaction.deferReply()
   const [info, messages, models] = await Promise.all([
     oc(bot, 'session.get', (client) => client.session.get({ sessionID: sessionId })),
-    oc(bot, 'message.list', (client) => client.message.list({ sessionID: sessionId, type: 'assistant', order: 'desc', limit: 20 })),
+    oc(bot, 'message.list', (client) =>
+      client.message.list({ sessionID: sessionId, type: 'assistant', order: 'desc', limit: 20 }),
+    ),
     oc(bot, 'model.list', (client) => client.model.list({ location: { directory } })),
   ])
   if (info instanceof Error) return replyError(interaction, info)
@@ -202,7 +238,11 @@ async function contextUsageCommand(bot: Bot, interaction: ChatInputCommandIntera
   }
   const { tokens, model } = last
   const total = tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
-  const limit = models instanceof Error ? null : models.data.find((candidate) => candidate.providerID === model.providerID && candidate.id === model.id)?.limit.context
+  const limit =
+    models instanceof Error
+      ? null
+      : models.data.find((candidate) => candidate.providerID === model.providerID && candidate.id === model.id)?.limit
+          .context
   const formatted = total.toLocaleString('en-US')
   const lines = [
     limit
@@ -218,7 +258,10 @@ async function sessionIdCommand(bot: Bot, interaction: ChatInputCommandInteracti
   const target = await resolveTarget(bot, interaction.channelId)
   if (target instanceof Error) return replyError(interaction, target)
   if (!target.thread || !target.sessionId) {
-    await interaction.reply({ content: 'Run /session-id inside a Kimaki session thread.', flags: MessageFlags.Ephemeral })
+    await interaction.reply({
+      content: 'Run /session-id inside a Kimaki session thread.',
+      flags: MessageFlags.Ephemeral,
+    })
     return
   }
   await interaction.reply({
@@ -231,26 +274,39 @@ async function diffCommand(bot: Bot, interaction: ChatInputCommandInteraction) {
   const target = await resolveTarget(bot, interaction.channelId)
   if (target instanceof Error) return replyError(interaction, target)
   await interaction.deferReply()
-  const status = await execFileAsync('git', ['status', '--porcelain'], { cwd: target.directory, timeout: 10_000 }).catch(
-    (e) => new DiscordError({ operation: 'git status', cause: e }),
-  )
-  if (status instanceof Error) return replyError(interaction, new ConfigError({ reason: 'This project is not a git repository' }))
+  const status = await execFileAsync('git', ['status', '--porcelain'], {
+    cwd: target.directory,
+    timeout: 10_000,
+  }).catch((e) => new DiscordError({ operation: 'git status', cause: e }))
+  if (status instanceof Error)
+    return replyError(interaction, new ConfigError({ reason: 'This project is not a git repository' }))
   if (!status.stdout.trim()) {
     await interaction.editReply({ content: 'No changes to show' })
     return
   }
   const title = `${path.basename(target.directory)}: Discord /diff`
-  const upload = await execFileAsync('critique', ['--web', title, '--json'], { cwd: target.directory, timeout: 30_000 }).catch(
-    (e: NodeJS.ErrnoException & { stdout?: string }) => e,
-  )
+  const upload = await execFileAsync('critique', ['--web', title, '--json'], {
+    cwd: target.directory,
+    timeout: 30_000,
+  }).catch((e: NodeJS.ErrnoException & { stdout?: string }) => e)
   if (upload instanceof Error && upload.code === 'ENOENT') {
-    return replyError(interaction, new ConfigError({ reason: 'critique is not installed. Install it with: bun add -g critique' }))
+    return replyError(
+      interaction,
+      new ConfigError({ reason: 'critique is not installed. Install it with: bun add -g critique' }),
+    )
   }
   const output = upload instanceof Error ? (upload.stdout ?? '') : upload.stdout
   const result = parseCritiqueOutput(output)
-  if (!result) return replyError(interaction, new ConfigError({ reason: `critique failed: ${output.slice(0, 200) || 'no output'}` }))
+  if (!result)
+    return replyError(
+      interaction,
+      new ConfigError({ reason: `critique failed: ${output.slice(0, 200) || 'no output'}` }),
+    )
   if (!result.ok) return replyError(interaction, new ConfigError({ reason: result.error }))
-  const embed = new EmbedBuilder().setTitle(title).setURL(result.url).setImage(`https://critique.work/og/${result.id}.png`)
+  const embed = new EmbedBuilder()
+    .setTitle(title)
+    .setURL(result.url)
+    .setImage(`https://critique.work/og/${result.id}.png`)
   await interaction.editReply({ embeds: [embed] })
 }
 
@@ -273,14 +329,18 @@ export const threadRoutes: InteractionRoutes = {
       definition: new SlashCommandBuilder()
         .setName('queue')
         .setDescription('Send a message after the current run finishes')
-        .addStringOption((option) => option.setName('message').setDescription('The message to queue').setRequired(true)),
+        .addStringOption((option) =>
+          option.setName('message').setDescription('The message to queue').setRequired(true),
+        ),
       run: inThread(queueCommand),
     },
     'clear-queue': {
       definition: new SlashCommandBuilder()
         .setName('clear-queue')
         .setDescription('Remove queued messages')
-        .addIntegerOption((option) => option.setName('position').setDescription('Only this position (1 = next)').setMinValue(1)),
+        .addIntegerOption((option) =>
+          option.setName('position').setDescription('Only this position (1 = next)').setMinValue(1),
+        ),
       run: inThread(clearQueueCommand),
     },
     'queue-command': {
@@ -295,11 +355,15 @@ export const threadRoutes: InteractionRoutes = {
       autocomplete: queueCommandChoices,
     },
     compact: {
-      definition: new SlashCommandBuilder().setName('compact').setDescription('Compact the session context by summarizing the history'),
+      definition: new SlashCommandBuilder()
+        .setName('compact')
+        .setDescription('Compact the session context by summarizing the history'),
       run: inThread(compactCommand),
     },
     undo: {
-      definition: new SlashCommandBuilder().setName('undo').setDescription('Undo the last turn (file changes are kept)'),
+      definition: new SlashCommandBuilder()
+        .setName('undo')
+        .setDescription('Undo the last turn (file changes are kept)'),
       run: inThread(undoCommand),
     },
     redo: {
@@ -311,7 +375,9 @@ export const threadRoutes: InteractionRoutes = {
       run: diffCommand,
     },
     'context-usage': {
-      definition: new SlashCommandBuilder().setName('context-usage').setDescription('Show token usage and context window percentage'),
+      definition: new SlashCommandBuilder()
+        .setName('context-usage')
+        .setDescription('Show token usage and context window percentage'),
       run: inThread(contextUsageCommand),
     },
     'session-id': {

@@ -96,7 +96,9 @@ type WireEvent = {
 
 function decode(event: WireEvent): LiveEvent | null {
   if (event.type === 'delegation.created' && event.item?.target === 'client' && event.item.id) {
-    const text = (event.item.content ?? []).flatMap((part) => (part.type === 'input_text' && part.text ? [part.text] : [])).join('\n')
+    const text = (event.item.content ?? [])
+      .flatMap((part) => (part.type === 'input_text' && part.text ? [part.text] : []))
+      .join('\n')
     return { type: 'delegation', id: event.item.id, text }
   }
   if (event.type === 'turn.done' && (event.turn?.role === 'user' || event.turn?.role === 'assistant')) {
@@ -104,7 +106,8 @@ function decode(event: WireEvent): LiveEvent | null {
   }
   if (event.type === 'session.closed') return { type: 'closed', reason: event.reason ?? 'unknown' }
   if (event.type === 'error') {
-    const message = typeof event.error === 'string' ? event.error : (event.error?.message ?? event.message ?? 'unknown error')
+    const message =
+      typeof event.error === 'string' ? event.error : (event.error?.message ?? event.message ?? 'unknown error')
     return { type: 'error', message }
   }
   return null
@@ -140,7 +143,12 @@ export async function startLiveCall({
   const peer = new RTCPeerConnection({ codecs: { audio: [useOPUS({ payloadType: PAYLOAD_TYPE })], video: [] } })
   const transceiver = peer.addTransceiver('audio', { direction: 'sendrecv' })
   const encoder = new OpusScript(48_000, 2, OpusScript.Application.VOIP)
-  const state = { started: false, closing: false, clock: null as ReturnType<typeof setInterval> | null, socket: null as WebSocket | null }
+  const state = {
+    started: false,
+    closing: false,
+    clock: null as ReturnType<typeof setInterval> | null,
+    socket: null as WebSocket | null,
+  }
 
   const teardown = async () => {
     if (state.clock) clearInterval(state.clock)
@@ -167,15 +175,24 @@ export async function startLiveCall({
     headers: { ...headers, 'content-type': 'application/json' },
     body: JSON.stringify({
       sdp: offer,
-      session: { model: MODEL, instructions, audio: { output: { voice } }, delegation: { type: 'client', ack_filler: true } },
+      session: {
+        model: MODEL,
+        instructions,
+        audio: { output: { voice } },
+        delegation: { type: 'client', ack_filler: true },
+      },
     }),
     signal: AbortSignal.timeout(START_TIMEOUT_MS),
   }).catch((cause) => new LiveCallError({ operation: 'call creation', cause }))
   if (response instanceof Error) return fail(response)
   const answer = await response.text().catch(() => '')
-  if (response.status !== 201) return fail(new LiveCallError({ operation: `call creation (HTTP ${response.status}: ${answer.slice(0, 300)})` }))
+  if (response.status !== 201)
+    return fail(new LiveCallError({ operation: `call creation (HTTP ${response.status}: ${answer.slice(0, 300)})` }))
   // Location: /v1/realtime/calls/rtc_xxx
-  const callId = (response.headers.get('location') ?? '').split('?')[0]!.split('/').findLast((part) => part.startsWith('rtc_'))
+  const callId = (response.headers.get('location') ?? '')
+    .split('?')[0]!
+    .split('/')
+    .findLast((part) => part.startsWith('rtc_'))
   if (!callId) return fail(new LiveCallError({ operation: 'call creation (no call ID in the Location header)' }))
 
   const answered = await peer
@@ -198,19 +215,32 @@ export async function startLiveCall({
   state.clock = setInterval(() => {
     const frame = readFrame() ?? SILENT_FRAME
     if (peer.connectionState !== 'connected') return
-    const opus = attempt(() => encoder.encode(frame, FRAME_SAMPLES), (cause) => new LiveCallError({ operation: 'encode audio', cause }))
+    const opus = attempt(
+      () => encoder.encode(frame, FRAME_SAMPLES),
+      (cause) => new LiveCallError({ operation: 'encode audio', cause }),
+    )
     if (opus instanceof Error) return logger.warn(opus)
-    const header = new RtpHeader({ payloadType: PAYLOAD_TYPE, sequenceNumber: outbound.sequence, timestamp: outbound.timestamp, marker: false })
+    const header = new RtpHeader({
+      payloadType: PAYLOAD_TYPE,
+      sequenceNumber: outbound.sequence,
+      timestamp: outbound.timestamp,
+      marker: false,
+    })
     outbound.sequence = (outbound.sequence + 1) & 0xffff
     outbound.timestamp = (outbound.timestamp + FRAME_SAMPLES) >>> 0
-    transceiver.sender.sendRtp(new RtpPacket(header, Buffer.from(opus))).catch((error: Error) => logger.warn('send audio', error))
+    transceiver.sender
+      .sendRtp(new RtpPacket(header, Buffer.from(opus)))
+      .catch((error: Error) => logger.warn('send audio', error))
   }, 20)
 
   // Node's WebSocket (undici) accepts headers in the init object.
   const socket = new WebSocket(`${urls.sideband}/${callId}`, { headers })
   state.socket = socket
   const started = await new Promise<LiveCallError | void>((resolve) => {
-    const timer = setTimeout(() => resolve(new LiveCallError({ operation: 'session start (timed out)' })), START_TIMEOUT_MS)
+    const timer = setTimeout(
+      () => resolve(new LiveCallError({ operation: 'session start (timed out)' })),
+      START_TIMEOUT_MS,
+    )
     socket.addEventListener('message', (message: MessageEvent) => {
       const event = attempt(() => JSON.parse(String(message.data)) as WireEvent)
       if (event instanceof Error) return logger.warn('invalid sideband message', event)
@@ -237,7 +267,8 @@ export async function startLiveCall({
     append({ text, channel, delegationId }) {
       for (const chunk of chunkUtf8(text)) {
         const content = [{ type: 'input_text', text: chunk }]
-        if (delegationId) send({ type: 'delegation.context.append', delegation_item_id: delegationId, channel, content })
+        if (delegationId)
+          send({ type: 'delegation.context.append', delegation_item_id: delegationId, channel, content })
         else send({ type: 'session.context.append', channel, content })
       }
     },

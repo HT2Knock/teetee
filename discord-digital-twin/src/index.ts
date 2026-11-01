@@ -6,12 +6,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import url from 'node:url'
-import {
-  ChannelType,
-  GatewayDispatchEvents,
-  InteractionType,
-  ComponentType,
-} from 'discord-api-types/v10'
+import { ChannelType, GatewayDispatchEvents, InteractionType, ComponentType } from 'discord-api-types/v10'
 import type {
   APIMessage,
   APIChannel,
@@ -22,23 +17,10 @@ import type {
 } from 'discord-api-types/v10'
 import { createPrismaClient, type PrismaClient } from './db.js'
 import { generateSnowflake } from './snowflake.js'
-import {
-  createServer,
-  startServer,
-  stopServer,
-  type ServerComponents,
-  type TypingEventRecord,
-} from './server.js'
+import { createServer, startServer, stopServer, type ServerComponents, type TypingEventRecord } from './server.js'
 import type { GatewayState } from './gateway.js'
 import { DiscordVoiceServer, type VoiceStream } from './voice.js'
-import {
-  userToAPI,
-  guildToAPI,
-  memberToAPI,
-  channelToAPI,
-  messageToAPI,
-  isoTimestamp,
-} from './serializers.js'
+import { userToAPI, guildToAPI, memberToAPI, channelToAPI, messageToAPI, isoTimestamp } from './serializers.js'
 
 const MAX_VITEST_WAIT_TIMEOUT_MS = 10_000
 
@@ -49,13 +31,7 @@ function normalizeWaitTimeout(timeout: number): number {
   return timeout
 }
 
-function collectComponentText({
-  components,
-  lines,
-}: {
-  components: unknown[]
-  lines: string[]
-}): void {
+function collectComponentText({ components, lines }: { components: unknown[]; lines: string[] }): void {
   for (const component of components) {
     if (!component || typeof component !== 'object') {
       continue
@@ -72,15 +48,16 @@ function collectComponentText({
       for (const item of component.items) lines.push(`[media: ${item?.media?.url ?? ''}]`)
       continue
     }
-    if (component.type === ComponentType.File && 'file' in component && component.file && typeof component.file === 'object') {
+    if (
+      component.type === ComponentType.File &&
+      'file' in component &&
+      component.file &&
+      typeof component.file === 'object'
+    ) {
       lines.push(`[file: ${'url' in component.file ? String(component.file.url) : ''}]`)
       continue
     }
-    if (
-      'content' in component &&
-      typeof component.content === 'string' &&
-      component.content
-    ) {
+    if ('content' in component && typeof component.content === 'string' && component.content) {
       lines.push(component.content)
     }
     if ('components' in component && Array.isArray(component.components)) {
@@ -330,12 +307,26 @@ export class DigitalDiscord {
   }
 
   // A user in a voice channel speaks: the bot receives Speaking and the opus frames.
-  async speakInVoice(input: { guildId: string; channelId: string; userId: string; opusPackets: readonly Buffer[]; intervalMs?: number }): Promise<void> {
+  async speakInVoice(input: {
+    guildId: string
+    channelId: string
+    userId: string
+    opusPackets: readonly Buffer[]
+    intervalMs?: number
+  }): Promise<void> {
     await this.requireVoice().speak(input)
   }
 
   // A user joins a voice channel (channelId) or leaves voice (null).
-  async setUserVoiceChannel({ userId, guildId, channelId }: { userId: string; guildId: string; channelId: string | null }): Promise<void> {
+  async setUserVoiceChannel({
+    userId,
+    guildId,
+    channelId,
+  }: {
+    userId: string
+    guildId: string
+    channelId: string | null
+  }): Promise<void> {
     if (!this.server) throw new Error('DigitalDiscord is not started')
     this.server.gateway.setVoiceState({ guildId, channelId, userId, sessionId: `user-${userId}` })
   }
@@ -469,9 +460,7 @@ export class DigitalDiscord {
         content,
         embeds: JSON.stringify(embeds ?? []),
         attachments: JSON.stringify(attachments ?? []),
-        messageReference: messageReference
-          ? JSON.stringify(messageReference)
-          : null,
+        messageReference: messageReference ? JSON.stringify(messageReference) : null,
       },
     })
     await this.prisma.channel.update({
@@ -498,12 +487,7 @@ export class DigitalDiscord {
           include: { user: true },
         })
       : null
-    const apiMessage = messageToAPI(
-      dbMessage,
-      author,
-      guildId,
-      member ?? undefined,
-    )
+    const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
     this.server.gateway.broadcastMessageCreate(apiMessage, guildId ?? '')
     return apiMessage
   }
@@ -549,12 +533,7 @@ export class DigitalDiscord {
           include: { user: true },
         })
       : null
-    const apiMessage = messageToAPI(
-      dbMessage,
-      author,
-      guildId,
-      member ?? undefined,
-    )
+    const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
     this.server.gateway.broadcast(GatewayDispatchEvents.MessageUpdate, {
       ...apiMessage,
       guild_id: guildId ?? '',
@@ -562,13 +541,7 @@ export class DigitalDiscord {
     return apiMessage
   }
 
-  async simulateUserMessageDelete({
-    messageId,
-    channelId,
-  }: {
-    messageId: string
-    channelId: string
-  }): Promise<void> {
+  async simulateUserMessageDelete({ messageId, channelId }: { messageId: string; channelId: string }): Promise<void> {
     if (!this.server) {
       throw new Error('Server not started')
     }
@@ -635,9 +608,6 @@ export class DigitalDiscord {
     })
 
     // Build the INTERACTION_CREATE gateway payload
-    const user = await this.prisma.user.findUniqueOrThrow({
-      where: { id: userId },
-    })
     const member = await this.prisma.guildMember.findUnique({
       where: { guildId_userId: { guildId: resolvedGuildId, userId } },
       include: { user: true },
@@ -665,12 +635,7 @@ export class DigitalDiscord {
             include: { user: true },
           })
         : null
-      messageData = messageToAPI(
-        msg,
-        msgAuthor,
-        resolvedGuildId,
-        msgMember ?? undefined,
-      )
+      messageData = messageToAPI(msg, msgAuthor, resolvedGuildId, msgMember ?? undefined)
     }
 
     const componentType = (() => {
@@ -740,10 +705,7 @@ export class DigitalDiscord {
       attachment_size_limit: 26214400,
     } as unknown as APIInteraction
 
-    this.server.gateway.broadcast(
-      GatewayDispatchEvents.InteractionCreate,
-      interactionPayload,
-    )
+    this.server.gateway.broadcast(GatewayDispatchEvents.InteractionCreate, interactionPayload)
 
     return { id: interactionId, token: interactionToken }
   }
@@ -808,9 +770,7 @@ export class DigitalDiscord {
 
   // Slash commands the bot registered, ordered by name. Guild commands by
   // default; pass guildId: null for global commands.
-  async getRegisteredCommands({
-    guildId = this.guildId,
-  }: { guildId?: string | null } = {}): Promise<
+  async getRegisteredCommands({ guildId = this.guildId }: { guildId?: string | null } = {}): Promise<
     Array<{ id: string; name: string; description: string; options: unknown[] }>
   > {
     const commands = await this.prisma.applicationCommand.findMany({
@@ -969,9 +929,16 @@ export class DigitalDiscord {
         ],
       }
     })
-    components.push(...files.map((field) => ({ type: ComponentType.Label, component: {
-      type: ComponentType.FileUpload, custom_id: field.customId, values: field.attachments.map((attachment) => attachment.id),
-    } })))
+    components.push(
+      ...files.map((field) => ({
+        type: ComponentType.Label,
+        component: {
+          type: ComponentType.FileUpload,
+          custom_id: field.customId,
+          values: field.attachments.map((attachment) => attachment.id),
+        },
+      })),
+    )
 
     return this.simulateInteraction({
       type: InteractionType.ModalSubmit,
@@ -982,12 +949,14 @@ export class DigitalDiscord {
       data: {
         custom_id: customId,
         components,
-        resolved: { attachments: Object.fromEntries(files.flatMap((field) => field.attachments.map((attachment) => [attachment.id, attachment]))) },
+        resolved: {
+          attachments: Object.fromEntries(
+            files.flatMap((field) => field.attachments.map((attachment) => [attachment.id, attachment])),
+          ),
+        },
       },
     })
   }
-
-
 
   // --- Internal ---
 
@@ -1016,17 +985,10 @@ export class DigitalDiscord {
           .join('\n')
           .trim(),
       )
-      .filter(
-        (s) =>
-          s.length > 0 &&
-          !/^CREATE\s+TABLE\s+["']?sqlite_sequence["']?\s*\(/i.test(s),
-      )
+      .filter((s) => s.length > 0 && !/^CREATE\s+TABLE\s+["']?sqlite_sequence["']?\s*\(/i.test(s))
       .map((s) =>
         s
-          .replace(
-            /^CREATE\s+UNIQUE\s+INDEX\b(?!\s+IF)/i,
-            'CREATE UNIQUE INDEX IF NOT EXISTS',
-          )
+          .replace(/^CREATE\s+UNIQUE\s+INDEX\b(?!\s+IF)/i, 'CREATE UNIQUE INDEX IF NOT EXISTS')
           .replace(/^CREATE\s+INDEX\b(?!\s+IF)/i, 'CREATE INDEX IF NOT EXISTS'),
       )
 
@@ -1153,13 +1115,7 @@ export class ChannelScope {
   private readonly discord: DigitalDiscord
   readonly channelId: string
 
-  constructor({
-    discord,
-    channelId,
-  }: {
-    discord: DigitalDiscord
-    channelId: string
-  }) {
+  constructor({ discord, channelId }: { discord: DigitalDiscord; channelId: string }) {
     this.discord = discord
     this.channelId = channelId
   }
@@ -1201,7 +1157,11 @@ export class ChannelScope {
    *   chronological position of interaction events. Defaults to false so
    *   existing snapshots are not affected.
    */
-  async text({ deterministicFooters = true, showTyping = false, showInteractions = false }: { deterministicFooters?: boolean; showTyping?: boolean; showInteractions?: boolean } = {}): Promise<string> {
+  async text({
+    deterministicFooters = true,
+    showTyping = false,
+    showInteractions = false,
+  }: { deterministicFooters?: boolean; showTyping?: boolean; showInteractions?: boolean } = {}): Promise<string> {
     const messages = await this.getMessages()
 
     // Build timeline entries: messages + optional typing events
@@ -1295,7 +1255,12 @@ export class ChannelScope {
           : content.startsWith('> ')
             ? content.slice(2)
             : content
-        if (deterministicFooters && footerBody.startsWith('*') && footerBody.includes('⋅') && !footerBody.startsWith('*using ')) {
+        if (
+          deterministicFooters &&
+          footerBody.startsWith('*') &&
+          footerBody.includes('⋅') &&
+          !footerBody.startsWith('*using ')
+        ) {
           content = content
             .replace(/<1s/g, 'Ns')
             .replace(/\b\d+m\s+\d+s\b/g, 'Ns')
@@ -1335,7 +1300,12 @@ export class ChannelScope {
       const starterMsg = await this.discord.prisma.message.findUnique({
         where: { id: channel.starterMessageId },
       })
-      if (starterMsg && !messages.some((m) => { return m.id === starterMsg.id })) {
+      if (
+        starterMsg &&
+        !messages.some((m) => {
+          return m.id === starterMsg.id
+        })
+      ) {
         const starterAuthor = await this.discord.prisma.user.findUniqueOrThrow({
           where: { id: starterMsg.authorId },
         })
@@ -1346,9 +1316,7 @@ export class ChannelScope {
       const author = await this.discord.prisma.user.findUniqueOrThrow({
         where: { id: msg.authorId },
       })
-      result.push(
-        messageToAPI(msg, author, channel?.guildId ?? undefined),
-      )
+      result.push(messageToAPI(msg, author, channel?.guildId ?? undefined))
     }
     return result
   }
@@ -1381,9 +1349,7 @@ export class ChannelScope {
         setTimeout(resolve, 50)
       })
     }
-    throw new Error(
-      `Timed out waiting for typing event in channel ${this.channelId}`,
-    )
+    throw new Error(`Timed out waiting for typing event in channel ${this.channelId}`)
   }
 
   async waitForTypingToStop({
@@ -1399,16 +1365,17 @@ export class ChannelScope {
     const start = Date.now()
     const baselineTimestamp = afterTimestamp ?? start
     while (Date.now() - start < effectiveTimeout) {
-      const latestTypingTimestamp = this.getTypingEvents()
-        .filter((entry) => {
-          return entry.timestamp >= baselineTimestamp
-        })
-        .map((entry) => {
-          return entry.timestamp
-        })
-        .sort((a, b) => {
-          return b - a
-        })[0] ?? baselineTimestamp
+      const latestTypingTimestamp =
+        this.getTypingEvents()
+          .filter((entry) => {
+            return entry.timestamp >= baselineTimestamp
+          })
+          .map((entry) => {
+            return entry.timestamp
+          })
+          .sort((a, b) => {
+            return b - a
+          })[0] ?? baselineTimestamp
 
       if (Date.now() - latestTypingTimestamp >= idleMs) {
         return
@@ -1419,9 +1386,7 @@ export class ChannelScope {
       })
     }
 
-    throw new Error(
-      `Timed out waiting for typing to stop in channel ${this.channelId}`,
-    )
+    throw new Error(`Timed out waiting for typing to stop in channel ${this.channelId}`)
   }
 
   async getChannel(): Promise<APIChannel | null> {
@@ -1439,11 +1404,7 @@ export class ChannelScope {
       where: {
         parentId: this.channelId,
         type: {
-          in: [
-            ChannelType.PublicThread,
-            ChannelType.PrivateThread,
-            ChannelType.AnnouncementThread,
-          ],
+          in: [ChannelType.PublicThread, ChannelType.PrivateThread, ChannelType.AnnouncementThread],
         },
       },
     })
@@ -1470,14 +1431,12 @@ export class ChannelScope {
     const start = Date.now()
     while (Date.now() - start < effectiveTimeout) {
       const messages = await this.getMessages()
-      const matchedMessage = [...messages]
-        .reverse()
-        .find((message) => {
-          if (!predicate) {
-            return true
-          }
-          return predicate(message)
-        })
+      const matchedMessage = [...messages].reverse().find((message) => {
+        if (!predicate) {
+          return true
+        }
+        return predicate(message)
+      })
       if (matchedMessage) {
         return matchedMessage
       }
@@ -1485,9 +1444,7 @@ export class ChannelScope {
         setTimeout(resolve, 50)
       })
     }
-    throw new Error(
-      `Timed out waiting for message in channel ${this.channelId}`,
-    )
+    throw new Error(`Timed out waiting for message in channel ${this.channelId}`)
   }
 
   async waitForBotReply({ timeout = 10000 }: { timeout?: number } = {}): Promise<APIMessage> {
@@ -1527,9 +1484,7 @@ export class ChannelScope {
         setTimeout(resolve, 50)
       })
     }
-    throw new Error(
-      `Timed out waiting for thread in channel ${this.channelId}`,
-    )
+    throw new Error(`Timed out waiting for thread in channel ${this.channelId}`)
   }
 
   async getInteractionResponse(interactionId: string): Promise<{
@@ -1563,10 +1518,9 @@ export class ChannelScope {
     const effectiveTimeout = normalizeWaitTimeout(timeout)
     const start = Date.now()
     while (Date.now() - start < effectiveTimeout) {
-      const response =
-        await this.discord.prisma.interactionResponse.findUnique({
-          where: { interactionId },
-        })
+      const response = await this.discord.prisma.interactionResponse.findUnique({
+        where: { interactionId },
+      })
       if (response?.acknowledged) {
         return response
       }
@@ -1574,9 +1528,7 @@ export class ChannelScope {
         setTimeout(resolve, 50)
       })
     }
-    throw new Error(
-      `Timed out waiting for interaction response ${interactionId}`,
-    )
+    throw new Error(`Timed out waiting for interaction response ${interactionId}`)
   }
 }
 
@@ -1587,15 +1539,7 @@ export class ScopedUserActor {
   private readonly channelId: string
   private readonly userId: string
 
-  constructor({
-    discord,
-    channelId,
-    userId,
-  }: {
-    discord: DigitalDiscord
-    channelId: string
-    userId: string
-  }) {
+  constructor({ discord, channelId, userId }: { discord: DigitalDiscord; channelId: string; userId: string }) {
     this.discord = discord
     this.channelId = channelId
     this.userId = userId
@@ -1615,7 +1559,13 @@ export class ScopedUserActor {
   async speak({ opusPackets, intervalMs }: { opusPackets: readonly Buffer[]; intervalMs?: number }): Promise<void> {
     const channel = await this.discord.prisma.channel.findUniqueOrThrow({ where: { id: this.channelId } })
     if (!channel.guildId) throw new Error(`Channel ${this.channelId} is not in a guild`)
-    await this.discord.speakInVoice({ guildId: channel.guildId, channelId: this.channelId, userId: this.userId, opusPackets, intervalMs })
+    await this.discord.speakInVoice({
+      guildId: channel.guildId,
+      channelId: this.channelId,
+      userId: this.userId,
+      opusPackets,
+      intervalMs,
+    })
   }
 
   private async setVoice(channelId: string | null): Promise<void> {
@@ -1653,7 +1603,7 @@ export class ScopedUserActor {
    */
   async sendVoiceMessage({
     content,
-    url = 'https://fake-cdn.discord.test/voice-message.ogg',
+    url: voiceUrl = 'https://fake-cdn.discord.test/voice-message.ogg',
     contentType = 'audio/ogg',
     filename = 'voice-message.ogg',
   }: { content?: string; url?: string; contentType?: string; filename?: string } = {}) {
@@ -1665,20 +1615,14 @@ export class ScopedUserActor {
           filename,
           content_type: contentType,
           size: 1024,
-          url,
-          proxy_url: url,
+          url: voiceUrl,
+          proxy_url: voiceUrl,
         },
       ],
     })
   }
 
-  async editMessage({
-    messageId,
-    content,
-  }: {
-    messageId: string
-    content: string
-  }) {
+  async editMessage({ messageId, content }: { messageId: string; content: string }) {
     return this.discord.simulateUserMessageEdit({
       messageId,
       channelId: this.channelId,
@@ -1735,15 +1679,7 @@ export class ScopedUserActor {
     })
   }
 
-  async clickButton({
-    messageId,
-    customId,
-    guildId,
-  }: {
-    messageId: string
-    customId: string
-    guildId?: string
-  }) {
+  async clickButton({ messageId, customId, guildId }: { messageId: string; customId: string; guildId?: string }) {
     return this.discord.simulateButtonClick({
       channelId: this.channelId,
       userId: this.userId,

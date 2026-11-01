@@ -39,7 +39,9 @@ let voiceChannelId: string
 
 async function opusPackets(): Promise<Buffer[]> {
   const packets: Buffer[] = []
-  const demuxer = fs.createReadStream(path.join(import.meta.dirname, 'fixtures', 'voice.ogg')).pipe(new prism.opus.OggDemuxer())
+  const demuxer = fs
+    .createReadStream(path.join(import.meta.dirname, 'fixtures', 'voice.ogg'))
+    .pipe(new prism.opus.OggDemuxer())
   for await (const packet of demuxer) packets.push(packet as Buffer)
   return packets
 }
@@ -51,7 +53,8 @@ function botVoiceChannel(): string | null {
 async function waitForChat(text: string) {
   return waitFor({
     label: `voice chat message containing ${JSON.stringify(text)}`,
-    check: async () => (await twin.discord.channel(voiceChannelId).getMessages()).find((message) => message.content.includes(text)),
+    check: async () =>
+      (await twin.discord.channel(voiceChannelId).getMessages()).find((message) => message.content.includes(text)),
   })
 }
 
@@ -72,15 +75,31 @@ beforeAll(async () => {
     when: { latestUserTextIncludes: marker },
     then: { parts: textParts(`${marker} done`) },
   }))
-  ;[server, twin, live] = await Promise.all([startOpencodeTestServer({ matchers }), startTwin({ voice: true }), startFakeLive()])
-  await seedProjectChannel({ dataDir, channelId: twin.channelId, guildId: twin.discord.guildId, directory: server.projectDirectory })
+  ;[server, twin, live] = await Promise.all([
+    startOpencodeTestServer({ matchers }),
+    startTwin({ voice: true }),
+    startFakeLive(),
+  ])
+  await seedProjectChannel({
+    dataDir,
+    channelId: twin.channelId,
+    guildId: twin.discord.guildId,
+    directory: server.projectDirectory,
+  })
   // The user's global AGENTS.md and a global skill go into the backend instructions.
   fs.writeFileSync(path.join(server.configDir, 'AGENTS.md'), 'Always answer like a pirate.\n')
   fs.mkdirSync(path.join(server.configDir, 'skills', 'deploy-docs'), { recursive: true })
-  fs.writeFileSync(path.join(server.configDir, 'skills', 'deploy-docs', 'SKILL.md'), '---\nname: deploy-docs\ndescription: Deploy the docs <site> & check it.\n---\n\nRun pnpm deploy.\n')
+  fs.writeFileSync(
+    path.join(server.configDir, 'skills', 'deploy-docs', 'SKILL.md'),
+    '---\nname: deploy-docs\ndescription: Deploy the docs <site> & check it.\n---\n\nRun pnpm deploy.\n',
+  )
   // The ChatGPT subscription signed in to OpenCode pays for the calls.
   const opencodeDbFile = path.join(dataDir, 'opencode-chatgpt.db')
-  await writeOpencodeCredential({ file: opencodeDbFile, access: 'chatgpt-access-token', expires: Date.now() + 3_600_000 })
+  await writeOpencodeCredential({
+    file: opencodeDbFile,
+    access: 'chatgpt-access-token',
+    expires: Date.now() + 3_600_000,
+  })
   bot = await startTestBot({ dataDir, twin, server, opencodeDbFile, realtimeBaseUrls: live.baseUrls })
   live.greeting = 'Hello tommy.'
 })
@@ -113,7 +132,11 @@ test('a user joins and speaks, the backend runs kimaki commands and the model sa
   live.replies.push(
     // seq makes the output longer than the 4000 character limit.
     { type: 'call', name: 'shell', args: { command: 'seq 1 2000; kimaki project list' } },
-    { type: 'call', name: 'shell', args: { command: `kimaki send --channel ${twin.channelId} --prompt 'Voice call note' --notify-only` } },
+    {
+      type: 'call',
+      name: 'shell',
+      args: { command: `kimaki send --channel ${twin.channelId} --prompt 'Voice call note' --notify-only` },
+    },
     // An empty post fails validation: the chat shows a failed tool line.
     { type: 'call', name: 'post_message', args: { text: ' ' } },
     { type: 'say', text: 'You have one project.' },
@@ -132,7 +155,10 @@ test('a user joins and speaks, the backend runs kimaki commands and the model sa
   receiver.speaking.emit('start', TEST_USER_ID)
   expect(subscription.listenerCount('data')).toBe(1)
 
-  await twin.discord.channel(voiceChannelId).user(TEST_USER_ID).speak({ opusPackets: await opusPackets(), intervalMs: 0 })
+  await twin.discord
+    .channel(voiceChannelId)
+    .user(TEST_USER_ID)
+    .speak({ opusPackets: await opusPackets(), intervalMs: 0 })
   await waitForChat('You have one project.')
   // Thread IDs are snowflakes: replace them for a stable snapshot.
   expect((await twin.discord.channel(voiceChannelId).text()).replace(/<#\d+>/g, '<#thread>')).toMatchInlineSnapshot(`
@@ -159,7 +185,9 @@ test('a user joins and speaks, the backend runs kimaki commands and the model sa
   // The truncated output names a file with the full output.
   const { output } = JSON.parse(listed!.output) as { output: string }
   const file = /full output in (\S+?),/.exec(output)?.[1]
-  expect(output.split('\n')[0]).toMatch(/^\[output truncated: first \d+ characters omitted; full output in \S+, use grep or sed on it\]$/)
+  expect(output.split('\n')[0]).toMatch(
+    /^\[output truncated: first \d+ characters omitted; full output in \S+, use grep or sed on it\]$/,
+  )
   expect(fs.readFileSync(file!, 'utf8').startsWith('1\n2\n3\n')).toBe(true)
   fs.rmSync(file!)
   // The model's instructions name the users; the backend's name the projects and pass every user to kimaki send.
@@ -167,7 +195,8 @@ test('a user joins and speaks, the backend runs kimaki commands and the model sa
   const instructions = live.backendInstructions[0]!
   expect(instructions).toContain(`--user '${TEST_USER_ID}'`)
   expect(instructions).toContain(server.projectDirectory)
-  expect(instructions.slice(instructions.indexOf('## user instructions')).replaceAll(server.configDir, '<config>')).toMatchInlineSnapshot(`
+  expect(instructions.slice(instructions.indexOf('## user instructions')).replaceAll(server.configDir, '<config>'))
+    .toMatchInlineSnapshot(`
     "## user instructions
 
     The global AGENTS.md of the user. Follow it where it applies to this call.
@@ -193,7 +222,10 @@ test('a user joins and speaks, the backend runs kimaki commands and the model sa
 
 test('chat messages reach the backend, and end_call leaves after the goodbye while the user stays', async () => {
   const before = (await twin.discord.channel(voiceChannelId).getMessages()).length
-  const botPackets = () => twin.discord.getVoiceStreams({ channelId: voiceChannelId, userId: twin.discord.botUserId }).reduce((total, stream) => total + stream.opusPackets.length, 0)
+  const botPackets = () =>
+    twin.discord
+      .getVoiceStreams({ channelId: voiceChannelId, userId: twin.discord.botUserId })
+      .reduce((total, stream) => total + stream.opusPackets.length, 0)
   const packetsBefore = botPackets()
   live.greeting = 'Hi again.'
   live.replies.push({ type: 'call', name: 'end_call', args: {} }, { type: 'say', text: 'Bye.' })
@@ -204,7 +236,9 @@ test('chat messages reach the backend, and end_call leaves after the goodbye whi
   await waitForChat('voice call ended: the assistant hung up')
   // The greeting and the goodbye (15 packets each in the fake) were both played before the bot left.
   expect(botPackets() - packetsBefore).toBeGreaterThanOrEqual(30)
-  expect(live.backendInputs.at(-1)).toBe(`<chat-message from="tommy" user-id="${TEST_USER_ID}">\nplease hang up\n</chat-message>`)
+  expect(live.backendInputs.at(-1)).toBe(
+    `<chat-message from="tommy" user-id="${TEST_USER_ID}">\nplease hang up\n</chat-message>`,
+  )
   expect(await chatSince(before)).toMatchInlineSnapshot(`
     "TestBot: -# ⬦ voice call started ⋅ gpt-live ⋅ cove
     TestBot: Hi again.
@@ -220,7 +254,13 @@ test('finished threads of any project are announced in the call; the model answe
   await waitFor({ label: 'bot out of voice', check: async () => botVoiceChannel() === null })
   const before = (await twin.discord.channel(voiceChannelId).getMessages()).length
   live.replies.push(
-    { type: 'call', name: 'shell', args: { command: `kimaki send --channel ${twin.channelId} --prompt 'call-thread-marker' --user '${TEST_USER_ID}'` } },
+    {
+      type: 'call',
+      name: 'shell',
+      args: {
+        command: `kimaki send --channel ${twin.channelId} --prompt 'call-thread-marker' --user '${TEST_USER_ID}'`,
+      },
+    },
     { type: 'say', text: 'Started.' },
     // The answer to the finished notice of the thread the call started.
     { type: 'say', text: 'Your thread finished.' },
@@ -238,7 +278,10 @@ test('finished threads of any project are announced in the call; the model answe
     label: 'second finished notice',
     // Match the new notice by text, not by count: earlier tests leave notices in
     // this channel, so a count of two can already be true when this test starts.
-    check: async () => (await twin.discord.channel(voiceChannelId).getMessages()).slice(before).some((message) => message.content.includes('thread finished: other-thread-marker')),
+    check: async () =>
+      (await twin.discord.channel(voiceChannelId).getMessages())
+        .slice(before)
+        .some((message) => message.content.includes('thread finished: other-thread-marker')),
   })
   for (let i = 0; i < 10; i++) {
     expect(live.replies.length).toBe(1)
@@ -258,7 +301,12 @@ test('finished threads of any project are announced in the call; the model answe
     TestBot: -# ⬦ thread finished: other-thread-marker ⋅ https://discord.com/channels/<id>/<id> ⋅ <ses>"
   `)
   const notices = live.appends.filter((append) => append.text.startsWith('<system>Thread finished'))
-  expect(notices.map((notice) => ({ ...notice, text: notice.text.replace(/\d{17,20}/g, '<id>').replace(/ses_\w+/g, '<ses>') }))).toMatchInlineSnapshot(`
+  expect(
+    notices.map((notice) => ({
+      ...notice,
+      text: notice.text.replace(/\d{17,20}/g, '<id>').replace(/ses_\w+/g, '<ses>'),
+    })),
+  ).toMatchInlineSnapshot(`
     [
       {
         "channel": "commentary",
@@ -271,7 +319,10 @@ test('finished threads of any project are announced in the call; the model answe
 })
 
 test('a saved voice is used when gpt-live knows it; no ChatGPT sign-in means no call', async () => {
-  const appId = parseFirst<BotTokenRow>('bot_tokens', await bot.db<BotTokenRow[]>`SELECT * FROM bot_tokens WHERE token = ${bot.token} LIMIT 1`)!.app_id
+  const appId = parseFirst<BotTokenRow>(
+    'bot_tokens',
+    await bot.db<BotTokenRow[]>`SELECT * FROM bot_tokens WHERE token = ${bot.token} LIMIT 1`,
+  )!.app_id
   const pick = async (voice: string | null) => {
     const saved = await saveVoiceCallVoice({ db: bot.db, appId, voice })
     if (saved instanceof Error) throw saved

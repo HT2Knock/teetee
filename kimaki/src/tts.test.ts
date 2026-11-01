@@ -18,7 +18,14 @@ beforeAll(async () => {
     request.on('data', (chunk: Buffer) => chunks.push(chunk))
     request.on('end', () => {
       const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
-      requests.push({ url: request.url ?? '', headers: { authorization: request.headers.authorization, key: request.headers['x-goog-api-key'] as string | undefined }, body })
+      requests.push({
+        url: request.url ?? '',
+        headers: {
+          authorization: request.headers.authorization,
+          key: request.headers['x-goog-api-key'] as string | undefined,
+        },
+        body,
+      })
       if (request.url?.endsWith('/audio/speech')) {
         response.setHeader('content-type', 'audio/mpeg')
         response.end(Buffer.from('mp3-bytes'))
@@ -30,7 +37,17 @@ beforeAll(async () => {
         return
       }
       response.setHeader('content-type', 'application/json')
-      response.end(JSON.stringify({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'audio/L16;codec=pcm;rate=24000', data: pcm.toString('base64') } }] } }] }))
+      response.end(
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [{ inlineData: { mimeType: 'audio/L16;codec=pcm;rate=24000', data: pcm.toString('base64') } }],
+              },
+            },
+          ],
+        }),
+      )
     })
   })
   const port = await freePort()
@@ -43,14 +60,37 @@ afterAll(async () => {
 })
 
 test('OpenAI returns mp3; Gemini PCM is wrapped in a WAV header; HTTP errors are values', async () => {
-  const openai = await generateSpeech({ text: 'Hello', provider: 'openai', apiKey: 'sk-test', speed: 1.25, instructions: 'Calm', baseUrls: { openai: baseUrl } })
-  const gemini = await generateSpeech({ text: 'Ciao', provider: 'gemini', apiKey: 'gm-test', voice: 'Puck', baseUrls: { gemini: baseUrl } })
-  const failed = await generateSpeech({ text: 'x', provider: 'gemini', apiKey: 'gm-test', baseUrls: { gemini: `${baseUrl}/fail` } })
+  const openai = await generateSpeech({
+    text: 'Hello',
+    provider: 'openai',
+    apiKey: 'sk-test',
+    speed: 1.25,
+    instructions: 'Calm',
+    baseUrls: { openai: baseUrl },
+  })
+  const gemini = await generateSpeech({
+    text: 'Ciao',
+    provider: 'gemini',
+    apiKey: 'gm-test',
+    voice: 'Puck',
+    baseUrls: { gemini: baseUrl },
+  })
+  const failed = await generateSpeech({
+    text: 'x',
+    provider: 'gemini',
+    apiKey: 'gm-test',
+    baseUrls: { gemini: `${baseUrl}/fail` },
+  })
   if (openai instanceof Error) throw openai
   if (gemini instanceof Error) throw gemini
   expect({
     openai: { mediaType: openai.mediaType, audio: openai.audio.toString() },
-    gemini: { mediaType: gemini.mediaType, header: gemini.audio.subarray(0, 4).toString(), bytes: gemini.audio.length, rate: gemini.audio.readUInt32LE(24) },
+    gemini: {
+      mediaType: gemini.mediaType,
+      header: gemini.audio.subarray(0, 4).toString(),
+      bytes: gemini.audio.length,
+      rate: gemini.audio.readUInt32LE(24),
+    },
     failed: failed instanceof Error ? failed.message : 'no error',
     requests,
   }).toMatchInlineSnapshot(`

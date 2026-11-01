@@ -39,7 +39,13 @@ export default Plugin.define({
       if (!session?.parentID) return current
       const parent = await ctx.session.get({ sessionID: session.parentID }).catch(() => null)
       const parentMarker = parent?.metadata?.['kimaki']
-      if (parentMarker && typeof parentMarker === 'object' && !Array.isArray(parentMarker) && parentMarker['threadId'] === current.get('threadId')) return marker(session.parentID)
+      if (
+        parentMarker &&
+        typeof parentMarker === 'object' &&
+        !Array.isArray(parentMarker) &&
+        parentMarker['threadId'] === current.get('threadId')
+      )
+        return marker(session.parentID)
       return current
     }
     // The git branch reaches the model as a synthetic message saved right before
@@ -48,7 +54,10 @@ export default Plugin.define({
     // OpenCode admits the prompt, so the synthetic message is admitted first.
     await ctx.session.hook('prompt', async (event) => {
       if (!(await marker(event.sessionID))) return
-      const branch = await exec('git', ['branch', '--show-current'], { cwd: ctx.location.directory, timeout: 5000 }).catch(() => null)
+      const branch = await exec('git', ['branch', '--show-current'], {
+        cwd: ctx.location.directory,
+        timeout: 5000,
+      }).catch(() => null)
       const name = branch?.stdout.trim()
       if (!name) return
       const text = `${BRANCH_PREFIX}${name}]`
@@ -56,7 +65,9 @@ export default Plugin.define({
       if (!history) return
       const last = history.findLast((message) => message.type === 'synthetic' && message.text.startsWith(BRANCH_PREFIX))
       if (last?.type === 'synthetic' && last.text === text) return
-      await ctx.session.synthetic({ sessionID: event.sessionID, text, delivery: event.delivery, resume: false }).catch(() => undefined)
+      await ctx.session
+        .synthetic({ sessionID: event.sessionID, text, delivery: event.delivery, resume: false })
+        .catch(() => undefined)
     })
     await ctx.session.hook('context', async (event) => {
       // The only prompt change for every session, TUI included. The ID never
@@ -76,21 +87,31 @@ export default Plugin.define({
       // inputs with Schema.Struct, which ignores unknown keys.
       const description = { type: 'string', description: 'Short 5-10 word summary shown in Discord' }
       const extras = {
-        shell: { description, hasSideEffect: { type: 'boolean', description: 'True if Discord should show this command so the user is aware it runs. False hides it' } },
+        shell: {
+          description,
+          hasSideEffect: {
+            type: 'boolean',
+            description: 'True if Discord should show this command so the user is aware it runs. False hides it',
+          },
+        },
         execute: { description },
       }
       for (const [name, properties] of Object.entries(extras)) {
         const tool = event.tools[name]
         const input = tool?.input
         if (!tool || !input || typeof input !== 'object' || Array.isArray(input)) continue
-        tool.input = { ...input, properties: {
-          ...(input.properties && typeof input.properties === 'object' ? input.properties : {}),
-          ...properties,
-        } }
+        tool.input = {
+          ...input,
+          properties: {
+            ...(input.properties && typeof input.properties === 'object' ? input.properties : {}),
+            ...properties,
+          },
+        }
       }
     })
     await ctx.tool.hook('execute.before', async (event) => {
-      if (event.tool !== 'shell' || !event.input || typeof event.input !== 'object' || Array.isArray(event.input)) return
+      if (event.tool !== 'shell' || !event.input || typeof event.input !== 'object' || Array.isArray(event.input))
+        return
       const info = await marker(event.sessionID)
       const dataDir = info?.get('dataDir')
       const lockPort = info?.get('lockPort')
@@ -105,7 +126,13 @@ export default Plugin.define({
       const dataDir = (await marker(event.sessionID))?.get('dataDir')
       if (typeof dataDir !== 'string') return
       // Plugins stay silent: a failed append only loses one index entry.
-      const recorded = await recordToolEdits({ dataDir, directory: ctx.location.directory, sessionId: event.sessionID, tool: event.tool, input: event.input })
+      const recorded = await recordToolEdits({
+        dataDir,
+        directory: ctx.location.directory,
+        sessionId: event.sessionID,
+        tool: event.tool,
+        input: event.input,
+      })
       if (recorded instanceof Error) return
     })
   },

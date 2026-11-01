@@ -43,8 +43,10 @@ afterEach(() => {
 })
 
 function tableNames(db: KimakiDb): Promise<string[]> {
-  return db<{ name: string }[]>`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`.then(
-    (rows) => rows.map((row) => row.name),
+  return db<
+    { name: string }[]
+  >`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`.then((rows) =>
+    rows.map((row) => row.name),
   )
 }
 
@@ -92,7 +94,9 @@ test('fresh install gets kimaki.db with the kimaki tables; subcommands never cre
 
   // Subcommands never migrate: a missing file is reported, not created.
   const notMigrated = await openDb({ dataDir, migrate: false })
-  expect(notMigrated instanceof Error && notMigrated.message).toMatchInlineSnapshot(`"Kimaki database is not set up (kimaki.db is missing). Run kimaki once to set up the database"`)
+  expect(notMigrated instanceof Error && notMigrated.message).toMatchInlineSnapshot(
+    `"Kimaki database is not set up (kimaki.db is missing). Run kimaki once to set up the database"`,
+  )
   expect(fs.readdirSync(dataDir)).toEqual([])
 
   const opened = await openDb({ dataDir, migrate: true })
@@ -141,20 +145,42 @@ test('first start imports the V1 database once and leaves it unchanged', async (
   const bots = parseRows<BotTokenRow>('bot_tokens', await db`SELECT * FROM bot_tokens ORDER BY app_id ASC`)
   const apiKeys = parseRows<BotApiKeyRow>('bot_api_keys', await db`SELECT * FROM bot_api_keys`)
   const globalModels = parseRows<GlobalModelRow>('global_models', await db`SELECT * FROM global_models`)
-  const channels = parseRows<ChannelDirectoryRow>('channel_directories', await db`SELECT * FROM channel_directories ORDER BY channel_id ASC`)
+  const channels = parseRows<ChannelDirectoryRow>(
+    'channel_directories',
+    await db`SELECT * FROM channel_directories ORDER BY channel_id ASC`,
+  )
   const channelModels = parseRows<ChannelModelRow>('channel_models', await db`SELECT * FROM channel_models`)
-  const channelVerbosity = parseRows<ChannelVerbosityRow>('channel_verbosity', await db`SELECT * FROM channel_verbosity`)
-  const threads = parseRows<ThreadSessionRow>('thread_sessions', await db`SELECT * FROM thread_sessions ORDER BY thread_id ASC`)
+  const channelVerbosity = parseRows<ChannelVerbosityRow>(
+    'channel_verbosity',
+    await db`SELECT * FROM channel_verbosity`,
+  )
+  const threads = parseRows<ThreadSessionRow>(
+    'thread_sessions',
+    await db`SELECT * FROM thread_sessions ORDER BY thread_id ASC`,
+  )
   const tasks = parseRows<ScheduledTaskRow>('scheduled_tasks', await db`SELECT * FROM scheduled_tasks`)
-  const sleeps = parseRows<SessionSleepRow>('session_sleeps', await db`SELECT * FROM session_sleeps ORDER BY session_id ASC`)
+  const sleeps = parseRows<SessionSleepRow>(
+    'session_sleeps',
+    await db`SELECT * FROM session_sleeps ORDER BY session_id ASC`,
+  )
   const categories = parseRows<GuildCategoryRow>('guild_categories', await db`SELECT * FROM guild_categories`)
   expect({
     bots: bots.map((row) => {
       const apiKey = apiKeys.find((candidate) => candidate.app_id === row.app_id)
       const globalModel = globalModels.find((candidate) => candidate.app_id === row.app_id)
-      return { app: row.app_id, mode: row.bot_mode, lastUsed: row.last_used_at?.toISOString() ?? null, gemini: apiKey?.gemini_api_key ?? null, globalModel: globalModel ? `${globalModel.model_id} ${globalModel.variant}` : null }
+      return {
+        app: row.app_id,
+        mode: row.bot_mode,
+        lastUsed: row.last_used_at?.toISOString() ?? null,
+        gemini: apiKey?.gemini_api_key ?? null,
+        globalModel: globalModel ? `${globalModel.model_id} ${globalModel.variant}` : null,
+      }
     }),
-    categories: categories.map((row) => ({ guild: row.guild_id, category: row.category_id, created: row.created_at?.toISOString() })),
+    categories: categories.map((row) => ({
+      guild: row.guild_id,
+      category: row.category_id,
+      created: row.created_at?.toISOString(),
+    })),
     channels: channels.map((row) => {
       const model = channelModels.find((candidate) => candidate.channel_id === row.channel_id)
       const verbosity = channelVerbosity.find((candidate) => candidate.channel_id === row.channel_id)
@@ -166,9 +192,24 @@ test('first start imports the V1 database once and leaves it unchanged', async (
         model: model ? `${model.model_id} ${model.variant}` : null,
       }
     }),
-    threads: threads.map((row) => ({ thread: row.thread_id, session: row.session_id, created: row.created_at?.toISOString(), updated: row.updated_at?.toISOString() ?? null })),
-    tasks: tasks.map((row) => ({ status: row.status, cron: row.cron_expr, next: row.next_run_at.toISOString(), channel: row.channel_id })),
-    sleeps: sleeps.map((row) => ({ session: row.session_id, status: row.status, wake: row.wake_at.toISOString(), delivery: row.delivery_id })),
+    threads: threads.map((row) => ({
+      thread: row.thread_id,
+      session: row.session_id,
+      created: row.created_at?.toISOString(),
+      updated: row.updated_at?.toISOString() ?? null,
+    })),
+    tasks: tasks.map((row) => ({
+      status: row.status,
+      cron: row.cron_expr,
+      next: row.next_run_at.toISOString(),
+      channel: row.channel_id,
+    })),
+    sleeps: sleeps.map((row) => ({
+      session: row.session_id,
+      status: row.status,
+      wake: row.wake_at.toISOString(),
+      delivery: row.delivery_id,
+    })),
   }).toMatchInlineSnapshot(`
     {
       "bots": [
@@ -256,7 +297,12 @@ test('first start imports the V1 database once and leaves it unchanged', async (
   expect(journal[0]?.journal_mode).toBe('wal')
   await opened.close()
 
-  expect(fs.readdirSync(dataDir).filter((name) => name.startsWith('kimaki')).sort()).toEqual(['kimaki.db'])
+  expect(
+    fs
+      .readdirSync(dataDir)
+      .filter((name) => name.startsWith('kimaki'))
+      .sort(),
+  ).toEqual(['kimaki.db'])
 
   // Later starts never import again, even if V1 keeps writing its own file.
   const later = new Database(legacyFile)
@@ -264,7 +310,12 @@ test('first start imports the V1 database once and leaves it unchanged', async (
   later.close()
   const reopened = await openDb({ dataDir, migrate: true })
   if (reopened instanceof Error) throw reopened
-  expect(parseFirst<ThreadSessionRow>('thread_sessions', await reopened.db`SELECT * FROM thread_sessions WHERE thread_id = ${'1555112336879250003'} LIMIT 1`)).toBe(undefined)
+  expect(
+    parseFirst<ThreadSessionRow>(
+      'thread_sessions',
+      await reopened.db`SELECT * FROM thread_sessions WHERE thread_id = ${'1555112336879250003'} LIMIT 1`,
+    ),
+  ).toBe(undefined)
   await reopened.close()
 })
 
@@ -291,7 +342,10 @@ test('a stray kimaki.db without the version marker does not block the V1 import'
   const bots = parseRows<BotTokenRow>('bot_tokens', await opened.db`SELECT * FROM bot_tokens ORDER BY app_id ASC`)
   const version = (await opened.db<{ user_version: number }[]>`PRAGMA user_version`)[0]
   const agents = parseRows<ChannelAgentRow>('channel_agents', await opened.db`SELECT * FROM channel_agents`)
-  const tasks = parseRows<ScheduledTaskRow>('scheduled_tasks', await opened.db`SELECT * FROM scheduled_tasks ORDER BY id ASC`)
+  const tasks = parseRows<ScheduledTaskRow>(
+    'scheduled_tasks',
+    await opened.db`SELECT * FROM scheduled_tasks ORDER BY id ASC`,
+  )
   expect({
     bots: bots.map((row) => row.app_id),
     version: version?.user_version,
@@ -322,26 +376,45 @@ test('a stray kimaki.db without the version marker does not block the V1 import'
   await opened.close()
 
   // The stray file is renamed, never deleted, and keeps its rows.
-  const aside = fs.readdirSync(dataDir).filter((name) => name.startsWith('kimaki.db.unknown-') && !name.endsWith('-wal') && !name.endsWith('-shm'))
+  const aside = fs
+    .readdirSync(dataDir)
+    .filter((name) => name.startsWith('kimaki.db.unknown-') && !name.endsWith('-wal') && !name.endsWith('-shm'))
   expect(aside).toHaveLength(1)
   const kept = new Database(path.join(dataDir, aside[0] ?? ''))
-  expect(kept.query<{ text: string }, []>('SELECT text FROM notes').all().map((row) => row.text)).toEqual(['keep me'])
+  expect(
+    kept
+      .query<{ text: string }, []>('SELECT text FROM notes')
+      .all()
+      .map((row) => row.text),
+  ).toEqual(['keep me'])
   kept.close()
 
   // The next start keeps the marked kimaki.db.
   const reopened = await openDb({ dataDir, migrate: true })
   if (reopened instanceof Error) throw reopened
   await reopened.close()
-  expect(fs.readdirSync(dataDir).filter((name) => name.startsWith('kimaki.db.unknown-') && !name.endsWith('-wal') && !name.endsWith('-shm'))).toHaveLength(1)
+  expect(
+    fs
+      .readdirSync(dataDir)
+      .filter((name) => name.startsWith('kimaki.db.unknown-') && !name.endsWith('-wal') && !name.endsWith('-shm')),
+  ).toHaveLength(1)
 })
 
 test('a kimaki.db that is not an SQLite file is set aside before the V1 import', async () => {
   const dataDir = tempDataDir()
-  writeLegacyDb({ dataDir, sql: `CREATE TABLE bot_tokens (app_id TEXT PRIMARY KEY, token TEXT NOT NULL); INSERT INTO bot_tokens VALUES ('1422625037164350001', 'fake-token');` })
-  fs.writeFileSync(path.join(dataDir, 'kimaki.db'), 'not a database, just text that is long enough to have a header'.repeat(10))
+  writeLegacyDb({
+    dataDir,
+    sql: `CREATE TABLE bot_tokens (app_id TEXT PRIMARY KEY, token TEXT NOT NULL); INSERT INTO bot_tokens VALUES ('1422625037164350001', 'fake-token');`,
+  })
+  fs.writeFileSync(
+    path.join(dataDir, 'kimaki.db'),
+    'not a database, just text that is long enough to have a header'.repeat(10),
+  )
   const opened = await openDb({ dataDir, migrate: true })
   if (opened instanceof Error) throw opened
-  expect(parseRows<BotTokenRow>('bot_tokens', await opened.db`SELECT * FROM bot_tokens`).map((row) => row.app_id)).toEqual(['1422625037164350001'])
+  expect(
+    parseRows<BotTokenRow>('bot_tokens', await opened.db`SELECT * FROM bot_tokens`).map((row) => row.app_id),
+  ).toEqual(['1422625037164350001'])
   await opened.close()
   expect(fs.readdirSync(dataDir).filter((name) => name.startsWith('kimaki.db.unknown-'))).toHaveLength(1)
 })

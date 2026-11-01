@@ -66,7 +66,10 @@ afterAll(async () => {
 async function startSlowThread(content: string) {
   const { discord, channelId } = twin
   const before = new Set((await discord.channel(channelId).getThreads()).map((thread) => thread.id))
-  await discord.channel(channelId).user(TEST_USER_ID).sendMessage({ content: `${content} slow-marker` })
+  await discord
+    .channel(channelId)
+    .user(TEST_USER_ID)
+    .sendMessage({ content: `${content} slow-marker` })
   const thread = await discord.channel(channelId).waitForThread({
     timeout: 8_000,
     predicate: (candidate) => !before.has(candidate.id),

@@ -57,8 +57,9 @@ export async function resolveGuildId({
   guildId?: string
 }): Promise<DbError | ConfigError | string> {
   if (guildId) return guildId
-  const rows = await db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories`
-    .catch((e) => new DbError({ operation: 'read channel_directories', cause: e }))
+  const rows = await db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories`.catch(
+    (e) => new DbError({ operation: 'read channel_directories', cause: e }),
+  )
   if (rows instanceof Error) return rows
   const directories = parseRows<ChannelDirectoryRow>('channel_directories', rows)
   const guilds = [...new Set(directories.flatMap((row) => (row.guild_id ? [row.guild_id] : [])))]
@@ -80,8 +81,11 @@ async function ensureCategory({
   name: string
   channels: Awaited<ReturnType<API['guilds']['getChannels']>>
 }): Promise<DbError | DiscordError | string> {
-  const storedRows = await db<GuildCategoryRow[]>`SELECT * FROM guild_categories WHERE guild_id = ${guildId} LIMIT 1`
-    .catch((e) => new DbError({ operation: 'read guild_categories', cause: e }))
+  const storedRows = await db<
+    GuildCategoryRow[]
+  >`SELECT * FROM guild_categories WHERE guild_id = ${guildId} LIMIT 1`.catch(
+    (e) => new DbError({ operation: 'read guild_categories', cause: e }),
+  )
   if (storedRows instanceof Error) return storedRows
   const stored = parseFirst<GuildCategoryRow>('guild_categories', storedRows)
   const categories = channels.filter((channel) => channel.type === ChannelType.GuildCategory)
@@ -99,8 +103,11 @@ async function ensureCategory({
   })()
   if (categoryId instanceof Error) return categoryId
   if (stored?.category_id === categoryId) return categoryId
-  const saved = await db<unknown[]>`INSERT INTO guild_categories (guild_id, category_id) VALUES (${guildId}, ${categoryId}) ON CONFLICT(guild_id) DO UPDATE SET category_id = ${categoryId}`
-    .catch((e) => new DbError({ operation: 'save guild_categories', cause: e }))
+  const saved = await db<
+    unknown[]
+  >`INSERT INTO guild_categories (guild_id, category_id) VALUES (${guildId}, ${categoryId}) ON CONFLICT(guild_id) DO UPDATE SET category_id = ${categoryId}`.catch(
+    (e) => new DbError({ operation: 'save guild_categories', cause: e }),
+  )
   if (saved instanceof Error) return saved
   return categoryId
 }
@@ -126,8 +133,11 @@ export async function addProjectChannel({
   // Names a new category and tells this machine's channels apart.
   machine: string
 }): Promise<DbError | DiscordError | ProjectChannel> {
-  const existingRows = await db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories WHERE directory = ${directory} AND guild_id = ${guildId} AND channel_type = ${'text'} LIMIT 1`
-    .catch((e) => new DbError({ operation: 'read channel_directories', cause: e }))
+  const existingRows = await db<
+    ChannelDirectoryRow[]
+  >`SELECT * FROM channel_directories WHERE directory = ${directory} AND guild_id = ${guildId} AND channel_type = ${'text'} LIMIT 1`.catch(
+    (e) => new DbError({ operation: 'read channel_directories', cause: e }),
+  )
   if (existingRows instanceof Error) return existingRows
   const existing = parseFirst<ChannelDirectoryRow>('channel_directories', existingRows)
   if (existing) return { channelId: existing.channel_id, name: '', directory, created: false }
@@ -142,7 +152,8 @@ export async function addProjectChannel({
   // The same project on another machine: "website" there, "website-<machine>" here.
   const baseName = name ?? channelNameFor(path.basename(directory))
   const taken = channels.some(
-    (channel) => channel.type === ChannelType.GuildText && channel.name === baseName && channel.parent_id !== categoryId,
+    (channel) =>
+      channel.type === ChannelType.GuildText && channel.name === baseName && channel.parent_id !== categoryId,
   )
   const body: RESTPostAPIGuildChannelJSONBody = {
     name: taken ? channelNameFor(`${baseName}-${machine}`) : baseName,
@@ -154,8 +165,11 @@ export async function addProjectChannel({
     .createChannel(guildId, body)
     .catch((e) => new DiscordError({ operation: 'create channel', cause: e }))
   if (channel instanceof Error) return channel
-  const saved = await db<unknown[]>`INSERT INTO channel_directories (channel_id, directory, channel_type, guild_id) VALUES (${channel.id}, ${directory}, ${'text'}, ${guildId})`
-    .catch((e) => new DbError({ operation: 'insert channel_directories', cause: e }))
+  const saved = await db<
+    unknown[]
+  >`INSERT INTO channel_directories (channel_id, directory, channel_type, guild_id) VALUES (${channel.id}, ${directory}, ${'text'}, ${guildId})`.catch(
+    (e) => new DbError({ operation: 'insert channel_directories', cause: e }),
+  )
   if (saved instanceof Error) return saved
   return { channelId: channel.id, name: channel.name ?? body.name, directory, created: true }
 }
@@ -177,8 +191,11 @@ export async function addVoiceChannel({
   dataDir: string
   machine: string
 }): Promise<DbError | DiscordError | { channelId: string; created: boolean }> {
-  const existingRows = await db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories WHERE guild_id = ${guildId} AND channel_type = ${'voice'} LIMIT 1`
-    .catch((e) => new DbError({ operation: 'read voice channel', cause: e }))
+  const existingRows = await db<
+    ChannelDirectoryRow[]
+  >`SELECT * FROM channel_directories WHERE guild_id = ${guildId} AND channel_type = ${'voice'} LIMIT 1`.catch(
+    (e) => new DbError({ operation: 'read voice channel', cause: e }),
+  )
   if (existingRows instanceof Error) return existingRows
   const existing = parseFirst<ChannelDirectoryRow>('channel_directories', existingRows)
   if (existing) return { channelId: existing.channel_id, created: false }
@@ -186,16 +203,21 @@ export async function addVoiceChannel({
     .createChannel(guildId, { name: `Kimaki voice ${machine}`.slice(0, 100), type: ChannelType.GuildVoice })
     .catch((e) => new DiscordError({ operation: 'create voice channel', cause: e }))
   if (channel instanceof Error) return channel
-  const saved = await db<unknown[]>`INSERT INTO channel_directories (channel_id, directory, channel_type, guild_id) VALUES (${channel.id}, ${dataDir}, ${'voice'}, ${guildId})`
-    .catch((e) => new DbError({ operation: 'insert voice channel', cause: e }))
+  const saved = await db<
+    unknown[]
+  >`INSERT INTO channel_directories (channel_id, directory, channel_type, guild_id) VALUES (${channel.id}, ${dataDir}, ${'voice'}, ${guildId})`.catch(
+    (e) => new DbError({ operation: 'insert voice channel', cause: e }),
+  )
   if (saved instanceof Error) return saved
   return { channelId: channel.id, created: true }
 }
 
-
 export async function listProjects({ db }: { db: KimakiDb }) {
-  const rows = await db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories WHERE channel_type = ${'text'} ORDER BY created_at ASC`
-    .catch((e) => new DbError({ operation: 'read channel_directories', cause: e }))
+  const rows = await db<
+    ChannelDirectoryRow[]
+  >`SELECT * FROM channel_directories WHERE channel_type = ${'text'} ORDER BY created_at ASC`.catch(
+    (e) => new DbError({ operation: 'read channel_directories', cause: e }),
+  )
   if (rows instanceof Error) return rows
   return parseRows<ChannelDirectoryRow>('channel_directories', rows)
 }
@@ -206,5 +228,6 @@ export async function countUserProjects({ db, dataDir }: { db: KimakiDb; dataDir
   const rows = await listProjects({ db })
   if (rows instanceof Error) return rows
   const defaultDirectory = path.resolve(defaultProjectDirectory({ dataDir }))
-  return new Set(rows.map((row) => path.resolve(row.directory)).filter((directory) => directory !== defaultDirectory)).size
+  return new Set(rows.map((row) => path.resolve(row.directory)).filter((directory) => directory !== defaultDirectory))
+    .size
 }

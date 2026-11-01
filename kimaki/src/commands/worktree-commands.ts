@@ -7,7 +7,14 @@
 //   /merge-worktree            ─▶ mergeWorktree, refused while a session runs there
 
 import crypto from 'node:crypto'
-import { ButtonStyle, ComponentType, SlashCommandBuilder, type ButtonInteraction, type ChatInputCommandInteraction, type ThreadChannel } from 'discord.js'
+import {
+  ButtonStyle,
+  ComponentType,
+  SlashCommandBuilder,
+  type ButtonInteraction,
+  type ChatInputCommandInteraction,
+  type ThreadChannel,
+} from 'discord.js'
 
 import { oc, projectOf, rootSession, sessionDirectory, type Author, type Bot } from '../bot.ts'
 import { ConfigError, DbError } from '../errors.ts'
@@ -32,12 +39,19 @@ const TOGGLE_PREFIX = 'worktree_toggle:'
 const REMOVE_PREFIX = 'worktree_remove:'
 const PAGE_PREFIX = 'worktree_page:'
 const PAGE_SIZE = 5
-const identity = (tree: GitWorktree) => crypto.createHash('sha256').update(`${tree.directory}\0${tree.head}`).digest('hex').slice(0, 16)
+const identity = (tree: GitWorktree) =>
+  crypto.createHash('sha256').update(`${tree.directory}\0${tree.head}`).digest('hex').slice(0, 16)
 
 // A new session in a fresh checkout. In a thread the session is a fork, so it keeps the context.
 export async function newWorktree(
   bot: Bot,
-  { channelId, sourceThread, name, baseBranch, author }: { channelId: string; sourceThread?: ThreadChannel; name?: string; baseBranch?: string; author: Author },
+  {
+    channelId,
+    sourceThread,
+    name,
+    baseBranch,
+    author,
+  }: { channelId: string; sourceThread?: ThreadChannel; name?: string; baseBranch?: string; author: Author },
 ) {
   const slug = name || `session-${crypto.randomBytes(4).toString('hex')}`
   const valid = worktreeName(slug)
@@ -101,7 +115,13 @@ export async function manageWorktree(
     operation,
     strategy,
     targetBranch,
-  }: { channelId: string; directory: string; operation: 'remove' | 'merge'; strategy?: 'rebase' | 'squash'; targetBranch?: string },
+  }: {
+    channelId: string
+    directory: string
+    operation: 'remove' | 'merge'
+    strategy?: 'rebase' | 'squash'
+    targetBranch?: string
+  },
 ) {
   const project = await projectOf(bot, channelId)
   if (project instanceof Error) return project
@@ -115,12 +135,18 @@ export async function manageWorktree(
     const cwd = await sessionDirectory(bot, sessionId)
     if (cwd instanceof Error) return cwd
     const insideCheckout = inside({ parent: candidate, candidate: await canonicalPath(cwd) })
-    const inMergeTarget = operation === 'merge' && !(await resolveWorkingDirectory({ projectDirectory: project.directory, candidate: cwd }) instanceof Error)
+    const inMergeTarget =
+      operation === 'merge' &&
+      !((await resolveWorkingDirectory({ projectDirectory: project.directory, candidate: cwd })) instanceof Error)
     if (insideCheckout || inMergeTarget) {
-      return new ConfigError({ reason: 'A session is running in this checkout or merge target. Wait for it to finish before modifying the worktree.' })
+      return new ConfigError({
+        reason:
+          'A session is running in this checkout or merge target. Wait for it to finish before modifying the worktree.',
+      })
     }
   }
-  if (operation === 'merge') return mergeWorktree({ projectDirectory: project.directory, directory: candidate, strategy, targetBranch })
+  if (operation === 'merge')
+    return mergeWorktree({ projectDirectory: project.directory, directory: candidate, strategy, targetBranch })
   const removed = await deleteWorktree({ projectDirectory: project.directory, directory: candidate })
   if (removed instanceof Error) return removed
   return { removed: candidate }
@@ -137,16 +163,31 @@ async function listMessage(bot: Bot, { channelId, requestedPage = 0 }: { channel
   const lines = [
     `**Worktrees** (${page + 1}/${pages})`,
     `Automatic worktrees: **${result.enabled ? 'on' : 'off'}**`,
-    ...entries.map((tree, index) => `${index + 1}. \`${tree.branch ?? 'detached HEAD'}\`\n   \`${tree.directory.slice(0, 200)}\`${tree.locked ? ' (locked)' : ''}`),
+    ...entries.map(
+      (tree, index) =>
+        `${index + 1}. \`${tree.branch ?? 'detached HEAD'}\`\n   \`${tree.directory.slice(0, 200)}\`${tree.locked ? ' (locked)' : ''}`,
+    ),
   ]
   if (!entries.length) lines.push('No linked worktrees. Create one with /new-worktree.')
-  const button = ({ customId, label, disabled = false }: { customId: string; label: string; disabled?: boolean }) =>
-    ({ type: ComponentType.Button as const, style: ButtonStyle.Secondary, custom_id: customId, label, disabled })
+  const button = ({ customId, label, disabled = false }: { customId: string; label: string; disabled?: boolean }) => ({
+    type: ComponentType.Button as const,
+    style: ButtonStyle.Secondary,
+    custom_id: customId,
+    label,
+    disabled,
+  })
   const deletes = entries.map((tree, index) =>
-    button({ customId: `${REMOVE_PREFIX}${identity(tree)}`, label: `Delete ${index + 1}`, disabled: tree.locked || tree.prunable }),
+    button({
+      customId: `${REMOVE_PREFIX}${identity(tree)}`,
+      label: `Delete ${index + 1}`,
+      disabled: tree.locked || tree.prunable,
+    }),
   )
   const controls = [
-    button({ customId: `${TOGGLE_PREFIX}${result.enabled ? 'off' : 'on'}`, label: result.enabled ? 'Disable auto-worktrees' : 'Enable auto-worktrees' }),
+    button({
+      customId: `${TOGGLE_PREFIX}${result.enabled ? 'off' : 'on'}`,
+      label: result.enabled ? 'Disable auto-worktrees' : 'Enable auto-worktrees',
+    }),
     button({ customId: `${PAGE_PREFIX}${page - 1}`, label: 'Previous', disabled: page === 0 }),
     button({ customId: `${PAGE_PREFIX}${page + 1}`, label: 'Next', disabled: page === pages - 1 }),
   ]
@@ -174,10 +215,16 @@ async function deferredTarget(bot: Bot, interaction: ChatInputCommandInteraction
 async function cwdCommand(bot: Bot, interaction: ChatInputCommandInteraction) {
   const target = await deferredTarget(bot, interaction)
   if (!target) return
-  if (!target.thread || !target.sessionId) return replyError(interaction, new ConfigError({ reason: 'Use /cwd in a session thread.' }))
-  const result = await sessionCwd(bot, { thread: target.thread, directory: interaction.options.getString('path') ?? undefined })
+  if (!target.thread || !target.sessionId)
+    return replyError(interaction, new ConfigError({ reason: 'Use /cwd in a session thread.' }))
+  const result = await sessionCwd(bot, {
+    thread: target.thread,
+    directory: interaction.options.getString('path') ?? undefined,
+  })
   if (result instanceof Error) return replyError(interaction, result)
-  const content = result.requestedDirectory ? `Directory change requested: \`${result.requestedDirectory}\`` : `Working directory: \`${result.directory}\``
+  const content = result.requestedDirectory
+    ? `Directory change requested: \`${result.requestedDirectory}\``
+    : `Working directory: \`${result.directory}\``
   return interaction.editReply({ content })
 }
 
@@ -206,9 +253,11 @@ async function newWorktreeCommand(bot: Bot, interaction: ChatInputCommandInterac
 async function mergeWorktreeCommand(bot: Bot, interaction: ChatInputCommandInteraction) {
   const target = await deferredTarget(bot, interaction)
   if (!target) return
-  if (!target.sessionId) return replyError(interaction, new ConfigError({ reason: 'Use /merge-worktree inside a worktree session thread.' }))
+  if (!target.sessionId)
+    return replyError(interaction, new ConfigError({ reason: 'Use /merge-worktree inside a worktree session thread.' }))
   const strategy = interaction.options.getString('strategy') ?? 'rebase'
-  if (strategy !== 'rebase' && strategy !== 'squash') return replyError(interaction, new ConfigError({ reason: 'Choose rebase or squash.' }))
+  if (strategy !== 'rebase' && strategy !== 'squash')
+    return replyError(interaction, new ConfigError({ reason: 'Choose rebase or squash.' }))
   const result = await manageWorktree(bot, {
     channelId: target.channelId,
     directory: target.directory,
@@ -217,9 +266,10 @@ async function mergeWorktreeCommand(bot: Bot, interaction: ChatInputCommandInter
     targetBranch: interaction.options.getString('target-branch') ?? undefined,
   })
   if (result instanceof Error) return replyError(interaction, result)
-  const content = 'targetBranch' in result
-    ? `Merged ${result.commitCount} commits into \`${result.targetBranch}\` (${result.sha}). Worktree retained with detached HEAD.`
-    : 'Worktree operation complete.'
+  const content =
+    'targetBranch' in result
+      ? `Merged ${result.commitCount} commits into \`${result.targetBranch}\` (${result.sha}). Worktree retained with detached HEAD.`
+      : 'Worktree operation complete.'
   await interaction.editReply({ content })
 }
 
@@ -237,7 +287,10 @@ function listButton({
     await interaction.deferUpdate()
     const acted = await act(bot, { channelId: target.channelId, value: interaction.customId.slice(prefix.length) })
     if (acted instanceof Error) return replyError(interaction, acted)
-    const result = await listMessage(bot, { channelId: target.channelId, requestedPage: Number.isSafeInteger(acted.page) ? acted.page : 0 })
+    const result = await listMessage(bot, {
+      channelId: target.channelId,
+      requestedPage: Number.isSafeInteger(acted.page) ? acted.page : 0,
+    })
     if (result instanceof Error) return replyError(interaction, result)
     const content = acted.note ? `${acted.note}\n${result.content}`.slice(0, 2000) : result.content
     await interaction.editReply({ ...result, content })
@@ -247,24 +300,43 @@ function listButton({
 export const worktreeRoutes: InteractionRoutes = {
   commands: {
     cwd: {
-      definition: new SlashCommandBuilder().setName('cwd').setDescription('Show or change this session working directory')
-        .addStringOption((option) => option.setName('path').setDescription('Project subfolder or linked worktree; relative to current cwd')),
+      definition: new SlashCommandBuilder()
+        .setName('cwd')
+        .setDescription('Show or change this session working directory')
+        .addStringOption((option) =>
+          option.setName('path').setDescription('Project subfolder or linked worktree; relative to current cwd'),
+        ),
       run: cwdCommand,
     },
     'new-worktree': {
-      definition: new SlashCommandBuilder().setName('new-worktree').setDescription('Start an isolated Git worktree session; fork context when used in a thread')
+      definition: new SlashCommandBuilder()
+        .setName('new-worktree')
+        .setDescription('Start an isolated Git worktree session; fork context when used in a thread')
         .addStringOption((option) => option.setName('name').setDescription('Lowercase letters, digits and hyphens'))
-        .addStringOption((option) => option.setName('base-branch').setDescription('Starting Git ref (default: project HEAD)')),
+        .addStringOption((option) =>
+          option.setName('base-branch').setDescription('Starting Git ref (default: project HEAD)'),
+        ),
       run: newWorktreeCommand,
     },
     worktrees: {
-      definition: new SlashCommandBuilder().setName('worktrees').setDescription('List worktrees, delete a safe checkout, or toggle automatic worktrees'),
+      definition: new SlashCommandBuilder()
+        .setName('worktrees')
+        .setDescription('List worktrees, delete a safe checkout, or toggle automatic worktrees'),
       run: worktreesCommand,
     },
     'merge-worktree': {
-      definition: new SlashCommandBuilder().setName('merge-worktree').setDescription('Merge this worktree into a local branch')
-        .addStringOption((option) => option.setName('strategy').setDescription('Merge strategy').addChoices({ name: 'Rebase', value: 'rebase' }, { name: 'Squash', value: 'squash' }))
-        .addStringOption((option) => option.setName('target-branch').setDescription('Local target branch (default: project checkout branch)')),
+      definition: new SlashCommandBuilder()
+        .setName('merge-worktree')
+        .setDescription('Merge this worktree into a local branch')
+        .addStringOption((option) =>
+          option
+            .setName('strategy')
+            .setDescription('Merge strategy')
+            .addChoices({ name: 'Rebase', value: 'rebase' }, { name: 'Squash', value: 'squash' }),
+        )
+        .addStringOption((option) =>
+          option.setName('target-branch').setDescription('Local target branch (default: project checkout branch)'),
+        ),
       run: mergeWorktreeCommand,
     },
   },
@@ -272,7 +344,8 @@ export const worktreeRoutes: InteractionRoutes = {
     [TOGGLE_PREFIX]: listButton({
       prefix: TOGGLE_PREFIX,
       act: async (bot, { channelId, value }) => {
-        if (value !== 'on' && value !== 'off') return new ConfigError({ reason: 'Invalid worktree toggle. Run /worktrees again.' })
+        if (value !== 'on' && value !== 'off')
+          return new ConfigError({ reason: 'Invalid worktree toggle. Run /worktrees again.' })
         const result = await setAutoWorktrees(bot, { channelId, enabled: value === 'on' })
         if (result instanceof Error) return result
         return { page: 0, note: null }
@@ -287,9 +360,15 @@ export const worktreeRoutes: InteractionRoutes = {
         if (!tree) return new ConfigError({ reason: 'Worktree changed or was removed. Run /worktrees again.' })
         const removed = await manageWorktree(bot, { channelId, directory: tree.directory, operation: 'remove' })
         if (removed instanceof Error) return removed
-        return { page: 0, note: 'Checkout removed. Existing sessions keep their cwd; use /cwd to choose another directory.' }
+        return {
+          page: 0,
+          note: 'Checkout removed. Existing sessions keep their cwd; use /cwd to choose another directory.',
+        }
       },
     }),
-    [PAGE_PREFIX]: listButton({ prefix: PAGE_PREFIX, act: async (_bot, { value }) => ({ page: Number(value), note: null }) }),
+    [PAGE_PREFIX]: listButton({
+      prefix: PAGE_PREFIX,
+      act: async (_bot, { value }) => ({ page: Number(value), note: null }),
+    }),
   },
 }

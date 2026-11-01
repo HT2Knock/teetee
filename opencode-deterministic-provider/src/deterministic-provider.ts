@@ -24,9 +24,7 @@ type LegacyUsage = {
 
 type DeterministicUsage = LegacyUsage | LanguageModelV3Usage
 
-type DeterministicFinishReason =
-  | LanguageModelV3FinishReason
-  | LanguageModelV3FinishReason['unified']
+type DeterministicFinishReason = LanguageModelV3FinishReason | LanguageModelV3FinishReason['unified']
 
 type DeterministicFinishPart = {
   type: 'finish'
@@ -35,9 +33,7 @@ type DeterministicFinishPart = {
   providerMetadata?: Extract<LanguageModelV3StreamPart, { type: 'finish' }>['providerMetadata']
 }
 
-type DeterministicStreamPart =
-  | Exclude<LanguageModelV3StreamPart, { type: 'finish' }>
-  | DeterministicFinishPart
+type DeterministicStreamPart = Exclude<LanguageModelV3StreamPart, { type: 'finish' }> | DeterministicFinishPart
 
 const DEFAULT_USAGE: LanguageModelV3Usage = {
   inputTokens: {
@@ -125,9 +121,7 @@ export interface DeterministicProvider {
   languageModel(modelId: string): LanguageModelV3
 }
 
-export function createDeterministicProvider(
-  settings: DeterministicProviderSettings = {},
-): DeterministicProvider {
+export function createDeterministicProvider(settings: DeterministicProviderSettings = {}): DeterministicProvider {
   const normalizedSettings = normalizeSettingsInput({ input: settings })
   const providerName = normalizedSettings.name || 'deterministic-provider'
   const normalizedMatchers = normalizeMatchers({
@@ -199,7 +193,9 @@ export function buildDeterministicOpencodeConfig({
     extraModels: smallModel ? [smallModel] : undefined,
     providerName,
     providerPackage: providerNpm
-      ? providerNpm.startsWith('aisdk:') ? providerNpm : `aisdk:${providerNpm}`
+      ? providerNpm.startsWith('aisdk:')
+        ? providerNpm
+        : `aisdk:${providerNpm}`
       : undefined,
     settings,
     permissions: [
@@ -253,13 +249,9 @@ export function buildDeterministicOpencode2Config({
   permissions,
 }: BuildDeterministicOpencode2ConfigOptions) {
   const chosenProviderName = providerName || 'deterministic-provider'
-  const entrypointUrl = pathToFileURL(
-    path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'index.ts'),
-  ).toString()
+  const entrypointUrl = pathToFileURL(path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'index.ts')).toString()
   const chosenPackage = providerPackage || `aisdk:${entrypointUrl}`
-  const models = Object.fromEntries(
-    [model, ...(extraModels || [])].map((modelId) => [modelId, { name: modelId }]),
-  )
+  const models = Object.fromEntries([model, ...(extraModels || [])].map((modelId) => [modelId, { name: modelId }]))
   return {
     providers: {
       [chosenProviderName]: {
@@ -280,12 +272,7 @@ function normalizeMatchers({ matchers }: { matchers: DeterministicMatcher[] }) {
     const promptRegexText = matcher.when?.promptTextRegex
     const lastMessageRegexText = matcher.when?.lastMessageTextRegex
     const regexText = matcher.when?.latestUserTextRegex
-    if (
-      !regexText &&
-      !lastMessageRegexText &&
-      !promptRegexText &&
-      !rawPromptRegexText
-    ) {
+    if (!regexText && !lastMessageRegexText && !promptRegexText && !rawPromptRegexText) {
       return matcher
     }
     return {
@@ -306,13 +293,8 @@ function normalizeMatchers({ matchers }: { matchers: DeterministicMatcher[] }) {
   })
 }
 
-function normalizeSettingsInput({
-  input,
-}: {
-  input: DeterministicProviderSettings
-}): DeterministicProviderSettings {
-  const root: Record<string, unknown> =
-    input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
+function normalizeSettingsInput({ input }: { input: DeterministicProviderSettings }): DeterministicProviderSettings {
+  const root: Record<string, unknown> = input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
   const candidate: Record<string, unknown> =
     'options' in root && root['options'] && typeof root['options'] === 'object'
       ? (root['options'] as Record<string, unknown>)
@@ -348,9 +330,7 @@ function normalizeSettingsInput({
     name: typeof candidate['name'] === 'string' ? candidate['name'] : undefined,
     matchers: parseMatchers(),
     defaultPartDelayMs:
-      typeof candidate['defaultPartDelayMs'] === 'number'
-        ? candidate['defaultPartDelayMs']
-        : undefined,
+      typeof candidate['defaultPartDelayMs'] === 'number' ? candidate['defaultPartDelayMs'] : undefined,
     strict: typeof candidate['strict'] === 'boolean' ? candidate['strict'] : undefined,
     defaultParts: parseDefaultParts(),
   }
@@ -391,13 +371,7 @@ function resolveMatch({
   }
 }
 
-function matcherMatches({
-  matcher,
-  options,
-}: {
-  matcher: NormalizedMatcher
-  options: LanguageModelV3CallOptions
-}) {
+function matcherMatches({ matcher, options }: { matcher: NormalizedMatcher; options: LanguageModelV3CallOptions }) {
   if (matcher.enabled === false) {
     return false
   }
@@ -412,24 +386,15 @@ function matcherMatches({
     return false
   }
   const lastMessageText = getLastMessageText({ prompt: options.prompt })
-  if (
-    when.lastMessageTextIncludes !== undefined &&
-    !lastMessageText.includes(when.lastMessageTextIncludes)
-  ) {
+  if (when.lastMessageTextIncludes !== undefined && !lastMessageText.includes(when.lastMessageTextIncludes)) {
     return false
   }
-  if (
-    matcher.compiledLastMessageRegex &&
-    !matcher.compiledLastMessageRegex.test(lastMessageText)
-  ) {
+  if (matcher.compiledLastMessageRegex && !matcher.compiledLastMessageRegex.test(lastMessageText)) {
     return false
   }
 
   const promptText = getPromptText({ prompt: options.prompt })
-  if (
-    when.promptTextIncludes !== undefined &&
-    !promptText.includes(when.promptTextIncludes)
-  ) {
+  if (when.promptTextIncludes !== undefined && !promptText.includes(when.promptTextIncludes)) {
     return false
   }
   if (matcher.compiledPromptRegex && !matcher.compiledPromptRegex.test(promptText)) {
@@ -437,36 +402,21 @@ function matcherMatches({
   }
 
   const rawPromptText = JSON.stringify(options.prompt)
-  if (
-    when.rawPromptIncludes !== undefined &&
-    !rawPromptText.includes(when.rawPromptIncludes)
-  ) {
+  if (when.rawPromptIncludes !== undefined && !rawPromptText.includes(when.rawPromptIncludes)) {
     return false
   }
-  if (
-    matcher.compiledRawPromptRegex &&
-    !matcher.compiledRawPromptRegex.test(rawPromptText)
-  ) {
+  if (matcher.compiledRawPromptRegex && !matcher.compiledRawPromptRegex.test(rawPromptText)) {
     return false
   }
 
   const latestUserText = getLatestUserText({ prompt: options.prompt })
-  if (
-    when.latestUserTextEquals !== undefined &&
-    latestUserText !== when.latestUserTextEquals
-  ) {
+  if (when.latestUserTextEquals !== undefined && latestUserText !== when.latestUserTextEquals) {
     return false
   }
-  if (
-    when.latestUserTextIncludes !== undefined &&
-    !latestUserText.includes(when.latestUserTextIncludes)
-  ) {
+  if (when.latestUserTextIncludes !== undefined && !latestUserText.includes(when.latestUserTextIncludes)) {
     return false
   }
-  if (
-    when.latestUserTextExcludes !== undefined &&
-    latestUserText.includes(when.latestUserTextExcludes)
-  ) {
+  if (when.latestUserTextExcludes !== undefined && latestUserText.includes(when.latestUserTextExcludes)) {
     return false
   }
   if (matcher.compiledRegex && !matcher.compiledRegex.test(latestUserText)) {
@@ -563,8 +513,7 @@ function ensureTerminalStreamPartsAndDelays({
     return part.type === 'stream-start'
   })
   const withStreamStart = hasStreamStart ? normalized : [streamStartPart, ...normalized]
-  const delaysWithStreamStart =
-    partDelaysMs && !hasStreamStart ? [0, ...partDelaysMs] : partDelaysMs
+  const delaysWithStreamStart = partDelaysMs && !hasStreamStart ? [0, ...partDelaysMs] : partDelaysMs
 
   const hasFinish = withStreamStart.some((part) => {
     return part.type === 'finish'
@@ -581,9 +530,7 @@ function ensureTerminalStreamPartsAndDelays({
   }
 
   const withFinish = [...withStreamStart, finishPart]
-  const delaysWithFinish = delaysWithStreamStart
-    ? [...delaysWithStreamStart, 0]
-    : undefined
+  const delaysWithFinish = delaysWithStreamStart ? [...delaysWithStreamStart, 0] : undefined
   if (delaysWithFinish && delaysWithFinish.length !== withFinish.length) {
     throw new Error('partDelaysMs length must equal emitted stream parts length')
   }
@@ -609,8 +556,7 @@ async function streamPartsWithDelay({
   try {
     for (const [index, part] of parts.entries()) {
       const delayFromList = partDelaysMs?.[index]
-      const delay =
-        delayFromList ?? matcherDefaultPartDelayMs ?? providerDefaultPartDelayMs ?? 0
+      const delay = delayFromList ?? matcherDefaultPartDelayMs ?? providerDefaultPartDelayMs ?? 0
       if (delay > 0) {
         await new Promise((resolve) => {
           setTimeout(resolve, delay)
@@ -624,11 +570,7 @@ async function streamPartsWithDelay({
   }
 }
 
-function buildGenerateResult({
-  parts,
-}: {
-  parts: LanguageModelV3StreamPart[]
-}): LanguageModelV3GenerateResult {
+function buildGenerateResult({ parts }: { parts: LanguageModelV3StreamPart[] }): LanguageModelV3GenerateResult {
   const content: LanguageModelV3Content[] = []
   const textById = new Map<string, string>()
   for (const part of parts) {
@@ -663,8 +605,9 @@ function buildGenerateResult({
 
   const finishReason = finish ? finish.finishReason : normalizeFinishReason('stop')
   const usage = finish ? finish.usage : DEFAULT_USAGE
-  const warnings: Extract<LanguageModelV3StreamPart, { type: 'stream-start' }>['warnings'] =
-    streamStart ? streamStart.warnings : []
+  const warnings: Extract<LanguageModelV3StreamPart, { type: 'stream-start' }>['warnings'] = streamStart
+    ? streamStart.warnings
+    : []
 
   return {
     content,
@@ -686,15 +629,11 @@ function isToolResultPart(
   return part.type === 'tool-result'
 }
 
-function isFilePart(
-  part: LanguageModelV3StreamPart,
-): part is Extract<LanguageModelV3StreamPart, { type: 'file' }> {
+function isFilePart(part: LanguageModelV3StreamPart): part is Extract<LanguageModelV3StreamPart, { type: 'file' }> {
   return part.type === 'file'
 }
 
-function isSourcePart(
-  part: LanguageModelV3StreamPart,
-): part is Extract<LanguageModelV3StreamPart, { type: 'source' }> {
+function isSourcePart(part: LanguageModelV3StreamPart): part is Extract<LanguageModelV3StreamPart, { type: 'source' }> {
   return part.type === 'source'
 }
 
@@ -704,9 +643,7 @@ function isStreamStartPart(
   return part.type === 'stream-start'
 }
 
-function isFinishPart(
-  part: LanguageModelV3StreamPart,
-): part is Extract<LanguageModelV3StreamPart, { type: 'finish' }> {
+function isFinishPart(part: LanguageModelV3StreamPart): part is Extract<LanguageModelV3StreamPart, { type: 'finish' }> {
   return part.type === 'finish'
 }
 
@@ -723,9 +660,7 @@ function normalizeStreamPart(part: DeterministicStreamPart): LanguageModelV3Stre
   }
 }
 
-function normalizeFinishReason(
-  reason: DeterministicFinishReason,
-): LanguageModelV3FinishReason {
+function normalizeFinishReason(reason: DeterministicFinishReason): LanguageModelV3FinishReason {
   if (typeof reason === 'string') {
     return {
       unified: reason,

@@ -14,11 +14,14 @@ test('supported binary wins over OpenCode 1, only OpenCode 1 is an error, nothin
   const v1 = path.join(dir, 'opencode')
   fs.writeFileSync(v1, '#!/bin/sh\necho 1.15.5\n', { mode: 0o755 })
   const v2 = opencodeBinary()
-  const message = (value: Error | string | null) => (value instanceof Error ? value.message.replace(dir, '<dir>') : value)
+  const message = (value: Error | string | null) =>
+    value instanceof Error ? value.message.replace(dir, '<dir>') : value
 
   expect(await findOpencodeBinary({ candidates: ['kimaki-missing-opencode2', v2, v1] })).toBe(v2)
   expect(await findOpencodeBinary({ candidates: ['kimaki-missing-opencode2', v1, v2] })).toBe(v2)
-  expect(message(await findOpencodeBinary({ candidates: ['kimaki-missing-opencode2', v1] }))).toMatchInlineSnapshot(`"Kimaki now requires OpenCode 2, but <dir>/opencode is OpenCode 1.15.5. Install OpenCode 2 with: curl -fsSL https://opencode.ai/v2/install | bash (or: bun add -g @opencode/cli). Then run kimaki again. To keep using OpenCode 1, run the older Kimaki instead: bunx kimaki@0"`)
+  expect(message(await findOpencodeBinary({ candidates: ['kimaki-missing-opencode2', v1] }))).toMatchInlineSnapshot(
+    `"Kimaki now requires OpenCode 2, but <dir>/opencode is OpenCode 1.15.5. Install OpenCode 2 with: curl -fsSL https://opencode.ai/v2/install | bash (or: bun add -g @opencode/cli). Then run kimaki again. To keep using OpenCode 1, run the older Kimaki instead: bunx kimaki@0"`,
+  )
   expect(await findOpencodeBinary({ candidates: ['kimaki-missing-opencode2'] })).toBe(null)
   fs.rmSync(dir, { recursive: true, force: true })
 })

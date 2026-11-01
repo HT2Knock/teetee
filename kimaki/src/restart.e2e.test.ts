@@ -49,7 +49,10 @@ test('restarted bot continues the session of an existing thread', async () => {
   await discord.channel(channelId).user(TEST_USER_ID).sendMessage({ content: 'first message before restart' })
   const thread = await discord.channel(channelId).waitForThread({ timeout: 8_000 })
   await waitForFooter({ discord, threadId: thread.id })
-  const [binding] = parseRows<ThreadSessionRow>('thread_sessions', await bot.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions`)
+  const [binding] = parseRows<ThreadSessionRow>(
+    'thread_sessions',
+    await bot.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions`,
+  )
 
   await bot.stop()
   bot = await startTestBot({ dataDir, twin, server })
@@ -70,7 +73,10 @@ test('restarted bot continues the session of an existing thread', async () => {
     ok
     -# *project ⋅ main ⋅ Ns ⋅ deterministic-v2*"
   `)
-  const rows = parseRows<ThreadSessionRow>('thread_sessions', await bot.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions`)
+  const rows = parseRows<ThreadSessionRow>(
+    'thread_sessions',
+    await bot.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions`,
+  )
   expect(rows.map((row) => row.session_id)).toEqual([binding!.session_id])
   const client = await server.client()
   const messages = await client.message.list({ sessionID: binding!.session_id })
@@ -81,7 +87,9 @@ test('reconnect hydration skips idle sessions, so a deleted one does not block i
   const { discord, channelId } = twin
   bot ??= await startTestBot({ dataDir, twin, server })
   await discord.channel(channelId).user(TEST_USER_ID).sendMessage({ content: 'session that gets deleted' })
-  const thread = await discord.channel(channelId).waitForThread({ timeout: 8_000, predicate: (candidate) => candidate.name === 'session that gets deleted' })
+  const thread = await discord
+    .channel(channelId)
+    .waitForThread({ timeout: 8_000, predicate: (candidate) => candidate.name === 'session that gets deleted' })
   await waitForFooter({ discord, threadId: thread.id })
   const client = await server.client()
   await client.session.remove({ sessionID: bot.store.getState().roots[thread.id]! })

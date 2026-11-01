@@ -99,19 +99,28 @@ type GuildChannelCreateBody = RESTPostAPIGuildChannelJSONBody & {
   rate_limit_per_user?: number
 }
 
-async function readMessageBody(request: Request): Promise<RESTPostAPIChannelMessageJSONBody & { uploadedAttachments: APIAttachment[] }> {
+async function readMessageBody(
+  request: Request,
+): Promise<RESTPostAPIChannelMessageJSONBody & { uploadedAttachments: APIAttachment[] }> {
   if (!request.headers.get('content-type')?.startsWith('multipart/form-data')) {
-    const body = await request.json() as RESTPostAPIChannelMessageJSONBody
+    const body = (await request.json()) as RESTPostAPIChannelMessageJSONBody
     return { ...body, uploadedAttachments: [] }
   }
   const form = await request.formData()
   const payload = form.get('payload_json')
-  const body = typeof payload === 'string' ? JSON.parse(payload) as RESTPostAPIChannelMessageJSONBody : {}
+  const body = typeof payload === 'string' ? (JSON.parse(payload) as RESTPostAPIChannelMessageJSONBody) : {}
   const uploadedAttachments: APIAttachment[] = []
   for (const [key, file] of form.entries()) {
     if (!/^files\[\d+\]$/.test(key) || typeof file === 'string') continue
     const uri = `data:${file.type || 'application/octet-stream'};base64,${Buffer.from(await file.arrayBuffer()).toString('base64')}`
-    uploadedAttachments.push({ id: generateSnowflake(), filename: file.name, size: file.size, content_type: file.type, url: uri, proxy_url: uri })
+    uploadedAttachments.push({
+      id: generateSnowflake(),
+      filename: file.name,
+      size: file.size,
+      content_type: file.type,
+      url: uri,
+      proxy_url: uri,
+    })
   }
   return { ...body, uploadedAttachments }
 }
@@ -154,8 +163,10 @@ export function resolveRouteScope(pathname: string): RouteScope {
   if ((first === 'interactions' || first === 'webhooks') && route.length >= 3) {
     return SNOWFLAKE.test(second) && third ? { kind: 'allowed-without-auth' } : { kind: 'denied' }
   }
-  if (first === 'guilds' && route.length >= 2) return SNOWFLAKE.test(second) ? { kind: 'guild', guildId: second } : { kind: 'denied' }
-  if (first === 'channels' && route.length >= 2) return SNOWFLAKE.test(second) ? { kind: 'channel', channelId: second } : { kind: 'denied' }
+  if (first === 'guilds' && route.length >= 2)
+    return SNOWFLAKE.test(second) ? { kind: 'guild', guildId: second } : { kind: 'denied' }
+  if (first === 'channels' && route.length >= 2)
+    return SNOWFLAKE.test(second) ? { kind: 'channel', channelId: second } : { kind: 'denied' }
   if (first === 'applications' && third === 'guilds' && route.length >= 4) {
     return SNOWFLAKE.test(fourth) ? { kind: 'guild', guildId: fourth } : { kind: 'denied' }
   }
@@ -297,13 +308,9 @@ export function createServer({
     .route({
       method: 'PUT',
       path: '/applications/:application_id/commands',
-      async handler({
-        params,
-        request,
-      }): Promise<RESTPutAPIApplicationCommandsResult> {
+      async handler({ params, request }): Promise<RESTPutAPIApplicationCommandsResult> {
         // JSON.parse of unknown request body -- `as` is the only option
-        const commands =
-          (await request.json()) as RESTPutAPIApplicationCommandsJSONBody
+        const commands = (await request.json()) as RESTPutAPIApplicationCommandsJSONBody
 
         await prisma.applicationCommand.deleteMany({
           where: {
@@ -316,8 +323,7 @@ export function createServer({
         for (const cmd of commands) {
           const id = generateSnowflake()
           const version = generateSnowflake()
-          const description =
-            'description' in cmd ? (cmd.description ?? '') : ''
+          const description = 'description' in cmd ? (cmd.description ?? '') : ''
           const options = 'options' in cmd ? (cmd.options ?? []) : []
           const type = cmd.type ?? ApplicationCommandType.ChatInput
           await prisma.applicationCommand.create({
@@ -356,12 +362,8 @@ export function createServer({
     .route({
       method: 'PUT',
       path: '/applications/:application_id/guilds/:guild_id/commands',
-      async handler({
-        params,
-        request,
-      }): Promise<RESTPutAPIApplicationCommandsResult> {
-        const commands =
-          (await request.json()) as RESTPutAPIApplicationCommandsJSONBody
+      async handler({ params, request }): Promise<RESTPutAPIApplicationCommandsResult> {
+        const commands = (await request.json()) as RESTPutAPIApplicationCommandsJSONBody
 
         await prisma.applicationCommand.deleteMany({
           where: {
@@ -374,8 +376,7 @@ export function createServer({
         for (const cmd of commands) {
           const id = generateSnowflake()
           const version = generateSnowflake()
-          const description =
-            'description' in cmd ? (cmd.description ?? '') : ''
+          const description = 'description' in cmd ? (cmd.description ?? '') : ''
           const options = 'options' in cmd ? (cmd.options ?? []) : []
           const type = cmd.type ?? ApplicationCommandType.ChatInput
           await prisma.applicationCommand.create({
@@ -481,9 +482,7 @@ export function createServer({
             embeds: JSON.stringify(body.embeds ?? []),
             components: JSON.stringify(body.components ?? []),
             attachments: JSON.stringify(body.uploadedAttachments),
-            messageReference: body.message_reference
-              ? JSON.stringify(body.message_reference)
-              : null,
+            messageReference: body.message_reference ? JSON.stringify(body.message_reference) : null,
           },
         })
         await prisma.channel.update({
@@ -507,12 +506,7 @@ export function createServer({
               include: { user: true },
             })
           : null
-        const apiMessage = messageToAPI(
-          dbMessage,
-          author,
-          guildId,
-          member ?? undefined,
-        )
+        const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
         gateway.broadcastMessageCreate(apiMessage, guildId ?? '')
         return apiMessage
       },
@@ -581,8 +575,7 @@ export function createServer({
       method: 'PATCH',
       path: '/channels/:channel_id/messages/:message_id',
       async handler({ params, request }): Promise<APIMessage> {
-        const body =
-          (await request.json()) as RESTPatchAPIChannelMessageJSONBody
+        const body = (await request.json()) as RESTPatchAPIChannelMessageJSONBody
         const channel = await prisma.channel.findUnique({
           where: { id: params.channel_id },
         })
@@ -615,9 +608,7 @@ export function createServer({
             content: body.content ?? existing.content,
             editedTimestamp: new Date(),
             ...(body.embeds ? { embeds: JSON.stringify(body.embeds) } : {}),
-            ...(body.components
-              ? { components: JSON.stringify(body.components) }
-              : {}),
+            ...(body.components ? { components: JSON.stringify(body.components) } : {}),
             ...(body.flags != null ? { flags: body.flags } : {}),
           },
         })
@@ -636,12 +627,7 @@ export function createServer({
               include: { user: true },
             })
           : null
-        const apiMessage = messageToAPI(
-          dbMessage,
-          author,
-          guildId,
-          member ?? undefined,
-        )
+        const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
         gateway.broadcast(GatewayDispatchEvents.MessageUpdate, {
           ...apiMessage,
           guild_id: guildId,
@@ -709,10 +695,7 @@ export function createServer({
         const before = url.searchParams.get('before')
         const after = url.searchParams.get('after')
         const parsedLimit = parseInt(url.searchParams.get('limit') ?? '50', 10)
-        const limit = Math.min(
-          Number.isNaN(parsedLimit) ? 50 : parsedLimit,
-          100,
-        )
+        const limit = Math.min(Number.isNaN(parsedLimit) ? 50 : parsedLimit, 100)
 
         let messages = await prisma.message.findMany({
           where: { channelId: params.channel_id },
@@ -905,21 +888,15 @@ export function createServer({
                 }
               : {}),
             ...(body.locked != null ? { locked: body.locked } : {}),
-            ...(body.auto_archive_duration != null
-              ? { autoArchiveDuration: body.auto_archive_duration }
-              : {}),
-            ...(body.rate_limit_per_user != null
-              ? { rateLimitPerUser: body.rate_limit_per_user }
-              : {}),
+            ...(body.auto_archive_duration != null ? { autoArchiveDuration: body.auto_archive_duration } : {}),
+            ...(body.rate_limit_per_user != null ? { rateLimitPerUser: body.rate_limit_per_user } : {}),
           },
         })
         const updated = await prisma.channel.findUniqueOrThrow({
           where: { id: params.channel_id },
         })
         const apiChannel = channelToAPI(updated)
-        const event = isThread
-          ? GatewayDispatchEvents.ThreadUpdate
-          : GatewayDispatchEvents.ChannelUpdate
+        const event = isThread ? GatewayDispatchEvents.ThreadUpdate : GatewayDispatchEvents.ChannelUpdate
         gateway.broadcast(event, apiChannel)
         return apiChannel
       },
@@ -1015,8 +992,7 @@ export function createServer({
       path: '/channels/:channel_id/messages/:message_id/threads',
       async handler({ params, request }): Promise<APIChannel> {
         // JSON.parse of unknown request body -- `as` is the only option
-        const body =
-          (await request.json()) as RESTPostAPIChannelMessagesThreadsJSONBody
+        const body = (await request.json()) as RESTPostAPIChannelMessagesThreadsJSONBody
         const channel = await prisma.channel.findUnique({
           where: { id: params.channel_id },
         })
@@ -1310,8 +1286,7 @@ export function createServer({
             color: body.color ?? 0,
             hoist: body.hoist ?? false,
             position: roleCount,
-            permissions:
-              body.permissions != null ? String(body.permissions) : '0',
+            permissions: body.permissions != null ? String(body.permissions) : '0',
             mentionable: body.mentionable ?? false,
           },
         })
@@ -1354,9 +1329,7 @@ export function createServer({
             ...(body.permissions !== undefined
               ? { permissions: body.permissions != null ? String(body.permissions) : '0' }
               : {}),
-            ...(body.mentionable !== undefined
-              ? { mentionable: body.mentionable ?? false }
-              : {}),
+            ...(body.mentionable !== undefined ? { mentionable: body.mentionable ?? false } : {}),
           },
         })
         const updatedRole = await prisma.role.findUniqueOrThrow({
@@ -1390,17 +1363,11 @@ export function createServer({
         const url = new URL(request.url, 'http://localhost')
         const query = url.searchParams.get('query') ?? ''
         const parsedLimit = parseInt(url.searchParams.get('limit') ?? '1', 10)
-        const limit = Math.min(
-          Number.isNaN(parsedLimit) ? 1 : parsedLimit,
-          1000,
-        )
+        const limit = Math.min(Number.isNaN(parsedLimit) ? 1 : parsedLimit, 1000)
         const members = await prisma.guildMember.findMany({
           where: {
             guildId: params.guild_id,
-            OR: [
-              { user: { username: { contains: query } } },
-              { nick: { contains: query } },
-            ],
+            OR: [{ user: { username: { contains: query } } }, { nick: { contains: query } }],
           },
           include: { user: true },
           take: limit,
@@ -1428,10 +1395,7 @@ export function createServer({
         const url = new URL(request.url, 'http://localhost')
         const after = url.searchParams.get('after')
         const parsedLimit = parseInt(url.searchParams.get('limit') ?? '1', 10)
-        const limit = Math.min(
-          Number.isNaN(parsedLimit) ? 1 : parsedLimit,
-          1000,
-        )
+        const limit = Math.min(Number.isNaN(parsedLimit) ? 1 : parsedLimit, 1000)
         const members = await prisma.guildMember.findMany({
           where: {
             guildId: params.guild_id,
@@ -1518,8 +1482,7 @@ export function createServer({
       path: '/interactions/:interaction_id/:interaction_token/callback',
       async handler({ params, request }): Promise<Response> {
         // JSON.parse of unknown request body -- `as` is the only option
-        const body =
-          (await request.json()) as RESTPostAPIInteractionCallbackJSONBody
+        const body = (await request.json()) as RESTPostAPIInteractionCallbackJSONBody
 
         const existing = await prisma.interactionResponse.findUnique({
           where: { interactionId: params.interaction_id },
@@ -1547,9 +1510,7 @@ export function createServer({
 
         const callbackType = body.type
         let messageId: string | null = existing.messageId
-        const data = (
-          'data' in body ? body.data : null
-        ) as APIInteractionResponseCallbackData | null
+        const data = ('data' in body ? body.data : null) as APIInteractionResponseCallbackData | null
 
         // Type 4 (CHANNEL_MESSAGE_WITH_SOURCE) creates a message immediately
         if (callbackType === InteractionResponseType.ChannelMessageWithSource) {
@@ -1593,12 +1554,7 @@ export function createServer({
                 include: { user: true },
               })
             : null
-          const apiMessage = messageToAPI(
-            dbMessage,
-            author,
-            guildId,
-            member ?? undefined,
-          )
+          const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
           gateway.broadcastMessageCreate(apiMessage, guildId ?? '')
         } else if (callbackType === InteractionResponseType.UpdateMessage) {
           messageId = existing.messageId
@@ -1631,9 +1587,7 @@ export function createServer({
               content: data?.content ?? origMessage.content,
               editedTimestamp: new Date(),
               ...(data?.embeds ? { embeds: JSON.stringify(data.embeds) } : {}),
-              ...(data?.components
-                ? { components: JSON.stringify(data.components) }
-                : {}),
+              ...(data?.components ? { components: JSON.stringify(data.components) } : {}),
               ...(data?.flags != null ? { flags: data.flags } : {}),
             },
           })
@@ -1655,12 +1609,7 @@ export function createServer({
                 include: { user: true },
               })
             : null
-          const apiMessage = messageToAPI(
-            dbMessage,
-            author,
-            guildId,
-            member ?? undefined,
-          )
+          const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
           gateway.broadcast(GatewayDispatchEvents.MessageUpdate, {
             ...apiMessage,
             guild_id: guildId,
@@ -1748,12 +1697,7 @@ export function createServer({
               include: { user: true },
             })
           : null
-        const apiMessage = messageToAPI(
-          dbMessage,
-          author,
-          guildId,
-          member ?? undefined,
-        )
+        const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
         gateway.broadcastMessageCreate(apiMessage, guildId ?? '')
         return apiMessage
       },
@@ -1821,8 +1765,7 @@ export function createServer({
       method: 'PATCH',
       path: '/webhooks/:webhook_id/:webhook_token/messages/:message_id',
       async handler({ params, request }): Promise<APIMessage> {
-        const body =
-          (await request.json()) as RESTPatchAPIChannelMessageJSONBody
+        const body = (await request.json()) as RESTPatchAPIChannelMessageJSONBody
         const resolvedId = resolveWebhookMessageId(params.message_id)
 
         // For @original, look up the interaction response's messageId.
@@ -1905,9 +1848,7 @@ export function createServer({
               content: body.content ?? existing.content,
               editedTimestamp: new Date(),
               ...(body.embeds ? { embeds: JSON.stringify(body.embeds) } : {}),
-              ...(body.components
-                ? { components: JSON.stringify(body.components) }
-                : {}),
+              ...(body.components ? { components: JSON.stringify(body.components) } : {}),
               ...(body.flags != null ? { flags: body.flags } : {}),
             },
           })
@@ -1931,12 +1872,7 @@ export function createServer({
               include: { user: true },
             })
           : null
-        const apiMessage = messageToAPI(
-          dbMessage,
-          author,
-          guildId,
-          member ?? undefined,
-        )
+        const apiMessage = messageToAPI(dbMessage, author, guildId, member ?? undefined)
         gateway.broadcast(GatewayDispatchEvents.MessageUpdate, {
           ...apiMessage,
           guild_id: guildId,
@@ -2010,11 +1946,16 @@ export function createServer({
     if (guilds === null) return null
     // Read-only, like rest_proxy.rs is_client_authorized_for_route.
     if (scope.kind === 'allowed-without-guild') {
-      return req.method === 'GET' ? null : Response.json({ error: 'REST route is outside the authorized guild scope' }, { status: 403 })
+      return req.method === 'GET'
+        ? null
+        : Response.json({ error: 'REST route is outside the authorized guild scope' }, { status: 403 })
     }
-    if (scope.kind === 'denied') return Response.json({ error: 'REST route is outside the authorized guild scope' }, { status: 403 })
+    if (scope.kind === 'denied')
+      return Response.json({ error: 'REST route is outside the authorized guild scope' }, { status: 403 })
     if (scope.kind === 'guild') {
-      return guilds.has(scope.guildId) ? null : Response.json({ error: 'REST route is outside the authorized guild scope' }, { status: 403 })
+      return guilds.has(scope.guildId)
+        ? null
+        : Response.json({ error: 'REST route is outside the authorized guild scope' }, { status: 403 })
     }
     const channel = await prisma.channel.findUnique({ where: { id: scope.channelId } })
     if (!channel) return Response.json({ message: 'Unknown Channel', code: 10003 }, { status: 404 })
@@ -2036,9 +1977,7 @@ export function createServer({
     // limit headers on every response.
     res.writeHead = function writeHeadWithRateLimits(
       statusCode: number,
-      ...rest: Parameters<typeof res.writeHead> extends [number, ...infer R]
-        ? R
-        : never[]
+      ...rest: Parameters<typeof res.writeHead> extends [number, ...infer R] ? R : never[]
     ) {
       for (const [key, value] of Object.entries(RATE_LIMIT_HEADERS)) {
         res.setHeader(key, value)

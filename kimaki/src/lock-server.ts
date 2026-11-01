@@ -27,16 +27,27 @@ export { DEFAULT_LOCK_PORT }
 // Exit code that tells the supervisor of the root `kimaki` command (cli/bot.ts) to start the bot again.
 export const RESTART_EXIT_CODE = 75
 
-export async function installShim({ dataDir, command }: { dataDir: string; command: string }): Promise<ConfigError | void> {
+export async function installShim({
+  dataDir,
+  command,
+}: {
+  dataDir: string
+  command: string
+}): Promise<ConfigError | void> {
   const directory = path.join(dataDir, 'bin')
-  const created = await fs.promises.mkdir(directory, { recursive: true }).catch((cause) => new ConfigError({ reason: 'Cannot create Kimaki shim directory', cause }))
+  const created = await fs.promises
+    .mkdir(directory, { recursive: true })
+    .catch((cause) => new ConfigError({ reason: 'Cannot create Kimaki shim directory', cause }))
   if (created instanceof Error) return created
   const file = path.join(directory, process.platform === 'win32' ? 'kimaki.cmd' : 'kimaki')
   // Bind the shim to its data dir through the env: not every command takes --data-dir.
-  const script = process.platform === 'win32'
-    ? `@echo off\r\nset "KIMAKI_DATA_DIR=${dataDir}"\r\n${command} %*\r\n`
-    : `#!/bin/sh\nexport KIMAKI_DATA_DIR='${dataDir.replaceAll("'", "'\\''")}'\nexec ${command} "$@"\n`
-  return fs.promises.writeFile(file, script, { mode: 0o700 }).then(() => fs.promises.chmod(file, 0o700))
+  const script =
+    process.platform === 'win32'
+      ? `@echo off\r\nset "KIMAKI_DATA_DIR=${dataDir}"\r\n${command} %*\r\n`
+      : `#!/bin/sh\nexport KIMAKI_DATA_DIR='${dataDir.replaceAll("'", "'\\''")}'\nexec ${command} "$@"\n`
+  return fs.promises
+    .writeFile(file, script, { mode: 0o700 })
+    .then(() => fs.promises.chmod(file, 0o700))
     .catch((cause) => new ConfigError({ reason: 'Cannot install Kimaki command shim', cause }))
 }
 
@@ -73,7 +84,10 @@ function wrapperPid(supervised: boolean): number | null {
 }
 
 function isAlive(pid: number): boolean {
-  const probed = attempt(() => process.kill(pid, 0), (cause) => new ConfigError({ reason: `probe PID ${pid}`, cause }))
+  const probed = attempt(
+    () => process.kill(pid, 0),
+    (cause) => new ConfigError({ reason: `probe PID ${pid}`, cause }),
+  )
   if (!(probed instanceof Error)) return true
   // EPERM: the PID exists but belongs to another user.
   return probed.cause instanceof Error && Reflect.get(probed.cause, 'code') === 'EPERM'
@@ -89,7 +103,10 @@ async function waitForExit({ pid, timeoutMs }: { pid: number; timeoutMs: number 
 }
 
 function signal({ pid, name }: { pid: number; name: NodeJS.Signals }): void {
-  const sent = attempt(() => process.kill(pid, name), (cause) => new ConfigError({ reason: `${name} to PID ${pid}`, cause }))
+  const sent = attempt(
+    () => process.kill(pid, name),
+    (cause) => new ConfigError({ reason: `${name} to PID ${pid}`, cause }),
+  )
   if (sent instanceof Error) logger.warn('cannot send', sent)
 }
 
@@ -119,7 +136,17 @@ async function evictRunningBot({ port, graceMs = 20_000 }: { port: number; grace
 }
 
 // evict: false (--if-not-running) never stops a running bot; the bind fails with EADDRINUSE instead.
-export async function startLockServer({ port, dataDir, supervised = false, evict = true }: { port: number; dataDir: string; supervised?: boolean; evict?: boolean }): Promise<LockPortError | LockServer> {
+export async function startLockServer({
+  port,
+  dataDir,
+  supervised = false,
+  evict = true,
+}: {
+  port: number
+  dataDir: string
+  supervised?: boolean
+  evict?: boolean
+}): Promise<LockPortError | LockServer> {
   const token = crypto.randomBytes(32).toString('hex')
   const state: { handler: LockHandler | null } = { handler: null }
   async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
@@ -127,7 +154,8 @@ export async function startLockServer({ port, dataDir, supervised = false, evict
       res.writeHead(status, { 'content-type': 'application/json' })
       res.end(JSON.stringify(value))
     }
-    if (req.headers.authorization !== `Bearer ${token}`) return json(401, { error: 'Not authorized. Use the lock-token of this bot.' })
+    if (req.headers.authorization !== `Bearer ${token}`)
+      return json(401, { error: 'Not authorized. Use the lock-token of this bot.' })
     if (req.method !== 'POST') return json(405, { error: 'Use POST' })
     if (!state.handler) return json(503, { error: 'Kimaki is starting. Try again.' })
     const chunks: Buffer[] = []
@@ -137,8 +165,10 @@ export async function startLockServer({ port, dataDir, supervised = false, evict
       if (size > 1_048_576) return json(413, { error: 'Request is larger than 1 MiB' })
       chunks.push(Buffer.from(chunk))
     }
-    const parsed = attempt(() => ({ input: JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown }),
-      (cause) => new ConfigError({ reason: 'Invalid JSON request', cause }))
+    const parsed = attempt(
+      () => ({ input: JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown }),
+      (cause) => new ConfigError({ reason: 'Invalid JSON request', cause }),
+    )
     if (parsed instanceof Error) return json(400, { error: parsed.message })
     const controller = new AbortController()
     res.once('close', () => controller.abort())
@@ -170,15 +200,17 @@ export async function startLockServer({ port, dataDir, supervised = false, evict
   if (evict) await evictRunningBot({ port })
   const bound = await listen(server, port)
   if (bound instanceof Error) {
-    const reason = bound.code === 'EADDRINUSE'
-      ? 'port is in use and the process on it did not stop. Stop it or set KIMAKI_LOCK_PORT to a free port'
-      : bound.message
+    const reason =
+      bound.code === 'EADDRINUSE'
+        ? 'port is in use and the process on it did not stop. Stop it or set KIMAKI_LOCK_PORT to a free port'
+        : bound.message
     return new LockPortError({ port, reason, cause: bound })
   }
 
   logger.info(`lock server listening on 127.0.0.1:${port}`)
   const tokenFile = path.join(dataDir, 'lock-token')
-  const written = await fs.promises.mkdir(dataDir, { recursive: true, mode: 0o700 })
+  const written = await fs.promises
+    .mkdir(dataDir, { recursive: true, mode: 0o700 })
     .then(() => fs.promises.writeFile(tokenFile, token, { mode: 0o600 }))
     .then(() => fs.promises.chmod(tokenFile, 0o600))
     .catch((cause) => new LockPortError({ port, reason: 'cannot write lock-token', cause }))
@@ -189,7 +221,9 @@ export async function startLockServer({ port, dataDir, supervised = false, evict
   return {
     port,
     supervised,
-    handle: (handler) => { state.handler = handler },
+    handle: (handler) => {
+      state.handler = handler
+    },
     close: async () => {
       server.closeAllConnections()
       await new Promise<void>((resolve) => server.close(() => resolve()))
@@ -200,31 +234,45 @@ export async function startLockServer({ port, dataDir, supervised = false, evict
 }
 
 // Typed by the route table; imports only its types, so the CLI loads no bot code.
-export async function callBot<N extends LockRouteName>({ dataDir, route, input, signal }: {
+export async function callBot<N extends LockRouteName>({
+  dataDir,
+  route,
+  input,
+  signal: abortSignal,
+}: {
   dataDir: string
   route: N
   input: LockRouteInput<N>
   signal?: AbortSignal
 }): Promise<BotNotRunningError | ConfigError | { data: LockRouteOutput<N> }> {
-  const token = await fs.promises.readFile(path.join(dataDir, 'lock-token'), 'utf8')
+  const token = await fs.promises
+    .readFile(path.join(dataDir, 'lock-token'), 'utf8')
     .catch((cause) => new BotNotRunningError({ cause }))
   if (token instanceof Error) return token
   const port = Number(process.env['KIMAKI_LOCK_PORT'] || DEFAULT_LOCK_PORT)
   const response = await fetch(`http://127.0.0.1:${port}/kimaki/${route}`, {
-    method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify(input), signal: signal ?? AbortSignal.timeout(30_000),
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify(input),
+    signal: abortSignal ?? AbortSignal.timeout(30_000),
   }).catch((cause: Error) =>
     // A timeout means the bot runs but is slow: only a refused connection means no bot.
     cause.name === 'TimeoutError' || cause.name === 'AbortError'
       ? new ConfigError({ reason: `Kimaki bot did not answer ${route} in time. Check kimaki logs`, cause })
-      : new BotNotRunningError({ cause }))
+      : new BotNotRunningError({ cause }),
+  )
   if (response instanceof Error) return response
-  const body = await response.json().then((data: unknown) => ({ data }))
+  const body = await response
+    .json()
+    .then((data: unknown) => ({ data }))
     .catch((cause) => new ConfigError({ reason: 'Invalid bot response. Check kimaki logs.', cause }))
   if (body instanceof Error) return body
   if (!response.ok) {
     const value = body.data
-    const reason = value && typeof value === 'object' && 'error' in value && typeof value.error === 'string' ? value.error : `Bot returned HTTP ${response.status}`
+    const reason =
+      value && typeof value === 'object' && 'error' in value && typeof value.error === 'string'
+        ? value.error
+        : `Bot returned HTTP ${response.status}`
     return new ConfigError({ reason })
   }
   // The bot answered this route with its run() result.

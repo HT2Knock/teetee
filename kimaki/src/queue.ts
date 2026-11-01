@@ -50,7 +50,13 @@ function inputFields(payload: { text: string; metadata?: { readonly [key: string
   const discord = payload.metadata?.['discord']
   // Sent outside Discord (TUI, other clients): echo it like V1 external sync did.
   if (!discord || typeof discord !== 'object' || Array.isArray(discord)) {
-    return { external: true, text, username: null, messageId: null, echo: text.trim() ? formatEcho({ username: 'user', text }) : null }
+    return {
+      external: true,
+      text,
+      username: null,
+      messageId: null,
+      echo: text.trim() ? formatEcho({ username: 'user', text }) : null,
+    }
   }
   const username = discord['username']
   const messageId = discord['messageId']
@@ -107,7 +113,11 @@ export function enqueueInput(
   }
   if (!acked) return
   const position = queuedItems(draft).length
-  const ack = textOnly(asSubtext(`Queued at position ${position}. Delete the original message to remove it, or use /clear-queue position:${position}`))
+  const ack = textOnly(
+    asSubtext(
+      `Queued at position ${position}. Delete the original message to remove it, or use /clear-queue position:${position}`,
+    ),
+  )
   emit({ type: 'show', key: ackKey(inboxID), messages: [ack], replyTo: meta.messageId, notify: false })
 }
 

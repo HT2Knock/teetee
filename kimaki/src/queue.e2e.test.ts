@@ -65,7 +65,10 @@ afterAll(async () => {
 async function startSlowThread(content: string) {
   const { discord, channelId } = twin
   const before = new Set((await discord.channel(channelId).getThreads()).map((thread) => thread.id))
-  await discord.channel(channelId).user(TEST_USER_ID).sendMessage({ content: `${content} slow-marker` })
+  await discord
+    .channel(channelId)
+    .user(TEST_USER_ID)
+    .sendMessage({ content: `${content} slow-marker` })
   const thread = await discord.channel(channelId).waitForThread({
     timeout: 8_000,
     predicate: (candidate) => !before.has(candidate.id),
@@ -186,7 +189,9 @@ test('message delete takes items out of the queue, edit re-queues', async () => 
   await expectNever({ threadId: thread.id, text: 'queued two ok' })
   // The re-queued prompt keeps the edited message's attachment.
   const messages = await (await server.client()).message.list({ sessionID: bot.store.getState().roots[thread.id]! })
-  const requeued = messages.data.find((message) => message.type === 'user' && JSON.stringify(message).includes('edited-marker'))
+  const requeued = messages.data.find(
+    (message) => message.type === 'user' && JSON.stringify(message).includes('edited-marker'),
+  )
   expect(JSON.stringify(requeued)).toContain('queued-notes.txt')
 })
 

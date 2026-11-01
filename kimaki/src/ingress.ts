@@ -31,12 +31,11 @@ import { projectOf, sessionDirectory, type Bot, type PromptFile } from './bot.ts
 import { formatError, NOTIFY_MESSAGE_FLAGS, SILENT_MESSAGE_FLAGS } from './format-parts.ts'
 import { createLogger } from './logger.ts'
 import { parseInput, sendInput } from './lock-routes.ts'
-import { dispatch, send } from './input.ts'
+import { dispatch, send, startSession } from './input.ts'
 import { cancelQueuedPrompt, requeueEdited } from './prompt.ts'
 import { REMOTE_PROMPT_FILE, REMOTE_RESULT_PREFIX, REMOTE_SEND_PREFIX } from './remote-send.ts'
 import { formatEcho, queuedItemFor } from './queue.ts'
 import { parseTextMessage, type Route } from './routes.ts'
-import { startSession } from './input.ts'
 import { primaryAgents } from './session-context.ts'
 import { isVoiceAttachment, parseVoiceMessage, transcribe, voiceMediaType, type AttachmentLike } from './voice.ts'
 
@@ -117,7 +116,8 @@ class AttachmentError extends Data.TaggedError('AttachmentError')<{ file: string
 async function remotePromptText(url: string) {
   const response = await fetch(url).catch((cause) => new AttachmentError({ file: REMOTE_PROMPT_FILE, cause }))
   if (response instanceof Error) return response
-  if (!response.ok) return new AttachmentError({ file: REMOTE_PROMPT_FILE, cause: new Error(`HTTP ${response.status}`) })
+  if (!response.ok)
+    return new AttachmentError({ file: REMOTE_PROMPT_FILE, cause: new Error(`HTTP ${response.status}`) })
   return response.text().catch((cause) => new AttachmentError({ file: REMOTE_PROMPT_FILE, cause }))
 }
 
@@ -144,7 +144,12 @@ function attachmentLike(attachment: Attachment): AttachmentLike {
 // Voice: transcribe first. The transcription picks the route (spec 9.4).
 async function voiceRoute(
   bot: Bot,
-  { message, attachment, directory, inSession }: { message: Message; attachment: Attachment; directory: string; inSession: boolean },
+  {
+    message,
+    attachment,
+    directory,
+    inSession,
+  }: { message: Message; attachment: Attachment; directory: string; inSession: boolean },
 ): Promise<Error | Route> {
   const audio = await download(attachment.url)
   if (audio instanceof Error) return audio
@@ -168,7 +173,10 @@ async function voiceRoute(
 }
 
 // A remote send envelope another machine's `kimaki send` posted in a channel this bot owns.
-async function handleRemoteEnvelope(bot: Bot, { message, channelId, threadId }: { message: Message; channelId: string; threadId: string | null }) {
+async function handleRemoteEnvelope(
+  bot: Bot,
+  { message, channelId, threadId }: { message: Message; channelId: string; threadId: string | null },
+) {
   const footer = message.embeds[0]?.footer?.text
   if (!footer?.startsWith(REMOTE_SEND_PREFIX)) return
   const decoded = attempt(
@@ -179,7 +187,8 @@ async function handleRemoteEnvelope(bot: Bot, { message, channelId, threadId }: 
   const value = decoded.value
   if (!value || typeof value !== 'object') return
   if (!('requestId' in value) || typeof value.requestId !== 'string' || !/^[0-9a-f]{16}$/.test(value.requestId)) return
-  if (!('options' in value) || !value.options || typeof value.options !== 'object' || Array.isArray(value.options)) return
+  if (!('options' in value) || !value.options || typeof value.options !== 'object' || Array.isArray(value.options))
+    return
   const promptInFile = 'promptFile' in value && value.promptFile === REMOTE_PROMPT_FILE
   const first = message.attachments.first()
   const promptAttachment = promptInFile && first?.name === REMOTE_PROMPT_FILE ? first : undefined
@@ -193,7 +202,12 @@ async function handleRemoteEnvelope(bot: Bot, { message, channelId, threadId }: 
   const input = prompt instanceof Error ? prompt : parseInput(sendInput, { ...value.options, ...target, prompt })
   const attachments = [...message.attachments.values()].filter((attachment) => attachment !== promptAttachment)
   const files = await saveAttachments({ dataDir: bot.dataDir, messageId: message.id, attachments })
-  const result = input instanceof Error ? input : files instanceof Error ? files : await send(bot, { ...input, files }, { localOnly: true })
+  const result =
+    input instanceof Error
+      ? input
+      : files instanceof Error
+        ? files
+        : await send(bot, { ...input, files }, { localOnly: true })
   const answer = JSON.stringify(result instanceof Error ? { error: result.message } : result)
   await message
     .reply({
@@ -254,21 +268,31 @@ async function handleMessage(bot: Bot, message: Message) {
   if (directory instanceof Error) return reportError(directory)
   const route = voice
     ? await voiceRoute(bot, { message, attachment: voice, directory, inSession: Boolean(sessionId) })
-    : (parseTextMessage({ content: message.content }) ?? (files.length > 0 ? { kind: 'steer' as const, text: '' } : null))
+    : (parseTextMessage({ content: message.content }) ??
+      (files.length > 0 ? { kind: 'steer' as const, text: '' } : null))
   if (route instanceof Error) return reportError(route)
   if (!route) return
   const detail = route.kind === 'command' ? ` /${route.name}` : route.kind === 'skill' ? ` ${route.id}` : ''
   const attached = files.length > 0 ? `, ${files.length} file(s)` : ''
-  logger.log(`${route.kind}${detail} from ${author.username} in ${thread ? `thread ${thread.id}` : `channel ${channelId}`}${attached}`)
+  logger.log(
+    `${route.kind}${detail} from ${author.username} in ${thread ? `thread ${thread.id}` : `channel ${channelId}`}${attached}`,
+  )
   // The transcription is not visible anywhere else.
   if (voice && thread && route.kind !== 'shell' && route.kind !== 'command' && route.kind !== 'skill') {
-    await message.reply({ content: formatEcho({ username: author.username, text: route.text }), allowedMentions: { parse: [] }, flags: SILENT_MESSAGE_FLAGS })
+    await message.reply({
+      content: formatEcho({ username: author.username, text: route.text }),
+      allowedMentions: { parse: [] },
+      flags: SILENT_MESSAGE_FLAGS,
+    })
   }
 
   if (!thread) {
     // A channel message starts a session. Queue and btw need one to wait
     // for or fork from: here they are plain prompts.
-    const first = route.kind === 'shell' || route.kind === 'command' || route.kind === 'skill' ? route : { ...route, kind: 'steer' as const }
+    const first =
+      route.kind === 'shell' || route.kind === 'command' || route.kind === 'skill'
+        ? route
+        : { ...route, kind: 'steer' as const }
     const started = await startSession(bot, {
       channelId,
       directory: project.directory,
@@ -286,8 +310,12 @@ async function handleMessage(bot: Bot, message: Message) {
   if (result instanceof Error) return reportError(result)
   if (!result) return
   const note =
-    route.kind === 'btw' ? `Session forked! Continue in <#${result.threadId}>` : `Started a new session in <#${result.threadId}>`
-  await message.reply({ content: note, allowedMentions: { repliedUser: false }, flags: SILENT_MESSAGE_FLAGS }).catch(() => undefined)
+    route.kind === 'btw'
+      ? `Session forked! Continue in <#${result.threadId}>`
+      : `Started a new session in <#${result.threadId}>`
+  await message
+    .reply({ content: note, allowedMentions: { repliedUser: false }, flags: SILENT_MESSAGE_FLAGS })
+    .catch(() => undefined)
 }
 
 // Registers the message listeners. Messages of one channel are handled in arrival order.
@@ -328,7 +356,11 @@ export function registerIngress(bot: Bot) {
       if (!full?.guild || !queuedItemFor(bot, { threadId: full.channelId, messageId: full.id })) return
       if (!(await canUseKimaki(bot, { guild: full.guild, userId: full.author.id }))) return
       // The re-queued prompt must carry the message's attachments again.
-      const files = await saveAttachments({ dataDir: bot.dataDir, messageId: full.id, attachments: [...full.attachments.values()] })
+      const files = await saveAttachments({
+        dataDir: bot.dataDir,
+        messageId: full.id,
+        attachments: [...full.attachments.values()],
+      })
       if (files instanceof Error) {
         logger.error(`edit of ${full.id}`, files)
         return

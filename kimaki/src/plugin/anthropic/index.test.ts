@@ -7,7 +7,11 @@ test('subscription rewrite adds the identity first and re-wraps the OpenCode env
     model: 'claude-sonnet-4-5',
     system: [
       { type: 'text', text: 'You are an AI agent running in OpenCode.' },
-      { type: 'text', text: 'Here is some useful information about the environment you are running in:\n<env>\n  Working directory: /repo\n  Is directory a git repo: yes\n</env>\nmore', cache_control: { type: 'ephemeral' } },
+      {
+        type: 'text',
+        text: 'Here is some useful information about the environment you are running in:\n<env>\n  Working directory: /repo\n  Is directory a git repo: yes\n</env>\nmore',
+        cache_control: { type: 'ephemeral' },
+      },
     ],
     messages: [{ role: 'user', content: 'hi' }],
   })

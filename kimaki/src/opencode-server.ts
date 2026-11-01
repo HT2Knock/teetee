@@ -29,7 +29,15 @@ import { OpenCode, type OpenCodeClient, type V2Event } from '@opencode/client'
 import { Service } from '@opencode/client/service'
 import { parse as parseJsonc } from 'jsonc-parser'
 
-import { ConfigError, OpenCodeError, OpenCodeMissingError, OpenCodeUnavailableError, OpenCodeV1Error, OpenCodeVersionError, attempt } from './errors.ts'
+import {
+  ConfigError,
+  OpenCodeError,
+  OpenCodeMissingError,
+  OpenCodeUnavailableError,
+  OpenCodeV1Error,
+  OpenCodeVersionError,
+  attempt,
+} from './errors.ts'
 import { createLogger } from './logger.ts'
 
 export type { OpenCodeClient, V2Event }
@@ -81,7 +89,7 @@ export function installedOpencodeBinary(): string {
 
 // `bun add -g @opencode/cli` puts the binary here. A service or an agent shell
 // does not always inherit ~/.bun/bin on PATH, so look there too.
-export function bunInstalledOpencodeBinary(): string {
+function bunInstalledOpencodeBinary(): string {
   return path.join(os.homedir(), '.bun', 'bin', process.platform === 'win32' ? 'opencode.exe' : 'opencode')
 }
 
@@ -95,28 +103,37 @@ async function opencodeVersion(binary: string): Promise<string | null> {
 // binary wins. If none is supported, the first OpenCode 1 or old V2 found is an
 // error, never a reason to install over it. null: no OpenCode at all.
 export async function findOpencodeBinary({
-  candidates = process.env['OPENCODE_PATH'] ? [process.env['OPENCODE_PATH']] : ['opencode', installedOpencodeBinary(), bunInstalledOpencodeBinary(), 'opencode2'],
+  candidates = process.env['OPENCODE_PATH']
+    ? [process.env['OPENCODE_PATH']]
+    : ['opencode', installedOpencodeBinary(), bunInstalledOpencodeBinary(), 'opencode2'],
 }: { candidates?: readonly string[] } = {}): Promise<OpenCodeV1Error | OpenCodeVersionError | string | null> {
   let unsupported: OpenCodeV1Error | OpenCodeVersionError | null = null
   for (const binary of candidates) {
     const version = await opencodeVersion(binary)
     if (!version) continue
     if (isSupportedVersion(version)) return binary
-    unsupported ??= (parseVersion(version)[0] ?? 0) < 2
-      ? new OpenCodeV1Error({ binary, version, install: OPENCODE_INSTALL_COMMAND })
-      : new OpenCodeVersionError({ version, minimum: MIN_OPENCODE_VERSION })
+    unsupported ??=
+      (parseVersion(version)[0] ?? 0) < 2
+        ? new OpenCodeV1Error({ binary, version, install: OPENCODE_INSTALL_COMMAND })
+        : new OpenCodeVersionError({ version, minimum: MIN_OPENCODE_VERSION })
   }
   return unsupported
 }
 
-async function resolveOpencodeBinary(): Promise<OpenCodeV1Error | OpenCodeVersionError | OpenCodeMissingError | string> {
+async function resolveOpencodeBinary(): Promise<
+  OpenCodeV1Error | OpenCodeVersionError | OpenCodeMissingError | string
+> {
   const binary = await findOpencodeBinary()
   return binary ?? new OpenCodeMissingError({ install: OPENCODE_INSTALL_COMMAND })
 }
 
 // Startup preflight, before Discord onboarding. 'missing': nothing runs and no
 // binary exists, so the caller may install OpenCode 2.
-export async function checkOpencode({ serviceFile }: { serviceFile?: string }): Promise<OpenCodeV1Error | OpenCodeVersionError | 'ready' | 'missing'> {
+export async function checkOpencode({
+  serviceFile,
+}: {
+  serviceFile?: string
+}): Promise<OpenCodeV1Error | OpenCodeVersionError | 'ready' | 'missing'> {
   const discovered = await Service.discover({ file: serviceFile }).catch(() => null)
   if (discovered) return 'ready'
   const binary = await findOpencodeBinary()
@@ -185,9 +202,15 @@ async function configuredPluginTargets({ configDir }: { configDir: string }): Pr
       const config: unknown = parseJsonc(text, [], { allowTrailingComma: true })
       if (!config || typeof config !== 'object' || Array.isArray(config)) return []
       // `plugin` is the V1 key (string or [target, options]), `plugins` the V2 one (string or { package }).
-      const entries: unknown[] = [Reflect.get(config, 'plugin'), Reflect.get(config, 'plugins')].flatMap((list) => (Array.isArray(list) ? list : []))
+      const entries: unknown[] = [Reflect.get(config, 'plugin'), Reflect.get(config, 'plugins')].flatMap((list) =>
+        Array.isArray(list) ? list : [],
+      )
       return entries.flatMap((entry) => {
-        const target: unknown = Array.isArray(entry) ? entry[0] : entry && typeof entry === 'object' ? Reflect.get(entry, 'package') : entry
+        const target: unknown = Array.isArray(entry)
+          ? entry[0]
+          : entry && typeof entry === 'object'
+            ? Reflect.get(entry, 'package')
+            : entry
         if (typeof target !== 'string' || target.startsWith('-')) return []
         if (target.startsWith('file://')) {
           const file = attempt(() => fileURLToPath(target))
@@ -213,7 +236,8 @@ async function isKimakiPluginDirectory({ target, directory }: { target: string; 
   for (const root of roots) {
     const manifest = await fs.promises.readFile(path.join(root, 'package.json'), 'utf8').catch(() => null)
     const parsed: unknown = manifest === null ? null : attempt(() => JSON.parse(manifest))
-    if (parsed && typeof parsed === 'object' && !(parsed instanceof Error) && Reflect.get(parsed, 'name') === 'kimaki') return true
+    if (parsed && typeof parsed === 'object' && !(parsed instanceof Error) && Reflect.get(parsed, 'name') === 'kimaki')
+      return true
   }
   return false
 }
@@ -232,7 +256,13 @@ async function installShim({ configDir, name, entry }: { configDir: string; name
     await fs.promises.mkdir(directory, { recursive: true })
     for (const child of extra) await fs.promises.rm(path.join(directory, child), { recursive: true, force: true })
     await fs.promises.writeFile(file, source)
-  })().catch((cause) => new ConfigError({ reason: `Cannot write the Kimaki OpenCode plugin to ${file}. Check permissions of ${configDir}`, cause }))
+  })().catch(
+    (cause) =>
+      new ConfigError({
+        reason: `Cannot write the Kimaki OpenCode plugin to ${file}. Check permissions of ${configDir}`,
+        cause,
+      }),
+  )
   if (written instanceof Error) return written
   logger.log(`installed OpenCode plugin shim ${file} -> ${entry}`)
   return { file, written: true }
@@ -244,20 +274,31 @@ async function installShim({ configDir, name, entry }: { configDir: string; name
 async function removeShim({ configDir, name, why }: { configDir: string; name: string; why: string }) {
   const directory = path.join(configDir, 'plugins', name)
   if (!fs.existsSync(directory)) return { file: directory, written: false }
-  const removed = await fs.promises
-    .rm(directory, { recursive: true, force: true })
-    .catch((cause) => new ConfigError({ reason: `Cannot remove the Kimaki OpenCode plugin shim ${directory}. Check permissions of ${configDir}`, cause }))
+  const removed = await fs.promises.rm(directory, { recursive: true, force: true }).catch(
+    (cause) =>
+      new ConfigError({
+        reason: `Cannot remove the Kimaki OpenCode plugin shim ${directory}. Check permissions of ${configDir}`,
+        cause,
+      }),
+  )
   if (removed instanceof Error) return removed
   logger.log(`removed OpenCode plugin shim ${directory}: ${why}`)
   return { file: directory, written: true }
 }
 
-export async function installPluginShim({ configDir }: { configDir: string }): Promise<ConfigError | { written: boolean }> {
+export async function installPluginShim({
+  configDir,
+}: {
+  configDir: string
+}): Promise<ConfigError | { written: boolean }> {
   const targets = await configuredPluginTargets({ configDir })
   const results = await Promise.all([
     ...PLUGIN_SHIMS.map(async (shim) => {
-      const configured = await Promise.all(targets.map((target) => isKimakiPluginDirectory({ target, directory: shim.directory })))
-      if (configured.includes(true)) return removeShim({ configDir, name: shim.name, why: 'opencode.json already loads this plugin' })
+      const configured = await Promise.all(
+        targets.map((target) => isKimakiPluginDirectory({ target, directory: shim.directory })),
+      )
+      if (configured.includes(true))
+        return removeShim({ configDir, name: shim.name, why: 'opencode.json already loads this plugin' })
       return installShim({ configDir, name: shim.name, entry: kimakiPluginEntry(shim.directory) })
     }),
     ...LEGACY_SHIMS.map((name) => removeShim({ configDir, name, why: 'replaced by the kimaki plugin' })),
@@ -279,7 +320,14 @@ export async function resolveOpencode({
 }: {
   serviceFile?: string
   ensure: boolean
-}): Promise<OpenCodeUnavailableError | OpenCodeMissingError | OpenCodeV1Error | OpenCodeVersionError | OpenCodeError | OpencodeEndpoint> {
+}): Promise<
+  | OpenCodeUnavailableError
+  | OpenCodeMissingError
+  | OpenCodeV1Error
+  | OpenCodeVersionError
+  | OpenCodeError
+  | OpencodeEndpoint
+> {
   const discovered = await Service.discover({ file: serviceFile }).catch(
     (e) => new OpenCodeUnavailableError({ reason: 'discover failed', cause: e }),
   )
@@ -290,7 +338,10 @@ export async function resolveOpencode({
     const binary = await resolveOpencodeBinary()
     if (binary instanceof Error) return binary
     logger.log(`no OpenCode service found, starting \`${binary} serve --service --hostname 127.0.0.1\``)
-    return Service.ensure({ file: serviceFile, command: [binary, 'serve', '--service', '--hostname', '127.0.0.1'] }).catch(
+    return Service.ensure({
+      file: serviceFile,
+      command: [binary, 'serve', '--service', '--hostname', '127.0.0.1'],
+    }).catch(
       (e) => new OpenCodeUnavailableError({ reason: `${binary} serve --service failed: ${errorText(e)}`, cause: e }),
     )
   })()
@@ -324,7 +375,11 @@ export type OpencodeConnection = {
   stop: () => void
 }
 
-class StreamClosedError extends Data.TaggedError('StreamClosedError')<{ reason: string; message: string; cause?: unknown }> {
+class StreamClosedError extends Data.TaggedError('StreamClosedError')<{
+  reason: string
+  message: string
+  cause?: unknown
+}> {
   constructor({ reason, cause }: { reason: string; cause?: unknown }) {
     super({ reason, cause, message: `OpenCode event stream closed: ${reason}` })
   }
@@ -363,8 +418,8 @@ export function watchOpencode({
   // One subscription attempt. Its signal aborts on stop() and when the attempt
   // ends, so a stale hydration can never publish into a newer connection.
   async function runAttempt({ endpoint, reconnect }: { endpoint: OpencodeEndpoint; reconnect: boolean }) {
-    const attempt = new AbortController()
-    const signal = AbortSignal.any([controller.signal, attempt.signal])
+    const retry = new AbortController()
+    const signal = AbortSignal.any([controller.signal, retry.signal])
     // The server writes a keepalive every 15s: a silent stream is half-open
     // (sleep/wake, hung server), so drop it and reconnect.
     const watchdog: { timer?: NodeJS.Timeout } = {}
@@ -372,7 +427,7 @@ export function watchOpencode({
       clearTimeout(watchdog.timer)
       watchdog.timer = setTimeout(() => {
         logger.warn(`no OpenCode stream activity for ${STREAM_IDLE_TIMEOUT_MS / 1000}s, reconnecting`)
-        attempt.abort()
+        retry.abort()
       }, STREAM_IDLE_TIMEOUT_MS)
     }
     touch()
@@ -418,7 +473,7 @@ export function watchOpencode({
       return consume
     })()
     clearTimeout(watchdog.timer)
-    attempt.abort()
+    retry.abort()
     void iterator.return?.(undefined).catch(() => {})
     state.connected = false
     // Hydration may have published the client before failing: always undo it.
@@ -433,7 +488,11 @@ export function watchOpencode({
       if (controller.signal.aborted) return
       // Wrong version, or no service at startup: fatal, the user must act.
       // After a first connect, failures are restarts and upgrades: retry.
-      if (endpoint instanceof OpenCodeVersionError || endpoint instanceof OpenCodeV1Error || (endpoint instanceof Error && state.endpoint === null)) {
+      if (
+        endpoint instanceof OpenCodeVersionError ||
+        endpoint instanceof OpenCodeV1Error ||
+        (endpoint instanceof Error && state.endpoint === null)
+      ) {
         readyDeferred.resolve(endpoint)
         logger.error(endpoint)
         return

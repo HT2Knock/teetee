@@ -123,7 +123,11 @@ function questionMessage({
       ...(option.description && { description: option.description.slice(0, 100) }),
     })),
     ...(field.custom
-      ? [field.options.length ? { label: 'Other', value: OTHER_VALUE, description: 'Type your own answer' } : { label: 'Type your answer', value: OTHER_VALUE }]
+      ? [
+          field.options.length
+            ? { label: 'Other', value: OTHER_VALUE, description: 'Type your own answer' }
+            : { label: 'Type your answer', value: OTHER_VALUE },
+        ]
       : []),
   ]
   return {
@@ -147,7 +151,13 @@ function questionMessage({
 }
 
 // Option labels instead of values ("Disable web search", not "disable").
-export function formatAnswer({ field, value }: { field: QuestionField; value: string | readonly string[] | number | boolean | undefined }): string {
+export function formatAnswer({
+  field,
+  value,
+}: {
+  field: QuestionField
+  value: string | readonly string[] | number | boolean | undefined
+}): string {
   if (value === undefined) return 'no answer'
   const label = (item: string | number | boolean) =>
     field.options.find((option) => option.value === String(item))?.label ?? String(item)
@@ -238,7 +248,10 @@ export function createQuestionHandlers(): InteractionRoutes {
   // "formID:key" -> options picked together with "Other", while the modal asks for the text.
   const otherPicks = new Map<string, readonly string[]>()
 
-  function pendingField(bot: Bot, { threadId, customId, prefix }: { threadId: string; customId: string; prefix: string }) {
+  function pendingField(
+    bot: Bot,
+    { threadId, customId, prefix }: { threadId: string; customId: string; prefix: string },
+  ) {
     const parsed = parseCustomId(customId, prefix)
     if (!parsed) return null
     const form = bot.store.getState().threads[threadId]?.forms[parsed.formID]
@@ -282,7 +295,11 @@ export function createQuestionHandlers(): InteractionRoutes {
   }
 
   async function select(bot: Bot, interaction: StringSelectMenuInteraction): Promise<void> {
-    const pending = pendingField(bot, { threadId: interaction.channelId, customId: interaction.customId, prefix: FORM_SELECT_PREFIX })
+    const pending = pendingField(bot, {
+      threadId: interaction.channelId,
+      customId: interaction.customId,
+      prefix: FORM_SELECT_PREFIX,
+    })
     if (!pending) return expired(interaction)
     const { formID, field } = pending
     const values = interaction.values.flatMap((value) => {
@@ -304,18 +321,27 @@ export function createQuestionHandlers(): InteractionRoutes {
       )
       return
     }
-    const value = field.type === 'multiselect' ? values : field.type === 'boolean' ? values[0] === 'true' : (values[0] ?? '')
+    const value =
+      field.type === 'multiselect' ? values : field.type === 'boolean' ? values[0] === 'true' : (values[0] ?? '')
     await record(bot, { interaction, ...pending, value })
   }
 
   async function other(bot: Bot, interaction: ModalSubmitInteraction): Promise<void> {
-    const pending = pendingField(bot, { threadId: interaction.channelId ?? '', customId: interaction.customId, prefix: FORM_OTHER_PREFIX })
+    const pending = pendingField(bot, {
+      threadId: interaction.channelId ?? '',
+      customId: interaction.customId,
+      prefix: FORM_OTHER_PREFIX,
+    })
     if (!pending) return expired(interaction)
     const text = interaction.fields.getTextInputValue('answer').trim()
     const key = `${pending.formID}:${pending.field.key}`
     const picked = otherPicks.get(key) ?? []
     otherPicks.delete(key)
-    await record(bot, { interaction, ...pending, value: pending.field.type === 'multiselect' ? [...picked, text] : text })
+    await record(bot, {
+      interaction,
+      ...pending,
+      value: pending.field.type === 'multiselect' ? [...picked, text] : text,
+    })
   }
 
   return { selects: { [FORM_SELECT_PREFIX]: select }, modals: { [FORM_OTHER_PREFIX]: other } }

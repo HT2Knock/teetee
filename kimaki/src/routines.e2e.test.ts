@@ -34,14 +34,25 @@ const clock = manualClock(Date.parse('2030-01-01T17:00:00Z'))
 let server: OpencodeTestServer
 let twin: TestTwin
 let bot: BotHandle
-const { cli, schedule, tick, listTasks, request, threadIds } = schedulingKit({ suite: () => ({ bot, twin, server }), dataDir, clock })
+const { cli, schedule, tick, listTasks, request, threadIds } = schedulingKit({
+  suite: () => ({ bot, twin, server }),
+  dataDir,
+  clock,
+})
 
 beforeAll(async () => {
   ;[server, twin] = await Promise.all([
-    startOpencodeTestServer({ matchers: [slowTextMatcher({ marker: 'slow-task-marker', text: 'slow done', delayMs: 60_000 })] }),
+    startOpencodeTestServer({
+      matchers: [slowTextMatcher({ marker: 'slow-task-marker', text: 'slow done', delayMs: 60_000 })],
+    }),
     startTwin(),
   ])
-  await seedProjectChannel({ dataDir, channelId: twin.channelId, guildId: twin.discord.guildId, directory: server.projectDirectory })
+  await seedProjectChannel({
+    dataDir,
+    channelId: twin.channelId,
+    guildId: twin.discord.guildId,
+    directory: server.projectDirectory,
+  })
   bot = await startTestBot({ dataDir, twin, server, clock, schedulerIntervalMs: null })
   await warmUp({ server })
 }, 60_000)
@@ -59,16 +70,22 @@ test('runs do not overlap by default; --allow-concurrency starts another session
   expect(first.length).toBe(2)
   const client = await server.client()
   const sessions = first.map((threadId) => bot.store.getState().roots[threadId]!)
-  await waitFor({ label: 'both runs busy', check: async () => {
-    const active = await client.session.active()
-    return sessions.every((id) => id in active)
-  } })
+  await waitFor({
+    label: 'both runs busy',
+    check: async () => {
+      const active = await client.session.active()
+      return sessions.every((id) => id in active)
+    },
+  })
   const second = await tick('2030-01-01T19:00:00Z')
   expect(second.length).toBe(1)
   const info = await client.session.get({ sessionID: bot.store.getState().roots[second[0]!]! })
   expect(info.metadata?.['kimaki']).toMatchObject({ taskId: parallel.routineId })
   // The skipped occurrence still moves the serial task to its next run.
-  expect((await listTasks()).find((row) => row.id === serial.routineId)).toMatchObject({ status: 'planned', nextRunAt: '2030-01-01T20:00:00.000Z' })
+  expect((await listTasks()).find((row) => row.id === serial.routineId)).toMatchObject({
+    status: 'planned',
+    nextRunAt: '2030-01-01T20:00:00.000Z',
+  })
   for (const threadId of [...first, ...second]) {
     const aborted = await abort(bot, { threadId })
     if (aborted instanceof Error) throw aborted
@@ -79,11 +96,26 @@ test('runs do not overlap by default; --allow-concurrency starts another session
 test('a routine row written by V1 runs unchanged', async () => {
   // Exactly what V1 `kimaki send --send-at` stored (task-schedule.ts serializeScheduledTaskPayload).
   const payload = {
-    kind: 'channel', channelId: twin.channelId, prompt: 'V1 weekly check', name: null, notifyOnly: false, worktreeName: null, cwd: null,
-    agent: null, model: null, username: 'tommy', userId: TEST_USER_ID, permissions: null, injectionGuardPatterns: null, parentSessionId: null,
-    preRunCommand: null, allowConcurrency: false,
+    kind: 'channel',
+    channelId: twin.channelId,
+    prompt: 'V1 weekly check',
+    name: null,
+    notifyOnly: false,
+    worktreeName: null,
+    cwd: null,
+    agent: null,
+    model: null,
+    username: 'tommy',
+    userId: TEST_USER_ID,
+    permissions: null,
+    injectionGuardPatterns: null,
+    parentSessionId: null,
+    preRunCommand: null,
+    allowConcurrency: false,
   }
-  const rows = await bot.db<ScheduledTaskRow[]>`INSERT INTO scheduled_tasks (status, schedule_kind, cron_expr, timezone, next_run_at, payload_json, prompt_preview, channel_id, project_directory)
+  const rows = await bot.db<
+    ScheduledTaskRow[]
+  >`INSERT INTO scheduled_tasks (status, schedule_kind, cron_expr, timezone, next_run_at, payload_json, prompt_preview, channel_id, project_directory)
     VALUES (${'planned'}, ${'cron'}, ${'0 9 * * 1'}, ${'UTC'}, ${toDbDate(new Date('2030-01-07T09:00:00.000Z'))}, ${JSON.stringify(payload)}, ${'V1 weekly check'}, ${twin.channelId}, ${server.projectDirectory})
     RETURNING *`
   const row = parseFirst<ScheduledTaskRow>('scheduled_tasks', rows)
@@ -96,10 +128,16 @@ test('a routine row written by V1 runs unchanged', async () => {
     ok
     -# *project ⋅ main ⋅ Ns ⋅ deterministic-v2*"
   `)
-  expect((await listTasks()).find((task) => task.id === row!.id)).toMatchObject({ status: 'planned', nextRunAt: '2030-01-14T09:00:00.000Z' })
+  expect((await listTasks()).find((task) => task.id === row!.id)).toMatchObject({
+    status: 'planned',
+    nextRunAt: '2030-01-14T09:00:00.000Z',
+  })
   // V1 history: finished rows only show with the V1 `task list --all`.
   await bot.db`UPDATE scheduled_tasks SET status = ${'completed'}, updated_at = ${toDbDate(new Date())} WHERE id = ${row!.id}`
-  const listed = async (args: string[]) => (JSON.parse(await cli(['task', 'list', '--json', ...args])) as Array<{ id: number; status: string }>).map(({ id, status }) => ({ id, status }))
+  const listed = async (args: string[]) =>
+    (JSON.parse(await cli(['task', 'list', '--json', ...args])) as Array<{ id: number; status: string }>).map(
+      ({ id, status }) => ({ id, status }),
+    )
   expect({ default: await listed([]), all: await listed(['--all']) }).toMatchInlineSnapshot(`
     {
       "all": [
@@ -119,8 +157,16 @@ function buttons(message: APIMessage) {
   const walk = (components: readonly unknown[]) => {
     for (const component of components) {
       if (!component || typeof component !== 'object') continue
-      if ('type' in component && component.type === ComponentType.Button && 'custom_id' in component && typeof component.custom_id === 'string') {
-        found.push({ label: 'label' in component && typeof component.label === 'string' ? component.label : '', customId: component.custom_id })
+      if (
+        'type' in component &&
+        component.type === ComponentType.Button &&
+        'custom_id' in component &&
+        typeof component.custom_id === 'string'
+      ) {
+        found.push({
+          label: 'label' in component && typeof component.label === 'string' ? component.label : '',
+          customId: component.custom_id,
+        })
       }
       if ('components' in component && Array.isArray(component.components)) walk(component.components)
     }
@@ -133,7 +179,25 @@ test('routine list/edit/run/delete and /routines with Run now and Delete buttons
   clock.set(Date.parse('2030-01-02T08:00:00Z'))
   const daily = await schedule({ prompt: 'Daily digest', sendAt: '0 9 * * *', preRun: 'true', user: TEST_USER_ID })
   const once = await schedule({ prompt: 'Renew the certificate', sendAt: '2030-01-05T09:00:00Z', notifyOnly: true })
-  expect(await cli(['routine', 'edit', String(daily.routineId), '--prompt', 'Daily digest, short', '--send-at', '30 9 * * 1-5', '--agent', 'plan', '--pre-run', '', '--allow-concurrency', 'true', '--user', ''])).toMatchInlineSnapshot(`
+  expect(
+    await cli([
+      'routine',
+      'edit',
+      String(daily.routineId),
+      '--prompt',
+      'Daily digest, short',
+      '--send-at',
+      '30 9 * * 1-5',
+      '--agent',
+      'plan',
+      '--pre-run',
+      '',
+      '--allow-concurrency',
+      'true',
+      '--user',
+      '',
+    ]),
+  ).toMatchInlineSnapshot(`
     "{"routineId":4,"updated":["prompt","sendAt","agent","preRun","user","allowConcurrency"]}
     "
   `)
@@ -148,7 +212,13 @@ test('routine list/edit/run/delete and /routines with Run now and Delete buttons
   const user = discord.channel(channelId).user(TEST_USER_ID)
   const { id } = await user.runSlashCommand({ name: 'routines' })
   await discord.channel(channelId).waitForInteractionAck({ interactionId: id })
-  const reply = await waitFor({ label: '/routines reply', check: async () => (await discord.channel(channelId).getMessages()).find((message) => buttons(message).some((button) => button.customId.startsWith('routine_'))) })
+  const reply = await waitFor({
+    label: '/routines reply',
+    check: async () =>
+      (await discord.channel(channelId).getMessages()).find((message) =>
+        buttons(message).some((button) => button.customId.startsWith('routine_')),
+      ),
+  })
   expect(buttons(reply)).toMatchInlineSnapshot(`
     [
       {
@@ -181,13 +251,19 @@ test('routine list/edit/run/delete and /routines with Run now and Delete buttons
   // Run now: a notify-only task posts its thread without a session.
   const before = await threadIds()
   await user.clickButton({ messageId: reply.id, customId: `routine_run:${once.routineId}` })
-  const notice = await waitFor({ label: 'notification thread', check: async () => [...(await threadIds())].find((threadId) => !before.has(threadId)) })
+  const notice = await waitFor({
+    label: 'notification thread',
+    check: async () => [...(await threadIds())].find((threadId) => !before.has(threadId)),
+  })
   expect(await discord.thread(notice).text()).toMatchInlineSnapshot(`
     "--- from: assistant (TestBot)
     Renew the certificate"
   `)
   await user.clickButton({ messageId: reply.id, customId: `routine_delete:${daily.routineId}` })
-  await waitFor({ label: 'routine deleted', check: async () => (await discord.channel(channelId).text()).includes(`Deleted routine #${daily.routineId}`) })
+  await waitFor({
+    label: 'routine deleted',
+    check: async () => (await discord.channel(channelId).text()).includes(`Deleted routine #${daily.routineId}`),
+  })
   expect(await discord.channel(channelId).text()).toMatchInlineSnapshot(`
     "--- from: assistant (TestBot)
     Deleted routine #4

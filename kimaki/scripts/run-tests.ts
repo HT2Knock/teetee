@@ -31,7 +31,10 @@ function run(command: string, args: readonly string[], env: NodeJS.ProcessEnv = 
       process.stderr.write(`${command} did not finish in ${SUITE_TIMEOUT_MS / 60_000} minutes, stopping it\n`)
       child.kill('SIGKILL')
     }, SUITE_TIMEOUT_MS)
-    const done = (code: number) => { clearTimeout(timer); resolve(code) }
+    const done = (code: number) => {
+      clearTimeout(timer)
+      resolve(code)
+    }
     child.once('error', (error) => {
       process.stderr.write(`Cannot start ${command}: ${error.message}\n`)
       done(1)

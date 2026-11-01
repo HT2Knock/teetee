@@ -23,9 +23,10 @@ import {
   type TestTwin,
 } from './test/harness.ts'
 
-const LONG_CODE = Array.from({ length: 80 }, (_, index) => `const value${index} = compute(${index}) // line ${index}`).join(
-  '\n',
-)
+const LONG_CODE = Array.from(
+  { length: 80 },
+  (_, index) => `const value${index} = compute(${index}) // line ${index}`,
+).join('\n')
 
 const MARKDOWN_ANSWER = [
   '## Results',
@@ -54,7 +55,11 @@ const matchers: DeterministicMatcher[] = [
     steps: [
       { id: 'call-shell-1', tool: 'shell', input: { command: 'echo kimaki-shell-ok' } },
       { id: 'call-read-1', tool: 'read', input: { path: 'notes.md' } },
-      { id: 'call-edit-1', tool: 'edit', input: { path: 'notes.md', oldString: 'first line', newString: 'first line\nsecond line' } },
+      {
+        id: 'call-edit-1',
+        tool: 'edit',
+        input: { path: 'notes.md', oldString: 'first line', newString: 'first line\nsecond line' },
+      },
     ],
     finalText: 'Edited notes.md.',
   }),

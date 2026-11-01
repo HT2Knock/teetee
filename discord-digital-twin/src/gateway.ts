@@ -6,11 +6,7 @@
 import crypto from 'node:crypto'
 import type http from 'node:http'
 import { WebSocketServer, WebSocket } from 'ws'
-import {
-  GatewayOpcodes,
-  GatewayDispatchEvents,
-  ApplicationFlags,
-} from 'discord-api-types/v10'
+import { GatewayOpcodes, GatewayDispatchEvents, ApplicationFlags } from 'discord-api-types/v10'
 import type {
   GatewaySendPayload,
   GatewayHelloData,
@@ -138,9 +134,7 @@ export class DiscordGateway {
   broadcast<T>(event: string, data: T): void {
     // gateway-proxy forwards guild events only to clients authorized for that guild.
     const guildId =
-      data && typeof data === 'object' && 'guild_id' in data && typeof data.guild_id === 'string'
-        ? data.guild_id
-        : null
+      data && typeof data === 'object' && 'guild_id' in data && typeof data.guild_id === 'string' ? data.guild_id : null
     for (const client of this.clients) {
       if (!client.identified) continue
       if (guildId && client.guilds && !client.guilds.has(guildId)) continue
@@ -215,7 +209,12 @@ export class DiscordGateway {
   // Gateway op 4 from the bot session.
   private handleVoiceStateUpdate(
     client: ConnectedClient,
-    { guildId, channelId, selfMute, selfDeaf }: { guildId: string; channelId: string | null; selfMute: boolean; selfDeaf: boolean },
+    {
+      guildId,
+      channelId,
+      selfMute,
+      selfDeaf,
+    }: { guildId: string; channelId: string | null; selfMute: boolean; selfDeaf: boolean },
   ): void {
     if (!this.voice) return
     if (client.guilds && !client.guilds.has(guildId)) return
@@ -224,7 +223,14 @@ export class DiscordGateway {
     // updates mute/deaf, with no new voice token. No change sends no events.
     if (channelId && current?.channel_id === channelId && current.session_id === client.sessionId) {
       if (current.self_mute === selfMute && current.self_deaf === selfDeaf) return
-      this.setVoiceState({ guildId, channelId, userId: this.botUserId, sessionId: client.sessionId, selfMute, selfDeaf })
+      this.setVoiceState({
+        guildId,
+        channelId,
+        userId: this.botUserId,
+        sessionId: client.sessionId,
+        selfMute,
+        selfDeaf,
+      })
       return
     }
     if (!channelId) {
@@ -271,11 +277,7 @@ export class DiscordGateway {
     })
   }
 
-  private sendDispatch<T>(
-    client: ConnectedClient,
-    event: string,
-    data: T,
-  ): void {
+  private sendDispatch<T>(client: ConnectedClient, event: string, data: T): void {
     client.sequence++
     this.send(client, {
       op: GatewayOpcodes.Dispatch,
@@ -309,18 +311,20 @@ export class DiscordGateway {
         this.clients.splice(idx, 1)
       }
       // The bot leaves voice when the gateway session that joined ends.
-      for (const state of [...this.voiceStates.values()]) {
+      for (const state of this.voiceStates.values()) {
         if (state.user_id !== this.botUserId || state.session_id !== client.sessionId || !state.guild_id) continue
         this.voice?.revoke({ guildId: state.guild_id, userId: this.botUserId })
-        this.setVoiceState({ guildId: state.guild_id, channelId: null, userId: this.botUserId, sessionId: client.sessionId })
+        this.setVoiceState({
+          guildId: state.guild_id,
+          channelId: null,
+          userId: this.botUserId,
+          sessionId: client.sessionId,
+        })
       }
     })
   }
 
-  private async handleMessage(
-    client: ConnectedClient,
-    raw: string,
-  ): Promise<void> {
+  private async handleMessage(client: ConnectedClient, raw: string): Promise<void> {
     // JSON.parse returns unknown -- `as` is the only option for untyped JSON
     const payload = JSON.parse(raw) as GatewaySendPayload
 
@@ -349,7 +353,12 @@ export class DiscordGateway {
       case GatewayOpcodes.VoiceStateUpdate: {
         if (!client.identified) return
         const { guild_id, channel_id, self_mute, self_deaf } = payload.d
-        this.handleVoiceStateUpdate(client, { guildId: guild_id, channelId: channel_id, selfMute: self_mute, selfDeaf: self_deaf })
+        this.handleVoiceStateUpdate(client, {
+          guildId: guild_id,
+          channelId: channel_id,
+          selfMute: self_mute,
+          selfDeaf: self_deaf,
+        })
         break
       }
     }

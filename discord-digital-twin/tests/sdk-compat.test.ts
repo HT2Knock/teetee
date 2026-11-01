@@ -25,11 +25,7 @@ describe('discord.js SDK compatibility', () => {
     await discord.start()
 
     client = new Client({
-      intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-      ],
+      intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
       rest: {
         api: discord.restUrl,
         version: '10',

@@ -4,7 +4,18 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 import type { BotHandle } from './main.ts'
-import { cliCommand, seedProjectChannel, startOpencodeTestServer, startTestBot, startTwin, tempDataDir, waitForFooter, warmUp, type OpencodeTestServer, type TestTwin } from './test/harness.ts'
+import {
+  cliCommand,
+  seedProjectChannel,
+  startOpencodeTestServer,
+  startTestBot,
+  startTwin,
+  tempDataDir,
+  waitForFooter,
+  warmUp,
+  type OpencodeTestServer,
+  type TestTwin,
+} from './test/harness.ts'
 
 const exec = promisify(execFile)
 const dataA = tempDataDir()
@@ -15,9 +26,22 @@ let a: BotHandle
 let b: BotHandle
 beforeAll(async () => {
   ;[server, twin] = await Promise.all([startOpencodeTestServer(), startTwin()])
-  await seedProjectChannel({ dataDir: dataA, channelId: twin.channelId, guildId: twin.discord.guildId, directory: server.projectDirectory })
-  await seedProjectChannel({ dataDir: dataB, channelId: twin.quietChannelId, guildId: twin.discord.guildId, directory: server.projectDirectory })
-  ;[a, b] = await Promise.all([startTestBot({ dataDir: dataA, twin, server }), startTestBot({ dataDir: dataB, twin, server })])
+  await seedProjectChannel({
+    dataDir: dataA,
+    channelId: twin.channelId,
+    guildId: twin.discord.guildId,
+    directory: server.projectDirectory,
+  })
+  await seedProjectChannel({
+    dataDir: dataB,
+    channelId: twin.quietChannelId,
+    guildId: twin.discord.guildId,
+    directory: server.projectDirectory,
+  })
+  ;[a, b] = await Promise.all([
+    startTestBot({ dataDir: dataA, twin, server }),
+    startTestBot({ dataDir: dataB, twin, server }),
+  ])
   await warmUp({ server })
 }, 60_000)
 afterAll(async () => {
@@ -27,12 +51,16 @@ afterAll(async () => {
   fs.rmSync(dataB, { recursive: true, force: true })
 })
 function cli(args: string[]) {
-  return exec(...cliCommand([...args, '--data-dir', dataA]), { env: { ...process.env, KIMAKI_LOCK_PORT: String(a.lock.port) } })
+  return exec(...cliCommand([...args, '--data-dir', dataA]), {
+    env: { ...process.env, KIMAKI_LOCK_PORT: String(a.lock.port) },
+  })
 }
 test('CLI remote envelope runs only on the owning bot and returns its IDs', async () => {
   const file = path.join(server.root, 'remote.txt')
   fs.writeFileSync(file, 'Remote file content')
-  const ids = JSON.parse((await cli(['send', '--channel', twin.quietChannelId, '-p', 'Remote first', '--file', file])).stdout) as { threadId: string; sessionId: string }
+  const ids = JSON.parse(
+    (await cli(['send', '--channel', twin.quietChannelId, '-p', 'Remote first', '--file', file])).stdout,
+  ) as { threadId: string; sessionId: string }
   await waitForFooter({ discord: twin.discord, threadId: ids.threadId })
   await cli(['send', '--thread', ids.threadId, '-p', 'Remote queued. queue'])
   await waitForFooter({ discord: twin.discord, threadId: ids.threadId, count: 2 })
@@ -60,9 +88,17 @@ test('CLI remote envelope runs only on the owning bot and returns its IDs', asyn
 test('CI send with only KIMAKI_BOT_TOKEN and no local bot reaches the owning bot', async () => {
   // Empty data dir and an unused lock port: no kimaki.db, no bot, like a CI runner.
   const ciDataDir = tempDataDir()
-  const sent = await exec(...cliCommand(['send', '--channel', twin.quietChannelId, '-p', 'From CI', '--data-dir', ciDataDir]), {
-    env: { ...process.env, KIMAKI_LOCK_PORT: '1', KIMAKI_BOT_TOKEN: twin.discord.botToken, KIMAKI_DISCORD_REST_URL: twin.discord.restUrl },
-  })
+  const sent = await exec(
+    ...cliCommand(['send', '--channel', twin.quietChannelId, '-p', 'From CI', '--data-dir', ciDataDir]),
+    {
+      env: {
+        ...process.env,
+        KIMAKI_LOCK_PORT: '1',
+        KIMAKI_BOT_TOKEN: twin.discord.botToken,
+        KIMAKI_DISCORD_REST_URL: twin.discord.restUrl,
+      },
+    },
+  )
   const ids = JSON.parse(sent.stdout) as { threadId: string; sessionId: string }
   await waitForFooter({ discord: twin.discord, threadId: ids.threadId })
   expect(await twin.discord.thread(ids.threadId).text()).toMatchInlineSnapshot(`
@@ -82,10 +118,15 @@ test('CLI remote prompt over 2000 chars arrives whole; a same-named user file st
   // A user file with the reserved name must stay a file, not become the prompt.
   const file = path.join(server.root, 'kimaki-prompt.md')
   fs.writeFileSync(file, 'User file content')
-  const ids = JSON.parse((await cli(['send', '--channel', twin.quietChannelId, '-p', prompt, '--file', file])).stdout) as { threadId: string; sessionId: string }
+  const ids = JSON.parse(
+    (await cli(['send', '--channel', twin.quietChannelId, '-p', prompt, '--file', file])).stdout,
+  ) as { threadId: string; sessionId: string }
   await waitForFooter({ discord: twin.discord, threadId: ids.threadId })
   const messages = await (await server.client()).message.list({ sessionID: ids.sessionId })
   const first = messages.data.find((message) => message.type === 'user' && message.text.startsWith('Remote long'))
   // The bot appends per-turn context after the prompt.
-  expect(first?.type === 'user' && { whole: first.text.startsWith(prompt), files: first.files?.length ?? 0 }).toEqual({ whole: true, files: 1 })
+  expect(first?.type === 'user' && { whole: first.text.startsWith(prompt), files: first.files?.length ?? 0 }).toEqual({
+    whole: true,
+    files: 1,
+  })
 })

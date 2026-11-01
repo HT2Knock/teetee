@@ -8,9 +8,18 @@ import { goke } from 'goke'
 
 import { registerBotCommands, registerLoginCommands, registerStartCommand, registerToolCommands } from './cli/bot.ts'
 import { registerAgentUiCommands, registerDiscordCommands } from './cli/discord.ts'
-import { registerChannelPreferenceCommands, registerChannelWorktreeCommand, registerProjectCommands, registerWorktreeCommands } from './cli/project.ts'
+import {
+  registerChannelPreferenceCommands,
+  registerChannelWorktreeCommand,
+  registerProjectCommands,
+  registerWorktreeCommands,
+} from './cli/project.ts'
 import { registerScheduleCommands, registerSendCommand } from './cli/schedule.ts'
-import { registerSessionActionCommands, registerSessionHistoryCommands, registerSessionQueryCommands } from './cli/session.ts'
+import {
+  registerSessionActionCommands,
+  registerSessionHistoryCommands,
+  registerSessionQueryCommands,
+} from './cli/session.ts'
 
 const cli = goke('kimaki')
 

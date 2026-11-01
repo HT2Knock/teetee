@@ -7,43 +7,93 @@ import { wrapJsonSchema, type Goke } from 'goke'
 
 import { BotNotRunningError } from '../errors.ts'
 import { callBot } from '../lock-server.ts'
-import { action, DATA_DIR_HELP, dataDirOrDefault, discordApi, fail, openCliDb, parseTarget, printJson, readClient, SESSION_HELP, targetOrEnv, waitAndPrintSession } from './shared.ts'
+import {
+  action,
+  DATA_DIR_HELP,
+  dataDirOrDefault,
+  discordApi,
+  fail,
+  openCliDb,
+  parseTarget,
+  printJson,
+  readClient,
+  SESSION_HELP,
+  targetOrEnv,
+  waitAndPrintSession,
+} from './shared.ts'
 
 export function registerSendCommand(cli: Goke) {
-  cli.command('send', 'Start a session in a channel, or continue a thread')
+  cli
+    .command('send', 'Start a session in a channel, or continue a thread')
     .option('--data-dir <path>', DATA_DIR_HELP)
     .option('-c, --channel <id>', 'New thread in this channel')
     .option('-d, --project <path>', 'Project directory of the new thread')
     .option('--thread <id>', 'Continue this thread (ID or URL)')
     .option('-s, --session <id>', 'Continue this session: session ID, thread ID or thread URL')
     .option('-p, --prompt <text>', 'Prompt; thread suffixes . queue and . btw are supported')
-    .option('-f, --file <path>', wrapJsonSchema<string[]>({ type: 'array', items: { type: 'string' }, description: 'Attach a local file (repeatable)' }))
+    .option(
+      '-f, --file <path>',
+      wrapJsonSchema<string[]>({
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Attach a local file (repeatable)',
+      }),
+    )
     .option('-n, --name <text>', 'Thread name')
     .option('--agent <name>', 'Agent ID')
     .option('--model <provider/model>', 'Model for the new session')
-    .option('-u, --user <id>', wrapJsonSchema<string[]>({ type: 'array', items: { type: 'string' }, description: 'Add this Discord user to the thread (repeatable)' }))
+    .option(
+      '-u, --user <id>',
+      wrapJsonSchema<string[]>({
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Add this Discord user to the thread (repeatable)',
+      }),
+    )
     .option('--cwd <path>', 'Existing project subfolder or linked Git worktree')
     .option('--worktree [name]', 'Create a custom Git worktree (automatic name when omitted)')
     .option('--base-branch <ref>', 'Starting ref for --worktree (default: project HEAD)')
     .option('--parent-session <id>', 'Record the parent session in session metadata')
-    .option('--permission <rule>', wrapJsonSchema<string[]>({ type: 'array', items: { type: 'string' }, description: 'Repeatable: tool[:pattern]:allow|deny|ask' }))
+    .option(
+      '--permission <rule>',
+      wrapJsonSchema<string[]>({
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Repeatable: tool[:pattern]:allow|deny|ask',
+      }),
+    )
     .option('--notify-only', 'Post a notification thread without a model turn')
     .option('--wait', 'Wait until idle or input is needed, then print the session')
     .option('--send-at <when>', 'Schedule: UTC ISO date ending in Z, or cron expression (UTC)')
     .option('--pre-run <command>', 'Scheduled only: run first in the project. Exit 0 starts, stdout is appended')
     .option('--allow-concurrency', 'Scheduled only: allow overlapping runs of this routine')
     .action(async (options) => {
-      if (options.wait && options.sendAt) fail(new Error('--wait cannot be used with --send-at: the routine runs later'))
-      if (options.thread !== undefined && options.session !== undefined) fail(new Error('Use exactly one of --channel, --thread, --session, --project'))
+      if (options.wait && options.sendAt)
+        fail(new Error('--wait cannot be used with --send-at: the routine runs later'))
+      if (options.thread !== undefined && options.session !== undefined)
+        fail(new Error('Use exactly one of --channel, --thread, --session, --project'))
       const continued = options.thread ?? options.session
       const target = continued === undefined ? {} : parseTarget(continued)
       if (target instanceof Error) fail(target)
       const input = {
-        channelId: options.channel, project: options.project, ...target,
-        prompt: options.prompt, name: options.name, agent: options.agent, model: options.model, user: options.user,
-        cwd: options.cwd, worktree: options.worktree, baseBranch: options.baseBranch, parentSessionId: options.parentSession,
-        permissions: options.permission, notifyOnly: options.notifyOnly,
-        files: (options.file ?? []).map((file) => ({ uri: pathToFileURL(path.resolve(file)).href, name: path.basename(file) })),
+        channelId: options.channel,
+        project: options.project,
+        ...target,
+        prompt: options.prompt,
+        name: options.name,
+        agent: options.agent,
+        model: options.model,
+        user: options.user,
+        cwd: options.cwd,
+        worktree: options.worktree,
+        baseBranch: options.baseBranch,
+        parentSessionId: options.parentSession,
+        permissions: options.permission,
+        notifyOnly: options.notifyOnly,
+        files: (options.file ?? []).map((file) => ({
+          uri: pathToFileURL(path.resolve(file)).href,
+          name: path.basename(file),
+        })),
       }
       const result = await callBot({
         dataDir: dataDirOrDefault(options.dataDir),
@@ -53,8 +103,12 @@ export function registerSendCommand(cli: Goke) {
       })
       if (result instanceof BotNotRunningError) {
         // No local bot (CI, another machine): the bot that owns the channel runs it (remote-send.ts).
-        if (options.sendAt || options.wait) fail(new Error('Kimaki bot is not running here. --send-at and --wait need a local bot.'))
-        const [{ sendInput }, { sendWithoutBot }] = await Promise.all([import('../lock-routes.ts'), import('../remote-send.ts')])
+        if (options.sendAt || options.wait)
+          fail(new Error('Kimaki bot is not running here. --send-at and --wait need a local bot.'))
+        const [{ sendInput }, { sendWithoutBot }] = await Promise.all([
+          import('../lock-routes.ts'),
+          import('../remote-send.ts'),
+        ])
         const parsed = sendInput.safeParse(input)
         if (!parsed.success) fail(new Error(parsed.error.issues.map((issue) => issue.message).join('; ')))
         const { api } = await discordApi(options.dataDir)
@@ -67,7 +121,8 @@ export function registerSendCommand(cli: Goke) {
       process.stdout.write(`${JSON.stringify(result.data)}\n`)
       if (!options.wait) return
       const data = result.data
-      if (!data || typeof data !== 'object' || !('sessionId' in data) || typeof data.sessionId !== 'string') fail(new Error('--wait requires an AI session, not --notify-only'))
+      if (!data || typeof data !== 'object' || !('sessionId' in data) || typeof data.sessionId !== 'string')
+        fail(new Error('--wait requires an AI session, not --notify-only'))
       await waitAndPrintSession({ client: await readClient(), sessionId: data.sessionId })
     })
 }
@@ -96,9 +151,23 @@ export function registerScheduleCommands(cli: Goke) {
           process.stdout.write('No routines\n')
           return
         }
-        const header = 'id | status | schedule | nextRunAt | channel | thread | user | agent | model | preRun | allowConcurrency | prompt'
+        const header =
+          'id | status | schedule | nextRunAt | channel | thread | user | agent | model | preRun | allowConcurrency | prompt'
         const rows = routines.map((routine) =>
-          [routine.id, routine.status, routine.schedule, routine.nextRunAt, routine.channelId, routine.threadId, routine.userId, routine.agent, routine.model, routine.preRun, routine.allowConcurrency, routine.prompt]
+          [
+            routine.id,
+            routine.status,
+            routine.schedule,
+            routine.nextRunAt,
+            routine.channelId,
+            routine.threadId,
+            routine.userId,
+            routine.agent,
+            routine.model,
+            routine.preRun,
+            routine.allowConcurrency,
+            routine.prompt,
+          ]
             .map((value) => value ?? '-')
             .join(' | '),
         )
@@ -111,19 +180,32 @@ export function registerScheduleCommands(cli: Goke) {
       .option('--send-at <when>', 'New schedule: UTC ISO date ending in Z, or cron (UTC)')
       .option('--agent <name>', 'Agent for the scheduled session')
       .option('--model <provider/model>', 'Model for the scheduled session')
-      .option('-u, --user <id>', 'Discord user ID added to each run\'s thread')
+      .option('-u, --user <id>', "Discord user ID added to each run's thread")
       .option('--pre-run <command>', 'Command to run before each run')
       .option('--allow-concurrency <bool>', 'true | false')
       .action(async (routineId, options) => {
         const flag = options.allowConcurrency
         if (flag && flag !== 'true' && flag !== 'false') fail(new Error('--allow-concurrency must be true or false'))
-        await action({ route: 'task.edit', dataDir: options.dataDir, input: {
-          id: Number(routineId), prompt: options.prompt, sendAt: options.sendAt, agent: options.agent, model: options.model,
-          user: options.user, preRun: options.preRun, allowConcurrency: flag ? flag === 'true' : undefined,
-        } })
+        await action({
+          route: 'task.edit',
+          dataDir: options.dataDir,
+          input: {
+            id: Number(routineId),
+            prompt: options.prompt,
+            sendAt: options.sendAt,
+            agent: options.agent,
+            model: options.model,
+            user: options.user,
+            preRun: options.preRun,
+            allowConcurrency: flag ? flag === 'true' : undefined,
+          },
+        })
       })
 
-    for (const [name, description] of [['delete', 'Delete a routine'], ['run', 'Run a routine now']] as const) {
+    for (const [name, description] of [
+      ['delete', 'Delete a routine'],
+      ['run', 'Run a routine now'],
+    ] as const) {
       hide(cli.command(`${noun} ${name} <routineId>`, description))
         .option('--data-dir <path>', DATA_DIR_HELP)
         .action(async (routineId, options) => {
@@ -134,7 +216,11 @@ export function registerScheduleCommands(cli: Goke) {
     }
   }
 
-  cli.command('sleep', 'Wake this session later with a new message in the same thread. Run it last, after your text. To monitor slow events (email replies, PR reviews), wait 2h or more; never poll every few minutes')
+  cli
+    .command(
+      'sleep',
+      'Wake this session later with a new message in the same thread. Run it last, after your text. To monitor slow events (email replies, PR reviews), wait 2h or more; never poll every few minutes',
+    )
     .option('--data-dir <path>', DATA_DIR_HELP)
     .option('--duration <duration>', 'Relative wait, e.g. 30m, 2h, 1d')
     .option('--until <date>', 'UTC ISO date ending in Z')
@@ -142,9 +228,16 @@ export function registerScheduleCommands(cli: Goke) {
     .option('-s, --session <id>', SESSION_HELP)
     .action(async (options) => {
       // The bot parses --duration/--until with its own clock (scheduler.ts parseWakeAt).
-      const result = await callBot({ dataDir: dataDirOrDefault(options.dataDir), route: 'sleep', input: {
-        ...targetOrEnv(options.session), duration: options.duration, until: options.until, reason: options.reason,
-      } })
+      const result = await callBot({
+        dataDir: dataDirOrDefault(options.dataDir),
+        route: 'sleep',
+        input: {
+          ...targetOrEnv(options.session),
+          duration: options.duration,
+          until: options.until,
+          reason: options.reason,
+        },
+      })
       if (result instanceof Error) fail(result)
       process.stdout.write(`${result.data.output}\n`)
     })

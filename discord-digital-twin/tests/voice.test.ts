@@ -87,13 +87,20 @@ test('bot joins a voice channel and the twin records the audio it sends', async 
 test('a user speaking reaches the bot receiver as the same opus frames', async () => {
   const guild = client.guilds.cache.get(GUILD)
   if (!guild) throw new Error('guild missing')
-  const connection = joinVoiceChannel({ guildId: GUILD, channelId: VOICE_CHANNEL, adapterCreator: guild.voiceAdapterCreator, selfDeaf: false })
+  const connection = joinVoiceChannel({
+    guildId: GUILD,
+    channelId: VOICE_CHANNEL,
+    adapterCreator: guild.voiceAdapterCreator,
+    selfDeaf: false,
+  })
   await entersState(connection, VoiceConnectionStatus.Ready, 8_000)
   const speaker = new Promise<string>((resolve) => connection.receiver.speaking.once('start', resolve))
   const received: Buffer[] = []
   const ended = new Promise<void>((resolve) => {
     connection.receiver.speaking.once('start', (userId) => {
-      const stream = connection.receiver.subscribe(userId, { end: { behavior: EndBehaviorType.AfterSilence, duration: 100 } })
+      const stream = connection.receiver.subscribe(userId, {
+        end: { behavior: EndBehaviorType.AfterSilence, duration: 100 },
+      })
       stream.on('data', (packet: Buffer) => received.push(packet))
       stream.once('end', () => resolve())
     })

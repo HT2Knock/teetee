@@ -32,7 +32,12 @@ import {
 } from './test/harness.ts'
 
 const matchers: DeterministicMatcher[] = [
-  { id: 'openai', priority: 500, when: { latestUserTextIncludes: 'voice-openai' }, then: { parts: textParts('openai voice ok') } },
+  {
+    id: 'openai',
+    priority: 500,
+    when: { latestUserTextIncludes: 'voice-openai' },
+    then: { parts: textParts('openai voice ok') },
+  },
 ]
 
 let server: OpencodeTestServer
@@ -53,11 +58,25 @@ beforeAll(async () => {
     startFakeOpenAI({ result: { transcription: 'Hello from the phone voice-openai', route: 'steer' } }),
     startFakeChatGPT({ text: 'Hello from ChatGPT voice-openai' }),
   ])
-  await seedProjectChannel({ dataDir, channelId: twin.channelId, guildId: twin.discord.guildId, directory: server.projectDirectory })
+  await seedProjectChannel({
+    dataDir,
+    channelId: twin.channelId,
+    guildId: twin.discord.guildId,
+    directory: server.projectDirectory,
+  })
   await warmUp({ server })
-  bot = await startTestBot({ dataDir, twin, server, openaiBaseUrl: openai.baseUrl, chatgptBaseUrl: chatgpt.baseUrl, opencodeDbFile })
+  bot = await startTestBot({
+    dataDir,
+    twin,
+    server,
+    openaiBaseUrl: openai.baseUrl,
+    chatgptBaseUrl: chatgpt.baseUrl,
+    opencodeDbFile,
+  })
   // Stored with the CLI, like a user would.
-  const { stdout } = await promisify(execFile)(...cliCommand(['bot', 'keys', 'set', '--openai', 'sk-test-openai-key', '--data-dir', dataDir]))
+  const { stdout } = await promisify(execFile)(
+    ...cliCommand(['bot', 'keys', 'set', '--openai', 'sk-test-openai-key', '--data-dir', dataDir]),
+  )
   expect(stdout).toBe('Saved OpenAI API key\n')
 })
 
@@ -115,8 +134,14 @@ test('an MP3 upload labeled audio/mpeg3 goes to OpenAI as mp3', async () => {
   await twin.discord
     .channel(twin.channelId)
     .user(TEST_USER_ID)
-    .sendVoiceMessage({ url: `data:audio/mpeg3;base64,${mp3.toString('base64')}`, contentType: 'audio/mpeg3', filename: 'memo.mp3' })
-  const thread = await twin.discord.channel(twin.channelId).waitForThread({ timeout: 8_000, predicate: (thread) => !before.has(thread.id) })
+    .sendVoiceMessage({
+      url: `data:audio/mpeg3;base64,${mp3.toString('base64')}`,
+      contentType: 'audio/mpeg3',
+      filename: 'memo.mp3',
+    })
+  const thread = await twin.discord
+    .channel(twin.channelId)
+    .waitForThread({ timeout: 8_000, predicate: (thread) => !before.has(thread.id) })
   await waitForFooter({ discord: twin.discord, threadId: thread.id })
   const request = openai.requests.at(-1)
   expect({ format: request?.format, audio: request?.audio.toString('utf8') }).toMatchInlineSnapshot(`
@@ -128,8 +153,14 @@ test('an MP3 upload labeled audio/mpeg3 goes to OpenAI as mp3', async () => {
 })
 
 test('the OpenAI key wins over the ChatGPT credential from OpenCode, which takes over when the key fails', async () => {
-  const claims = Buffer.from(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'acct-test' } })).toString('base64url')
-  await writeOpencodeCredential({ file: opencodeDbFile, access: `header.${claims}.signature`, expires: Date.now() + 3_600_000 })
+  const claims = Buffer.from(
+    JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'acct-test' } }),
+  ).toString('base64url')
+  await writeOpencodeCredential({
+    file: opencodeDbFile,
+    access: `header.${claims}.signature`,
+    expires: Date.now() + 3_600_000,
+  })
   const ogg = fs.readFileSync(path.join(import.meta.dirname, 'fixtures', 'voice.ogg'))
   const openaiRequests = openai.requests.length
 
@@ -139,7 +170,9 @@ test('the OpenAI key wins over the ChatGPT credential from OpenCode, which takes
       .channel(twin.channelId)
       .user(TEST_USER_ID)
       .sendVoiceMessage({ url: `data:audio/ogg;base64,${ogg.toString('base64')}` })
-    const thread = await twin.discord.channel(twin.channelId).waitForThread({ timeout: 8_000, predicate: (thread) => !before.has(thread.id) })
+    const thread = await twin.discord
+      .channel(twin.channelId)
+      .waitForThread({ timeout: 8_000, predicate: (thread) => !before.has(thread.id) })
     await waitForFooter({ discord: twin.discord, threadId: thread.id })
     return thread.id
   }
@@ -154,7 +187,8 @@ test('the OpenAI key wins over the ChatGPT credential from OpenCode, which takes
     openai voice ok
     -# *project ⋅ main ⋅ Ns ⋅ N% ⋅ deterministic-v2*"
   `)
-  expect({ chatgptRequests: chatgpt.requests.length, openaiRequests: openai.requests.length - openaiRequests }).toMatchInlineSnapshot(`
+  expect({ chatgptRequests: chatgpt.requests.length, openaiRequests: openai.requests.length - openaiRequests })
+    .toMatchInlineSnapshot(`
     {
       "chatgptRequests": 0,
       "openaiRequests": 1,

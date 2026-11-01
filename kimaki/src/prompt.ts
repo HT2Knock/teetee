@@ -13,20 +13,18 @@
 // order (prompt, then interrupt with resume) parks queued items for good.
 
 import fs from 'node:fs'
-import path from 'node:path'
-import crypto from 'node:crypto'
-import {type Message} from 'discord.js'
+import { type Message } from 'discord.js'
 
-import {oc, projectOf, rootSession, type Author, type Bot, type PromptFile} from './bot.ts'
-import {ConfigError, OpenCodeError, OpenCodeUnavailableError} from './errors.ts'
-import {formatError} from './format-parts.ts'
-import {createLogger} from './logger.ts'
-import {splitPromptFiles} from './prompt-files.ts'
-import {parseTextMessage} from './routes.ts'
-import {allMessages} from './session-events.ts'
-import {cancelSleep} from './sleep-store.ts'
-import {type TurnContext} from './system-prompt.ts'
-import {isBusy, type UploadFile} from './thread-reducer.ts'
+import { oc, projectOf, rootSession, type Author, type Bot, type PromptFile } from './bot.ts'
+import { ConfigError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
+import { formatError } from './format-parts.ts'
+import { createLogger } from './logger.ts'
+import { splitPromptFiles } from './prompt-files.ts'
+import { parseTextMessage } from './routes.ts'
+import { allMessages } from './session-events.ts'
+import { cancelSleep } from './sleep-store.ts'
+import { type TurnContext } from './system-prompt.ts'
+import { isBusy, type UploadFile } from './thread-reducer.ts'
 
 const logger = createLogger('PROMPT')
 
@@ -70,7 +68,14 @@ export async function prompt(
   const { attached, attachments } = await splitPromptFiles(files)
   // The text stays as the user wrote it. The plugin renders the <discord-user>
   // context from this metadata into the model request only (turnContext()).
-  const discord: TurnContext = { userId: author.id, username: author.username, messageId, threadId, threadName, attachments }
+  const discord: TurnContext = {
+    userId: author.id,
+    username: author.username,
+    messageId,
+    threadId,
+    threadName,
+    attachments,
+  }
   const result = await oc(bot, 'session.prompt', (client) =>
     client.session.prompt({
       sessionID: sessionId,
@@ -86,7 +91,10 @@ export async function prompt(
 }
 
 // Questions and permissions of the thread (root and children) that wait for the user.
-export async function cancelPendingUi(bot: Bot, threadId: string): Promise<OpenCodeUnavailableError | OpenCodeError | void> {
+export async function cancelPendingUi(
+  bot: Bot,
+  threadId: string,
+): Promise<OpenCodeUnavailableError | OpenCodeError | void> {
   if (!bot.opencode.endpoint) return new OpenCodeUnavailableError({ reason: 'not connected' })
   const view = bot.store.getState().threads[threadId]
   if (!view) return
@@ -94,7 +102,9 @@ export async function cancelPendingUi(bot: Bot, threadId: string): Promise<OpenC
     oc(bot, 'session.form.cancel', (client) => client.session.form.cancel({ sessionID: form.sessionId, formID })),
   )
   const permissions = Object.entries(view.permissions).map(([requestID, request]) =>
-    oc(bot, 'permission.reply', (client) => client.permission.reply({ sessionID: request.sessionId, requestID, decision: 'reject' })),
+    oc(bot, 'permission.reply', (client) =>
+      client.permission.reply({ sessionID: request.sessionId, requestID, decision: 'reject' }),
+    ),
   )
   // Settled meanwhile by someone else is fine: log and go on.
   for (const result of await Promise.all([...forms, ...permissions])) {
@@ -103,7 +113,9 @@ export async function cancelPendingUi(bot: Bot, threadId: string): Promise<OpenC
 }
 
 export async function interrupt(bot: Bot, sessionId: string): Promise<OpenCodeUnavailableError | OpenCodeError | void> {
-  const result = await oc(bot, 'session.interrupt', (client) => client.session.interrupt({ sessionID: sessionId, resume: false }))
+  const result = await oc(bot, 'session.interrupt', (client) =>
+    client.session.interrupt({ sessionID: sessionId, resume: false }),
+  )
   if (result instanceof Error) return result
 }
 
@@ -132,7 +144,9 @@ export async function steer(
 export async function cancelQueuedPrompt(bot: Bot, { threadId, inboxID }: { threadId: string; inboxID: string }) {
   const sessionId = rootSession(bot, threadId)
   if (sessionId instanceof Error) return sessionId
-  const result = await oc(bot, 'session.inbox.cancel', (client) => client.session.inbox.cancel({ sessionID: sessionId, inboxID }))
+  const result = await oc(bot, 'session.inbox.cancel', (client) =>
+    client.session.inbox.cancel({ sessionID: sessionId, inboxID }),
+  )
   if (result instanceof Error) return result
 }
 
@@ -201,7 +215,10 @@ export async function requeueEdited(
 // `!cmd` (spec 9.2.1): native session.shell, not interrupting and not
 // queued. The request returns only when the command ends, so it is never
 // awaited; output arrives as session.shell.* events.
-export function shell(bot: Bot, { threadId, sessionId, command }: { threadId: string; sessionId: string; command: string }) {
+export function shell(
+  bot: Bot,
+  { threadId, sessionId, command }: { threadId: string; sessionId: string; command: string },
+) {
   const client = bot.opencode.endpoint?.client
   if (!client) return new OpenCodeUnavailableError({ reason: 'not connected' })
   void client.session
@@ -215,7 +232,10 @@ export function shell(bot: Bot, { threadId, sessionId, command }: { threadId: st
 }
 
 // User shells of a session that still run (for /abort).
-async function killShells(bot: Bot, { sessionId }: { sessionId: string }): Promise<OpenCodeUnavailableError | OpenCodeError | void> {
+async function killShells(
+  bot: Bot,
+  { sessionId }: { sessionId: string },
+): Promise<OpenCodeUnavailableError | OpenCodeError | void> {
   const info = await oc(bot, 'session.get', (client) => client.session.get({ sessionID: sessionId }))
   if (info instanceof Error) return info
   const location = { directory: info.location.directory }
@@ -277,7 +297,9 @@ export async function redo(bot: Bot, { threadId }: { threadId: string }) {
   const index = session.messages.findIndex((message) => message.id === session.revert)
   const next = index >= 0 ? session.messages[index + 1] : undefined
   if (!next) {
-    const cleared = await oc(bot, 'session.revert.clear', (client) => client.session.revert.clear({ sessionID: session.sessionId }))
+    const cleared = await oc(bot, 'session.revert.clear', (client) =>
+      client.session.revert.clear({ sessionID: session.sessionId }),
+    )
     if (cleared instanceof Error) return cleared
     return { restored: 'all' as const }
   }
@@ -305,7 +327,9 @@ export async function upload(bot: Bot, { id, files }: { id: string; files: Array
     if (!stat?.isFile()) return new ConfigError({ reason: `File not found: ${file.path}` })
     sized.push({ ...file, size: stat.size })
   }
-  const error = await new Promise<Error | null>((settle) => bot.effects.run(threadId, [{ type: 'attachments', files: sized, settle }]))
+  const error = await new Promise<Error | null>((settle) =>
+    bot.effects.run(threadId, [{ type: 'attachments', files: sized, settle }]),
+  )
   if (error) return error
   return { uploaded: files.map((file) => file.name) }
 }

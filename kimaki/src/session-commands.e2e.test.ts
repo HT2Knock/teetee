@@ -26,8 +26,18 @@ import {
   type TestTwin,
 } from './test/harness.ts'
 
-function reply(marker: string, text: string, extra: DeterministicMatcher['when'] = {}, priority = 500): DeterministicMatcher {
-  return { id: `${marker}-${priority}`, priority, when: { latestUserTextIncludes: marker, ...extra }, then: { parts: textParts(text) } }
+function reply(
+  marker: string,
+  text: string,
+  extra: DeterministicMatcher['when'] = {},
+  priority = 500,
+): DeterministicMatcher {
+  return {
+    id: `${marker}-${priority}`,
+    priority,
+    when: { latestUserTextIncludes: marker, ...extra },
+    then: { parts: textParts(text) },
+  }
 }
 
 const matchers: DeterministicMatcher[] = [
@@ -41,7 +51,13 @@ const matchers: DeterministicMatcher[] = [
   reply('fork-check', 'fork has only the first message', {}, 550),
   ...scriptedTurn({
     marker: 'subagent-marker',
-    steps: [{ id: 'call-subagent-1', tool: 'subagent', input: { agent: 'general', description: 'Count files', prompt: 'child-marker count' } }],
+    steps: [
+      {
+        id: 'call-subagent-1',
+        tool: 'subagent',
+        input: { agent: 'general', description: 'Count files', prompt: 'child-marker count' },
+      },
+    ],
     finalText: 'The child counted.',
   }),
   reply('child-marker', 'child says three', {}, 700),
@@ -52,7 +68,9 @@ const matchers: DeterministicMatcher[] = [
       {
         id: 'call-ask-resume',
         tool: 'question',
-        input: { questions: [{ question: 'Which color?', header: 'Color', options: [{ label: 'Red', description: 'warm' }] }] },
+        input: {
+          questions: [{ question: 'Which color?', header: 'Color', options: [{ label: 'Red', description: 'warm' }] }],
+        },
       },
     ],
     finalText: 'answered after resume',
@@ -68,7 +86,12 @@ beforeAll(async () => {
   dataDir = tempDataDir()
   ;[server, twin] = await Promise.all([startOpencodeTestServer({ matchers }), startTwin()])
   fs.writeFileSync(path.join(server.projectDirectory, 'notes.txt'), 'file-body-marker\n')
-  await seedProjectChannel({ dataDir, channelId: twin.channelId, guildId: twin.discord.guildId, directory: server.projectDirectory })
+  await seedProjectChannel({
+    dataDir,
+    channelId: twin.channelId,
+    guildId: twin.discord.guildId,
+    directory: server.projectDirectory,
+  })
   await warmUp({ server })
   bot = await startTestBot({ dataDir, twin, server })
 })
@@ -103,8 +126,13 @@ async function sessionThread(content: string) {
 test('/new-session starts a thread with attached files and an agent', async () => {
   const { discord, channelId } = twin
   const user = discord.channel(channelId).user(TEST_USER_ID)
-  expect(await user.autocomplete({ name: 'new-session', options: [{ name: 'files', type: 3, value: 'note' }], focused: 'files' }))
-    .toMatchInlineSnapshot(`
+  expect(
+    await user.autocomplete({
+      name: 'new-session',
+      options: [{ name: 'files', type: 3, value: 'note' }],
+      focused: 'files',
+    }),
+  ).toMatchInlineSnapshot(`
       [
         {
           "name": "notes.txt",
@@ -112,8 +140,13 @@ test('/new-session starts a thread with attached files and an agent', async () =
         },
       ]
     `)
-  expect(await user.autocomplete({ name: 'new-session', options: [{ name: 'agent', type: 3, value: 'pl' }], focused: 'agent' }))
-    .toMatchInlineSnapshot(`
+  expect(
+    await user.autocomplete({
+      name: 'new-session',
+      options: [{ name: 'agent', type: 3, value: 'pl' }],
+      focused: 'agent',
+    }),
+  ).toMatchInlineSnapshot(`
       [
         {
           "name": "Plan",
@@ -157,11 +190,17 @@ test('/resume binds an existing session to a new thread and moves the binding', 
   await client.session.wait({ sessionID: tui.id })
 
   const user = discord.channel(channelId).user(TEST_USER_ID)
-  const choices = await user.autocomplete({ name: 'resume', options: [{ name: 'session', type: 3, value: 'TUI' }], focused: 'session' })
+  const choices = await user.autocomplete({
+    name: 'resume',
+    options: [{ name: 'session', type: 3, value: 'TUI' }],
+    focused: 'session',
+  })
   expect(choices.map((choice) => ({ ...choice, name: choice.name.replace(/\(.*\)/, '(DATE)') }))).toEqual([
     { name: 'TUI work (DATE)', value: tui.id },
   ])
-  const resumed = await newThread(() => user.runSlashCommand({ name: 'resume', options: [{ name: 'session', type: 3, value: tui.id }] }))
+  const resumed = await newThread(() =>
+    user.runSlashCommand({ name: 'resume', options: [{ name: 'session', type: 3, value: tui.id }] }),
+  )
   await waitFor({
     label: 'resume note',
     check: async () => (await discord.thread(resumed.id).text()).includes('Session resumed'),
@@ -188,11 +227,19 @@ test('/resume binds an existing session to a new thread and moves the binding', 
   `)
 
   // Resuming again moves the session: the old thread stops following it.
-  const moved = await newThread(() => user.runSlashCommand({ name: 'resume', options: [{ name: 'session', type: 3, value: tui.id }] }))
-  await waitFor({ label: 'second resume note', check: async () => (await discord.thread(moved.id).text()).includes('Session resumed') })
+  const moved = await newThread(() =>
+    user.runSlashCommand({ name: 'resume', options: [{ name: 'session', type: 3, value: tui.id }] }),
+  )
+  await waitFor({
+    label: 'second resume note',
+    check: async () => (await discord.thread(moved.id).text()).includes('Session resumed'),
+  })
   const { roots } = bot.store.getState()
   expect({ old: roots[resumed.id] ?? null, moved: roots[moved.id] === tui.id }).toEqual({ old: null, moved: true })
-  const rows = parseRows<ThreadSessionRow>('thread_sessions', await bot.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions WHERE session_id = ${tui.id}`)
+  const rows = parseRows<ThreadSessionRow>(
+    'thread_sessions',
+    await bot.db<ThreadSessionRow[]>`SELECT * FROM thread_sessions WHERE session_id = ${tui.id}`,
+  )
   expect(rows.map((row) => row.thread_id)).toEqual([moved.id])
   expect(hide(await discord.channel(channelId).text())).toContain('Resumed session "TUI work" in <#THREAD>')
 })
@@ -213,9 +260,15 @@ test('/fork forks before a user message into a new thread', async () => {
   `)
   const second = select.options[1]!
   const fork = await newThread(() =>
-    discord.thread(source.id).user(TEST_USER_ID).selectMenu({ messageId: message.id, customId: select.custom_id, values: [second.value] }),
+    discord
+      .thread(source.id)
+      .user(TEST_USER_ID)
+      .selectMenu({ messageId: message.id, customId: select.custom_id, values: [second.value] }),
   )
-  await waitFor({ label: 'fork note', check: async () => (await discord.thread(fork.id).text()).includes('continue the conversation') })
+  await waitFor({
+    label: 'fork note',
+    check: async () => (await discord.thread(fork.id).text()).includes('continue the conversation'),
+  })
   await discord.thread(fork.id).user(TEST_USER_ID).sendMessage({ content: 'Check fork-check' })
   await waitForFooter({ discord, threadId: fork.id })
   expect(fork.name).toBe('Start first-marker (fork #1)')
@@ -252,23 +305,44 @@ test('/fork-subagent forks a subagent session into a new thread', async () => {
   const { discord } = twin
   const source = await sessionThread('Delegate subagent-marker')
   const client = await server.client()
-  const unrelated = await client.session.create({ location: { directory: server.projectDirectory }, title: 'Unrelated session' })
+  const unrelated = await client.session.create({
+    location: { directory: server.projectDirectory },
+    title: 'Unrelated session',
+  })
   await client.session.prompt({ sessionID: unrelated.id, text: 'Start first-marker' })
   await client.session.wait({ sessionID: unrelated.id })
   const threadsBefore = (await discord.channel(twin.channelId).getThreads()).map((thread) => thread.id)
-  const sessionsBefore = (await client.session.list({ directory: server.projectDirectory })).data.map((session) => session.id)
+  const sessionsBefore = (await client.session.list({ directory: server.projectDirectory })).data.map(
+    (session) => session.id,
+  )
   await discord.thread(source.id).user(TEST_USER_ID).runSlashCommand({ name: 'fork-subagent' })
   const forged = await waitForSelectMenu({ discord, channelId: source.id, prefix: 'fork_sub:' })
-  await discord.thread(source.id).user(TEST_USER_ID).selectMenu({ messageId: forged.message.id, customId: forged.select.custom_id, values: [unrelated.id] })
+  await discord
+    .thread(source.id)
+    .user(TEST_USER_ID)
+    .selectMenu({ messageId: forged.message.id, customId: forged.select.custom_id, values: [unrelated.id] })
   await waitFor({
     label: 'fork selection response',
-    check: async () => !(await discord.thread(source.id).getMessages()).find((message) => message.id === forged.message.id)?.content.includes('Select a subagent session'),
+    check: async () =>
+      !(await discord.thread(source.id).getMessages())
+        .find((message) => message.id === forged.message.id)
+        ?.content.includes('Select a subagent session'),
   })
-  expect((await discord.thread(source.id).getMessages()).find((message) => message.id === forged.message.id)?.content).toMatchInlineSnapshot(`"This session is not the thread's root or a direct subagent. Run /fork or /fork-subagent in the session's own thread."`)
+  expect(
+    (await discord.thread(source.id).getMessages()).find((message) => message.id === forged.message.id)?.content,
+  ).toMatchInlineSnapshot(
+    `"This session is not the thread's root or a direct subagent. Run /fork or /fork-subagent in the session's own thread."`,
+  )
   expect((await discord.channel(twin.channelId).getThreads()).map((thread) => thread.id)).toEqual(threadsBefore)
-  expect((await client.session.list({ directory: server.projectDirectory })).data.map((session) => session.id)).toEqual(sessionsBefore)
+  expect((await client.session.list({ directory: server.projectDirectory })).data.map((session) => session.id)).toEqual(
+    sessionsBefore,
+  )
   await discord.thread(source.id).user(TEST_USER_ID).runSlashCommand({ name: 'fork-subagent' })
-  const { message, select } = await waitForSelectMenu({ discord: twin.discord, channelId: source.id, prefix: 'fork_sub:' })
+  const { message, select } = await waitForSelectMenu({
+    discord: twin.discord,
+    channelId: source.id,
+    prefix: 'fork_sub:',
+  })
   expect(select.options.map((option) => option.label)).toMatchInlineSnapshot(`
     [
       "general · Count files",
@@ -280,7 +354,10 @@ test('/fork-subagent forks a subagent session into a new thread', async () => {
       .user(TEST_USER_ID)
       .selectMenu({ messageId: message.id, customId: select.custom_id, values: [select.options[0]!.value] }),
   )
-  await waitFor({ label: 'fork note', check: async () => (await discord.thread(fork.id).text()).includes('continue the conversation') })
+  await waitFor({
+    label: 'fork note',
+    check: async () => (await discord.thread(fork.id).text()).includes('continue the conversation'),
+  })
   await discord.thread(fork.id).user(TEST_USER_ID).sendMessage({ content: 'More child-followup' })
   await waitForFooter({ discord, threadId: fork.id })
   expect(fork.name).toMatchInlineSnapshot(`"Count files (fork #1)"`)
@@ -304,14 +381,25 @@ test('/fork-subagent forks a subagent session into a new thread', async () => {
 test('/resume of a session waiting on a question shows the question in the new thread', async () => {
   const { discord, channelId } = twin
   const client = await server.client()
-  const tui = await client.session.create({ location: { directory: server.projectDirectory }, title: 'Asks a question' })
+  const tui = await client.session.create({
+    location: { directory: server.projectDirectory },
+    title: 'Asks a question',
+  })
   await client.session.prompt({ sessionID: tui.id, text: 'Please ask-resume' })
-  await waitFor({ label: 'pending form', check: async () => (await client.session.form.list({ sessionID: tui.id })).length > 0 })
+  await waitFor({
+    label: 'pending form',
+    check: async () => (await client.session.form.list({ sessionID: tui.id })).length > 0,
+  })
 
   const user = discord.channel(channelId).user(TEST_USER_ID)
-  const thread = await newThread(() => user.runSlashCommand({ name: 'resume', options: [{ name: 'session', type: 3, value: tui.id }] }))
+  const thread = await newThread(() =>
+    user.runSlashCommand({ name: 'resume', options: [{ name: 'session', type: 3, value: tui.id }] }),
+  )
   const { message, select } = await waitForSelectMenu({ discord, channelId: thread.id, prefix: 'form:' })
-  await discord.thread(thread.id).user(TEST_USER_ID).selectMenu({ messageId: message.id, customId: select.custom_id, values: ['0'] })
+  await discord
+    .thread(thread.id)
+    .user(TEST_USER_ID)
+    .selectMenu({ messageId: message.id, customId: select.custom_id, values: ['0'] })
   await waitForFooter({ discord, threadId: thread.id })
   expect(hide(await discord.thread(thread.id).text())).toMatchInlineSnapshot(`
     "--- from: assistant (TestBot)

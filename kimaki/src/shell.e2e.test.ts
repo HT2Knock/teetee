@@ -32,8 +32,18 @@ const matchers: DeterministicMatcher[] = [
     when: { latestUserTextIncludes: 'shell-check', rawPromptIncludes: 'kimaki-shell-output' },
     then: { parts: textParts('I saw your shell output') },
   },
-  { id: 'review', priority: 500, when: { latestUserTextIncludes: 'Review this change: cmd-marker' }, then: { parts: textParts('reviewed') } },
-  { id: 'unknown', priority: 500, when: { latestUserTextIncludes: '/nope unknown-marker' }, then: { parts: textParts('plain text') } },
+  {
+    id: 'review',
+    priority: 500,
+    when: { latestUserTextIncludes: 'Review this change: cmd-marker' },
+    then: { parts: textParts('reviewed') },
+  },
+  {
+    id: 'unknown',
+    priority: 500,
+    when: { latestUserTextIncludes: '/nope unknown-marker' },
+    then: { parts: textParts('plain text') },
+  },
 ]
 
 let server: OpencodeTestServer

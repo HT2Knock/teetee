@@ -31,14 +31,37 @@ import { replyError, resolveTarget, type InteractionRoutes } from '../interactio
 import { parseFirst, type ChannelDirectoryRow } from '../rows.ts'
 import { handleTranscriptionKeyModal, TRANSCRIPTION_KEY_MODAL, transcriptionKeyModal } from '../voice.ts'
 
-type LoginWizard = { userId: string; directory: string; provider: IntegrationInfo | null; expires: number; attempt?: string }
+type LoginWizard = {
+  userId: string
+  directory: string
+  provider: IntegrationInfo | null
+  expires: number
+  attempt?: string
+}
 
 const TTL = 10 * 60_000
 const POPULAR = ['openai', 'anthropic', 'google', 'opencode']
 
-function textModal({ customId, title, inputId, label }: { customId: string; title: string; inputId: string; label: string }) {
-  const input = new TextInputBuilder().setCustomId(inputId).setLabel(label).setStyle(TextInputStyle.Short).setRequired(true)
-  return new ModalBuilder().setCustomId(customId).setTitle(title).addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input))
+function textModal({
+  customId,
+  title,
+  inputId,
+  label,
+}: {
+  customId: string
+  title: string
+  inputId: string
+  label: string
+}) {
+  const input = new TextInputBuilder()
+    .setCustomId(inputId)
+    .setLabel(label)
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+  return new ModalBuilder()
+    .setCustomId(customId)
+    .setTitle(title)
+    .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input))
 }
 
 async function providers(bot: Bot, directory: string) {
@@ -57,12 +80,17 @@ function methods(provider: IntegrationInfo) {
     return []
   })
   const credentials = provider.connections.flatMap((connection) =>
-    connection.type === 'credential' ? [{ label: `Activate ${connection.label}`.slice(0, 100), value: `credential:${connection.id}` }] : [],
+    connection.type === 'credential'
+      ? [{ label: `Activate ${connection.label}`.slice(0, 100), value: `credential:${connection.id}` }]
+      : [],
   )
   return [...options, ...credentials]
 }
 
-async function connectKey(bot: Bot, { provider, key, directory }: { provider: string; key: string; directory: string }) {
+async function connectKey(
+  bot: Bot,
+  { provider, key, directory }: { provider: string; key: string; directory: string },
+) {
   const result = await oc(bot, 'integration.connect.key', (client) =>
     client.integration.connect.key({ integrationID: provider, key, location: { directory } }),
   )
@@ -71,7 +99,10 @@ async function connectKey(bot: Bot, { provider, key, directory }: { provider: st
 }
 
 // `kimaki login credential`: activate, remove or relabel a saved credential.
-export async function credential(bot: Bot, input: { id: string; operation: 'activate' | 'remove' | 'label'; label?: string }) {
+export async function credential(
+  bot: Bot,
+  input: { id: string; operation: 'activate' | 'remove' | 'label'; label?: string },
+) {
   const result = await oc(bot, `credential.${input.operation}`, (client) =>
     input.operation === 'label'
       ? client.credential.update({ credentialID: input.id, label: input.label ?? '' })
@@ -99,7 +130,9 @@ export async function loginCli(
   if (attempt) {
     const attemptID = attempt
     if (input.operation === 'cancel') {
-      const result = await oc(bot, 'integration.oauth.cancel', (client) => client.integration.oauth.cancel({ integrationID, attemptID, location }))
+      const result = await oc(bot, 'integration.oauth.cancel', (client) =>
+        client.integration.oauth.cancel({ integrationID, attemptID, location }),
+      )
       if (result instanceof Error) return result
       return { cancelled: true }
     }
@@ -111,13 +144,17 @@ export async function loginCli(
       if (result instanceof Error) return result
       return { connected: true }
     }
-    const result = await oc(bot, 'integration.oauth.status', (client) => client.integration.oauth.status({ integrationID, attemptID, location }))
+    const result = await oc(bot, 'integration.oauth.status', (client) =>
+      client.integration.oauth.status({ integrationID, attemptID, location }),
+    )
     if (result instanceof Error) return result
     return result.data
   }
   const methodID = input.method
   if (methodID) {
-    const result = await oc(bot, 'integration.oauth.connect', (client) => client.integration.oauth.connect({ integrationID, methodID, location }))
+    const result = await oc(bot, 'integration.oauth.connect', (client) =>
+      client.integration.oauth.connect({ integrationID, methodID, location }),
+    )
     if (result instanceof Error) return result
     return result.data
   }
@@ -127,7 +164,8 @@ export async function loginCli(
     provider: info.data.name,
     methods: info.data.methods,
     connections: info.data.connections,
-    instructions: 'Use --key, or --method <oauth method ID>. Complete with --attempt <id> --code <code>; check or cancel with --attempt <id> [--cancel].',
+    instructions:
+      'Use --key, or --method <oauth method ID>. Complete with --attempt <id> --code <code>; check or cancel with --attempt <id> [--cancel].',
   }
 }
 
@@ -164,7 +202,13 @@ export function createLoginRoutes(): InteractionRoutes {
   }
 
   // The wizard of a select, or null after an error reply. A previous/next entry shows that page.
-  async function selected({ interaction, options }: { interaction: StringSelectMenuInteraction; options: (wizard: LoginWizard) => Promise<Error | Array<{ label: string; value: string }>> }) {
+  async function selected({
+    interaction,
+    options,
+  }: {
+    interaction: StringSelectMenuInteraction
+    options: (wizard: LoginWizard) => Promise<Error | Array<{ label: string; value: string }>>
+  }) {
     const found = await wizardOf(interaction)
     if (!found) return null
     const { id, wizard } = found
@@ -181,7 +225,11 @@ export function createLoginRoutes(): InteractionRoutes {
       await replyError(interaction, new ConfigError({ reason: 'Login page no longer exists. Run /login again.' }))
       return null
     }
-    await interaction.editReply({ components: [selectRow({ customId: interaction.customId, placeholder: `Page ${page + 1}`, options: paginate(all, page) })] })
+    await interaction.editReply({
+      components: [
+        selectRow({ customId: interaction.customId, placeholder: `Page ${page + 1}`, options: paginate(all, page) }),
+      ],
+    })
     return null
   }
 
@@ -191,10 +239,17 @@ export function createLoginRoutes(): InteractionRoutes {
     if (target instanceof Error) return replyError(interaction, target)
     const options = await providers(bot, target.directory)
     if (options instanceof Error) return replyError(interaction, options)
-    const id = remember({ userId: interaction.user.id, directory: target.directory, provider: null, expires: Date.now() + TTL })
+    const id = remember({
+      userId: interaction.user.id,
+      directory: target.directory,
+      provider: null,
+      expires: Date.now() + TTL,
+    })
     await interaction.editReply({
       content: 'Connect a provider. Credentials are stored by OpenCode, not Kimaki.',
-      components: [selectRow({ customId: `login_provider:${id}`, placeholder: 'Provider', options: paginate(options, 0) })],
+      components: [
+        selectRow({ customId: `login_provider:${id}`, placeholder: 'Provider', options: paginate(options, 0) }),
+      ],
     })
   }
 
@@ -209,15 +264,24 @@ export function createLoginRoutes(): InteractionRoutes {
     if (provider instanceof Error) return replyError(interaction, provider)
     wizards.set(id, { ...wizard, provider: provider.data })
     const options = methods(provider.data)
-    if (!options.length) return replyError(interaction, new ConfigError({ reason: 'No interactive login method. This integration uses environment credentials.' }))
+    if (!options.length)
+      return replyError(
+        interaction,
+        new ConfigError({ reason: 'No interactive login method. This integration uses environment credentials.' }),
+      )
     await interaction.editReply({
       content: `Connect ${provider.data.name}`,
-      components: [selectRow({ customId: `login_method:${id}`, placeholder: 'Login method', options: paginate(options, 0) })],
+      components: [
+        selectRow({ customId: `login_method:${id}`, placeholder: 'Login method', options: paginate(options, 0) }),
+      ],
     })
   }
 
   async function methodSelect(bot: Bot, interaction: StringSelectMenuInteraction) {
-    const picked = await selected({ interaction, options: async (wizard) => (wizard.provider ? methods(wizard.provider) : []) })
+    const picked = await selected({
+      interaction,
+      options: async (wizard) => (wizard.provider ? methods(wizard.provider) : []),
+    })
     if (!picked) return
     const { id, wizard, value } = picked
     const provider = wizard.provider
@@ -225,7 +289,9 @@ export function createLoginRoutes(): InteractionRoutes {
     if (value.startsWith('credential:')) {
       await interaction.deferUpdate()
       const credentialId = value.slice('credential:'.length)
-      if (!provider.connections.some((connection) => connection.type === 'credential' && connection.id === credentialId)) {
+      if (
+        !provider.connections.some((connection) => connection.type === 'credential' && connection.id === credentialId)
+      ) {
         return replyError(interaction, new ConfigError({ reason: 'Unknown credential' }))
       }
       const result = await credential(bot, { id: credentialId, operation: 'activate' })
@@ -236,9 +302,14 @@ export function createLoginRoutes(): InteractionRoutes {
     if (value.startsWith('oauth:')) {
       await interaction.deferUpdate()
       const method = provider.methods.find((candidate) => candidate.type === 'oauth' && candidate.id === value.slice(6))
-      if (!method || method.type !== 'oauth') return replyError(interaction, new ConfigError({ reason: 'Unknown login method' }))
+      if (!method || method.type !== 'oauth')
+        return replyError(interaction, new ConfigError({ reason: 'Unknown login method' }))
       const result = await oc(bot, 'integration.oauth.connect', (client) =>
-        client.integration.oauth.connect({ integrationID: provider.id, methodID: method.id, location: { directory: wizard.directory } }),
+        client.integration.oauth.connect({
+          integrationID: provider.id,
+          methodID: method.id,
+          location: { directory: wizard.directory },
+        }),
       )
       if (result instanceof Error) return replyError(interaction, result)
       wizards.set(id, { ...wizard, attempt: result.data.attemptID })
@@ -254,7 +325,14 @@ export function createLoginRoutes(): InteractionRoutes {
       })
     }
     if (value === 'key') {
-      await interaction.showModal(textModal({ customId: `login_key:${id}`, title: `Connect ${provider.name}`.slice(0, 45), inputId: 'key', label: 'API key' }))
+      await interaction.showModal(
+        textModal({
+          customId: `login_key:${id}`,
+          title: `Connect ${provider.name}`.slice(0, 45),
+          inputId: 'key',
+          label: 'API key',
+        }),
+      )
     }
   }
 
@@ -276,7 +354,11 @@ export function createLoginRoutes(): InteractionRoutes {
     const found = await modalWizard(interaction)
     if (!found) return
     const { id, wizard, provider } = found
-    const result = await connectKey(bot, { provider: provider.id, key: interaction.fields.getTextInputValue('key'), directory: wizard.directory })
+    const result = await connectKey(bot, {
+      provider: provider.id,
+      key: interaction.fields.getTextInputValue('key'),
+      directory: wizard.directory,
+    })
     if (result instanceof Error) return replyError(interaction, result)
     wizards.delete(id)
     await interaction.editReply({ content: `Connected ${provider.name}. Use /model to select a model.` })
@@ -290,7 +372,12 @@ export function createLoginRoutes(): InteractionRoutes {
     if (!attemptID) return replyError(interaction, new ConfigError({ reason: 'No pending login attempt' }))
     const code = interaction.fields.getTextInputValue('code')
     const result = await oc(bot, 'integration.oauth.complete', (client) =>
-      client.integration.oauth.complete({ integrationID: provider.id, attemptID, code, location: { directory: wizard.directory } }),
+      client.integration.oauth.complete({
+        integrationID: provider.id,
+        attemptID,
+        code,
+        location: { directory: wizard.directory },
+      }),
     )
     if (result instanceof Error) return replyError(interaction, result)
     wizards.delete(id)
@@ -307,13 +394,19 @@ export function createLoginRoutes(): InteractionRoutes {
       await replyError(interaction, new ConfigError({ reason: 'No pending login attempt' }))
       return null
     }
-    return { id, provider, request: { integrationID: provider.id, attemptID, location: { directory: wizard.directory } } }
+    return {
+      id,
+      provider,
+      request: { integrationID: provider.id, attemptID, location: { directory: wizard.directory } },
+    }
   }
 
   async function codeClick(_bot: Bot, interaction: ButtonInteraction) {
     const found = await attemptOf(interaction)
     if (!found) return
-    return interaction.showModal(textModal({ customId: `login_code:${found.id}`, title: 'Authorization code', inputId: 'code', label: 'Code' }))
+    return interaction.showModal(
+      textModal({ customId: `login_code:${found.id}`, title: 'Authorization code', inputId: 'code', label: 'Code' }),
+    )
   }
 
   async function cancelClick(bot: Bot, interaction: ButtonInteraction) {
@@ -334,23 +427,32 @@ export function createLoginRoutes(): InteractionRoutes {
     if (result instanceof Error) return replyError(interaction, result)
     const status = result.data
     if (status.status === 'pending') {
-      return interaction.followUp({ content: 'Login still pending. Finish authorization, then check again.', flags: MessageFlags.Ephemeral })
+      return interaction.followUp({
+        content: 'Login still pending. Finish authorization, then check again.',
+        flags: MessageFlags.Ephemeral,
+      })
     }
     wizards.delete(found.id)
-    const content = status.status === 'complete'
-      ? `${found.provider.name} OAuth connected`
-      : status.status === 'failed'
-        ? status.message
-        : 'Login expired. Run /login again.'
+    const content =
+      status.status === 'complete'
+        ? `${found.provider.name} OAuth connected`
+        : status.status === 'failed'
+          ? status.message
+          : 'Login expired. Run /login again.'
     return interaction.editReply({ content, components: [] })
   }
 
   return {
     admin: true,
     commands: {
-      login: { definition: new SlashCommandBuilder().setName('login').setDescription('Connect an OpenCode provider'), run: loginCommand },
+      login: {
+        definition: new SlashCommandBuilder().setName('login').setDescription('Connect an OpenCode provider'),
+        run: loginCommand,
+      },
       'transcription-key': {
-        definition: new SlashCommandBuilder().setName('transcription-key').setDescription('Set the OpenAI or Gemini API key for voice transcription and speech'),
+        definition: new SlashCommandBuilder()
+          .setName('transcription-key')
+          .setDescription('Set the OpenAI or Gemini API key for voice transcription and speech'),
         run: (_bot, interaction) => interaction.showModal(transcriptionKeyModal()),
       },
     },

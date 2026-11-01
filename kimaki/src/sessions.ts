@@ -2,22 +2,31 @@
 // and binds sessions to them (spec 27.2). New sessions, /resume, /fork,
 // /fork-subagent, btw forks, the session marker and the instructions entry.
 
-import path from 'node:path'
-import crypto from 'node:crypto'
-import type {SessionMetadata} from '@opencode/client'
-import type {TextChannel, ThreadChannel} from 'discord.js'
+import type { SessionMetadata } from '@opencode/client'
+import type { TextChannel, ThreadChannel } from 'discord.js'
 
-import {cliContext, oc, projectOf, readMarker, rootSession, sessionDirectory, textChannel, type Author, type Bot, type PromptFile} from './bot.ts'
-import {ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError} from './errors.ts'
-import {SILENT_MESSAGE_FLAGS} from './format-parts.ts'
-import {createLogger} from './logger.ts'
-import type {OpenCodeClient} from './opencode-server.ts'
-import {prompt} from './prompt.ts'
-import {parseRows, type ChannelDirectoryRow} from './rows.ts'
-import {disabledSkillRules} from './builtin-skills.ts'
-import {type ScheduledRun} from './system-prompt.ts'
-import {NO_QUESTION_TOOL, bindThread, putInstructions, switchAgent, threadProject} from './session-context.ts'
-import {createWorktree, resolveWorkingDirectory} from './worktrees.ts'
+import {
+  cliContext,
+  oc,
+  projectOf,
+  readMarker,
+  rootSession,
+  sessionDirectory,
+  textChannel,
+  type Author,
+  type Bot,
+  type PromptFile,
+} from './bot.ts'
+import { ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
+import { SILENT_MESSAGE_FLAGS } from './format-parts.ts'
+import { createLogger } from './logger.ts'
+import type { OpenCodeClient } from './opencode-server.ts'
+import { prompt } from './prompt.ts'
+import { parseRows, type ChannelDirectoryRow } from './rows.ts'
+import { disabledSkillRules } from './builtin-skills.ts'
+import { type ScheduledRun } from './system-prompt.ts'
+import { NO_QUESTION_TOOL, bindThread, putInstructions, switchAgent, threadProject } from './session-context.ts'
+import { createWorktree, resolveWorkingDirectory } from './worktrees.ts'
 
 const logger = createLogger('SESSIONS')
 
@@ -87,7 +96,9 @@ async function adoptSession(
     // Cleanup of a session created only for this thread (a fork).
     discard?: () => Promise<void>
   },
-): Promise<OpenCodeUnavailableError | OpenCodeError | DiscordError | DbError | { threadId: string; sessionId: string }> {
+): Promise<
+  OpenCodeUnavailableError | OpenCodeError | DiscordError | DbError | { threadId: string; sessionId: string }
+> {
   const sessionId = session.id
   const thread = await channel.threads
     .create({ name: threadName.replace(/\s+/g, ' ').slice(0, 100), autoArchiveDuration: 1440 })
@@ -102,10 +113,18 @@ async function adoptSession(
     // Merge: other metadata stays. Task fields stay only for a resumed task session.
     const { task: _task, taskId: _taskId, ...rest } = readMarker(session.metadata)?.fields ?? {}
     const marker = scheduledTask ? { ...rest, taskId: scheduledTask.id, task: scheduledTask } : rest
-    const kimaki = { ...marker, source: scheduledTask ? 'task' : 'discord', ...cliContext(bot), threadId: thread.id, channelId: channel.id }
+    const kimaki = {
+      ...marker,
+      source: scheduledTask ? 'task' : 'discord',
+      ...cliContext(bot),
+      threadId: thread.id,
+      channelId: channel.id,
+    }
     // A session with its own question rule (a fork, or --permission) keeps it.
     const rules = session.permissions ?? []
-    const permissions = rules.some((rule) => rule.action === 'question') ? rules : [NO_QUESTION_TOOL, ...disabledSkillRules(bot.disabledSkills), ...rules]
+    const permissions = rules.some((rule) => rule.action === 'question')
+      ? rules
+      : [NO_QUESTION_TOOL, ...disabledSkillRules(bot.disabledSkills), ...rules]
     const marked = await oc(bot, 'session.update', (client) =>
       client.session.update({ sessionID: sessionId, metadata: { ...session.metadata, kimaki }, permissions }),
     )
@@ -120,13 +139,17 @@ async function adoptSession(
       scheduledTask,
     })
     if (instructions instanceof Error) return instructions
-    const messages = await oc(bot, 'message.list', (client) => client.message.list({ sessionID: sessionId, order: 'desc', limit: 100 }))
+    const messages = await oc(bot, 'message.list', (client) =>
+      client.message.list({ sessionID: sessionId, order: 'desc', limit: 100 }),
+    )
     if (messages instanceof Error) return messages
     // One thread per session: older threads of this session stop following it.
     const moved = await (async () => {
       try {
         return await bot.db.begin(async (tx) => {
-          const deleted = await tx<{ thread_id: string }[]>`DELETE FROM thread_sessions WHERE session_id = ${sessionId} RETURNING thread_id`
+          const deleted = await tx<
+            { thread_id: string }[]
+          >`DELETE FROM thread_sessions WHERE session_id = ${sessionId} RETURNING thread_id`
           await tx`INSERT INTO thread_sessions (thread_id, session_id, source) VALUES (${thread.id}, ${sessionId}, ${'kimaki'})`
           return deleted
         })
@@ -167,14 +190,18 @@ export async function channelForSession(bot: Bot, sessionId: string) {
 }
 
 export async function channelForDirectory(bot: Bot, directory: string) {
-  const rows = await bot.db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories`
-    .catch((cause) => new DbError({ operation: 'read channel_directories', cause }))
+  const rows = await bot.db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories`.catch(
+    (cause) => new DbError({ operation: 'read channel_directories', cause }),
+  )
   if (rows instanceof Error) return rows
   const projects = parseRows<ChannelDirectoryRow>('channel_directories', rows)
   projects.sort((a, b) => b.directory.length - a.directory.length)
   // Stored directories may be symlink aliases of the real path.
   const matches = await Promise.all(
-    projects.map(async (row) => !(await resolveWorkingDirectory({ projectDirectory: row.directory, candidate: directory }) instanceof Error)),
+    projects.map(
+      async (row) =>
+        !((await resolveWorkingDirectory({ projectDirectory: row.directory, candidate: directory })) instanceof Error),
+    ),
   )
   const project = projects.find((_, index) => matches[index])
   if (!project) return new ConfigError({ reason: `No project channel for ${directory}. Pass --channel.` })
@@ -182,14 +209,22 @@ export async function channelForDirectory(bot: Bot, directory: string) {
 }
 
 // Binds an existing session of the channel's project to a new thread.
-export async function resume(bot: Bot, { channelId, sessionId, author }: { channelId: string; sessionId: string; author: Author }) {
+export async function resume(
+  bot: Bot,
+  { channelId, sessionId, author }: { channelId: string; sessionId: string; author: Author },
+) {
   const [channel, project] = await Promise.all([textChannel(bot, channelId), projectOf(bot, channelId)])
   if (channel instanceof Error) return channel
   if (project instanceof Error) return project
   if (!project) return new ConfigError({ reason: 'This channel is not configured with a project directory' })
   const info = await oc(bot, 'session.get', (client) => client.session.get({ sessionID: sessionId }))
   if (info instanceof Error) return info
-  if (await resolveWorkingDirectory({ projectDirectory: project.directory, candidate: info.location.directory }) instanceof Error) {
+  if (
+    (await resolveWorkingDirectory({
+      projectDirectory: project.directory,
+      candidate: info.location.directory,
+    })) instanceof Error
+  ) {
     return new ConfigError({
       reason: `This session belongs to a different project or worktree: \`${info.location.directory}\`. Run \`/resume\` in the channel for that directory.`,
     })
@@ -241,14 +276,19 @@ export async function fork(
     const info = await oc(bot, 'session.get', (client) => client.session.get({ sessionID: sessionId }))
     if (info instanceof Error) return info
     if (info.parentID !== root) {
-      return new ConfigError({ reason: "This session is not the thread's root or a direct subagent. Run /fork or /fork-subagent in the session's own thread." })
+      return new ConfigError({
+        reason:
+          "This session is not the thread's root or a direct subagent. Run /fork or /fork-subagent in the session's own thread.",
+      })
     }
   }
   const project = await threadProject(bot, sourceThread)
   if (project instanceof Error) return project
   const channel = await textChannel(bot, project.channelId)
   if (channel instanceof Error) return channel
-  const forked = await oc(bot, 'session.fork', (client) => client.session.fork({ sessionID: sessionId, ...(before && { before }) }))
+  const forked = await oc(bot, 'session.fork', (client) =>
+    client.session.fork({ sessionID: sessionId, ...(before && { before }) }),
+  )
   if (forked instanceof Error) return forked
   const discard = async () => {
     const removed = await oc(bot, 'session.remove', (client) => client.session.remove({ sessionID: forked.id }))
@@ -265,11 +305,17 @@ export async function fork(
     if (checkout instanceof Error) return checkout
     const plugin = await bot.features.waitForPlugin(checkout.directory)
     if (plugin instanceof Error) return plugin
-    const moved = await oc(bot, 'move worktree fork', (client) => client.session.move({ sessionID: forked.id, directory: checkout.directory }))
+    const moved = await oc(bot, 'move worktree fork', (client) =>
+      client.session.move({ sessionID: forked.id, directory: checkout.directory }),
+    )
     if (moved instanceof Error) return moved
-    const waited = await oc(bot, 'wait for worktree fork move', (client) => client.session.wait({ sessionID: forked.id }))
+    const waited = await oc(bot, 'wait for worktree fork move', (client) =>
+      client.session.wait({ sessionID: forked.id }),
+    )
     if (waited instanceof Error) return waited
-    const info = await oc(bot, 'confirm worktree fork directory', (client) => client.session.get({ sessionID: forked.id }))
+    const info = await oc(bot, 'confirm worktree fork directory', (client) =>
+      client.session.get({ sessionID: forked.id }),
+    )
     if (info instanceof Error) return info
     if (info.location.directory !== checkout.directory) {
       return new ConfigError({ reason: `Session did not move to ${checkout.directory}. No new thread was bound.` })
@@ -316,7 +362,14 @@ export async function forkBtw(
     // A voice message asked for this agent.
     agent?: string
   },
-): Promise<ConfigError | OpenCodeUnavailableError | OpenCodeError | DiscordError | DbError | { threadId: string; sessionId: string }> {
+): Promise<
+  | ConfigError
+  | OpenCodeUnavailableError
+  | OpenCodeError
+  | DiscordError
+  | DbError
+  | { threadId: string; sessionId: string }
+> {
   const parentSessionId = rootSession(bot, sourceThread.id)
   if (parentSessionId instanceof Error) return parentSessionId
   const project = await threadProject(bot, sourceThread)
@@ -342,7 +395,9 @@ export async function forkBtw(
   }
 
   const kimaki = { threadId: thread.id, channelId: project.channelId, source: 'discord', ...cliContext(bot) }
-  const marked = await oc(bot, 'session.update', (client) => client.session.update({ sessionID: forked.id, metadata: { kimaki } }))
+  const marked = await oc(bot, 'session.update', (client) =>
+    client.session.update({ sessionID: forked.id, metadata: { kimaki } }),
+  )
   if (marked instanceof Error) return marked
   const bound = await bindThread(bot, {
     threadId: thread.id,
@@ -354,7 +409,11 @@ export async function forkBtw(
   if (bound instanceof Error) return bound
   await thread.members.add(author.id).catch((e: Error) => logger.warn(`add btw member`, e))
   const intro = await thread
-    .send({ content: `Reusing context from <#${sourceThread.id}> to answer prompt...\n${text}`.slice(0, 2_000), allowedMentions: { parse: [] }, flags: SILENT_MESSAGE_FLAGS })
+    .send({
+      content: `Reusing context from <#${sourceThread.id}> to answer prompt...\n${text}`.slice(0, 2_000),
+      allowedMentions: { parse: [] },
+      flags: SILENT_MESSAGE_FLAGS,
+    })
     .catch((cause) => new DiscordError({ operation: 'send btw intro', cause }))
   if (intro instanceof Error) return intro
   if (agent) {
@@ -366,7 +425,13 @@ export async function forkBtw(
     sessionId: forked.id,
     threadId: thread.id,
     threadName: thread.name,
-    text: btwPrompt({ text, parentSessionId, sourceThreadId: sourceThread.id, sessionId: forked.id, threadId: thread.id }),
+    text: btwPrompt({
+      text,
+      parentSessionId,
+      sourceThreadId: sourceThread.id,
+      sessionId: forked.id,
+      threadId: thread.id,
+    }),
     author,
     messageId,
     delivery: 'steer',

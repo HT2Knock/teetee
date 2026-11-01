@@ -80,7 +80,18 @@ export function foldAnalytics({
 }): { state: UsageState; events: AnalyticsEvent[] } {
   switch (event.type) {
     case 'session.execution.started': {
-      const usage: ExecutionUsage = { startedAt: event.created, steps: 0, input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0, cost: 0, model: null, provider: null }
+      const usage: ExecutionUsage = {
+        startedAt: event.created,
+        steps: 0,
+        input: 0,
+        output: 0,
+        reasoning: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        cost: 0,
+        model: null,
+        provider: null,
+      }
       const next = { ...state, [event.data.sessionID]: usage }
       return { state: next, events: isRoot ? [{ name: 'turn_started', properties: {} }] : [] }
     }
@@ -135,7 +146,12 @@ export function foldAnalytics({
       }
       const completed: AnalyticsEvent[] =
         isRoot && event.type === 'session.execution.succeeded'
-          ? [{ name: 'turn_completed', properties: { duration_sec: Math.round((event.created - usage.startedAt) / 1000) } }]
+          ? [
+              {
+                name: 'turn_completed',
+                properties: { duration_sec: Math.round((event.created - usage.startedAt) / 1000) },
+              },
+            ]
           : []
       // Zero-token executions are skipped, like V1.
       return { state: next, events: [...(total > 0 || usage.cost > 0 ? [tokensUsed] : []), ...completed] }
@@ -222,7 +238,13 @@ export function createAnalytics({
     logger.warn(`analytics off`, initialized)
     return disabledAnalytics
   }
-  const common = { install_id: installId, schema_version: SCHEMA_VERSION, bot_mode: botMode, platform: process.platform, arch: process.arch }
+  const common = {
+    install_id: installId,
+    schema_version: SCHEMA_VERSION,
+    bot_mode: botMode,
+    platform: process.platform,
+    arch: process.arch,
+  }
   const send = (name: AnalyticsEventName, properties: AnalyticsProps = {}) => {
     // Identity fields always win over caller props.
     const failed = track(name, { ...properties, ...common })

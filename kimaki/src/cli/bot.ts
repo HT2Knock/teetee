@@ -35,7 +35,10 @@ async function readRange({ file, start, end }: { file: string; start: number; en
 async function followFile(file: string): Promise<never> {
   const position = { offset: 0 }
   while (true) {
-    const size = await fs.promises.stat(file).then((stat) => stat.size).catch(() => 0)
+    const size = await fs.promises
+      .stat(file)
+      .then((stat) => stat.size)
+      .catch(() => 0)
     if (size < position.offset) position.offset = 0
     if (size > position.offset) {
       const chunk = await readRange({ file, start: position.offset, end: size })
@@ -83,7 +86,8 @@ async function supervise(): Promise<never> {
 
 // `kimaki` with no subcommand.
 export function registerStartCommand(cli: Goke) {
-  cli.command('', 'Start the bot. Runs onboarding on first start')
+  cli
+    .command('', 'Start the bot. Runs onboarding on first start')
     .option('--data-dir <path>', DATA_DIR_HELP)
     .option('-g, --guild <guildId>', 'Server to onboard when the bot is in several')
     .option('--gateway', 'Use the shared Kimaki bot, no Discord app needed')
@@ -92,9 +96,18 @@ export function registerStartCommand(cli: Goke) {
     .option('--machine-name <name>', 'Name in this machine\'s category "Kimaki <name>" (default: hostname)')
     .option('--restart-onboarding', 'Choose credentials again')
     .option('--worktrees', 'Use a fresh Git worktree for new sessions unless the channel overrides it')
-    .option('--allow-all-users', 'Every server member can use the bot (role "no-kimaki" still denies; provider login stays admin-only)')
-    .option('--voice <name>', 'Voice of voice calls, saved for later starts (e.g. cove, juniper, sol). "default" resets it')
-    .option('--disable-skills <list>', `Built-in Kimaki skills to turn off: "all" or a comma separated list (${BUILTIN_SKILL_IDS.join(',')})`)
+    .option(
+      '--allow-all-users',
+      'Every server member can use the bot (role "no-kimaki" still denies; provider login stays admin-only)',
+    )
+    .option(
+      '--voice <name>',
+      'Voice of voice calls, saved for later starts (e.g. cove, juniper, sol). "default" resets it',
+    )
+    .option(
+      '--disable-skills <list>',
+      `Built-in Kimaki skills to turn off: "all" or a comma separated list (${BUILTIN_SKILL_IDS.join(',')})`,
+    )
     .option('--no-analytics', 'Disable anonymous usage analytics (same as KIMAKI_STRADA_ENABLED=0)')
     .option('--if-not-running', 'Start only if no bot runs; never stop the running one (used by autostart)')
     .action(async (options) => {
@@ -107,7 +120,15 @@ export function registerStartCommand(cli: Goke) {
       const [
         { startBot },
         { ensureOpencode, kimakiShellCommand, runOnboarding, startCaffeinate },
-        { emitEvent, gatewayCredentials, gatewayUrlsFromEnv, installUrlFor, readSavedCredentials, resolveCredentials, restApiUrl },
+        {
+          emitEvent,
+          gatewayCredentials,
+          gatewayUrlsFromEnv,
+          installUrlFor,
+          readSavedCredentials,
+          resolveCredentials,
+          restApiUrl,
+        },
         { openDb },
         { createAnalytics },
         { opencodeConfigDir, opencodeDbFile },
@@ -126,7 +147,8 @@ export function registerStartCommand(cli: Goke) {
       // Non-TTY hosts get the failure as an `error` event too (programmatic onboarding).
       // Explicit type: TS narrows after a `never` call only for annotated consts.
       const failStartup: (error: Error, installUrl?: string) => never = (error, installUrl) => {
-        if (!process.stdin.isTTY) emitEvent({ type: 'error', message: error.message, ...(installUrl && { install_url: installUrl }) })
+        if (!process.stdin.isTTY)
+          emitEvent({ type: 'error', message: error.message, ...(installUrl && { install_url: installUrl }) })
         fail(error)
       }
       const dataDir = dataDirOrDefault(options.dataDir)
@@ -152,15 +174,23 @@ export function registerStartCommand(cli: Goke) {
         await opened.close()
         if (credentials instanceof Error) fail(credentials)
         if (!credentials) fail(new Error('No bot configured yet. Run kimaki first, or pass --gateway.'))
-        process.stdout.write(`${installUrlFor({ credentials, website: urls.website, callbackUrl: options.gatewayCallbackUrl })}\n`)
-        if (credentials.mode === 'gateway') process.stderr.write('This URL contains your client credentials. Do not share it.\n')
+        process.stdout.write(
+          `${installUrlFor({ credentials, website: urls.website, callbackUrl: options.gatewayCallbackUrl })}\n`,
+        )
+        if (credentials.mode === 'gateway')
+          process.stderr.write('This URL contains your client credentials. Do not share it.\n')
         return
       }
 
       // Stops a running bot of this port (V1 or V2) before the migration and
       // onboarding, which must not run while it still writes. Before the log
       // reset, so the stopped bot (or the one --if-not-running leaves running) keeps its kimaki.log.
-      const lock = await startLockServer({ port: Number(process.env['KIMAKI_LOCK_PORT'] || DEFAULT_LOCK_PORT), dataDir, supervised: true, evict: !options.ifNotRunning })
+      const lock = await startLockServer({
+        port: Number(process.env['KIMAKI_LOCK_PORT'] || DEFAULT_LOCK_PORT),
+        dataDir,
+        supervised: true,
+        evict: !options.ifNotRunning,
+      })
       if (lock instanceof Error) {
         // Another bot won the race after the plugin's health check.
         if (options.ifNotRunning && lock.cause instanceof Error && Reflect.get(lock.cause, 'code') === 'EADDRINUSE') {
@@ -192,11 +222,15 @@ export function registerStartCommand(cli: Goke) {
         callbackUrl: options.gatewayCallbackUrl,
       })
       // Saved in SQLite, so restarts, crashes and autostart keep it without the flag.
-      const savedVoice = resolved instanceof Error || voice === undefined ? undefined : await saveVoiceCallVoice({ db: opened.db, appId: resolved.credentials.appId, voice })
+      const savedVoice =
+        resolved instanceof Error || voice === undefined
+          ? undefined
+          : await saveVoiceCallVoice({ db: opened.db, appId: resolved.credentials.appId, voice })
       await opened.close()
       if (resolved instanceof Error) failStartup(resolved)
       if (savedVoice instanceof Error) failStartup(savedVoice)
-      if (voice !== undefined) logger.log(`voice calls use ${voice === null ? 'the default voice' : `the voice ${voice}`}`)
+      if (voice !== undefined)
+        logger.log(`voice calls use ${voice === null ? 'the default voice' : `the voice ${voice}`}`)
       const { credentials, install } = resolved
       const installUrl = installUrlFor({ credentials, website: urls.website, callbackUrl: options.gatewayCallbackUrl })
       // The agent calls this same install. Prefer the built dist entry, so agent
@@ -235,35 +269,56 @@ export function registerStartCommand(cli: Goke) {
       process.once('disconnect', shutdown)
 
       const gateway = credentials.mode === 'gateway'
-      const onboarded = await runOnboarding({ bot, dataDir, guildId: options.guild ?? install?.guildId, installUrl, kimaki, gateway, installerId: install?.installerId, machine })
+      const onboarded = await runOnboarding({
+        bot,
+        dataDir,
+        guildId: options.guild ?? install?.guildId,
+        installUrl,
+        kimaki,
+        gateway,
+        installerId: install?.installerId,
+        machine,
+      })
       // The bot keeps running; the next start retries onboarding.
       if (onboarded instanceof Error) {
         logger.error(`onboarding failed`, onboarded)
-        if (!process.stdin.isTTY) emitEvent({ type: 'error', message: `Onboarding failed: ${onboarded.message}. The bot is running; restart kimaki to retry.` })
+        if (!process.stdin.isTTY)
+          emitEvent({
+            type: 'error',
+            message: `Onboarding failed: ${onboarded.message}. The bot is running; restart kimaki to retry.`,
+          })
         return
       }
-      if (onboarded) process.stderr.write(`Onboarding thread: https://discord.com/channels/${onboarded.guildId}/${onboarded.threadId}\n`)
+      if (onboarded)
+        process.stderr.write(
+          `Onboarding thread: https://discord.com/channels/${onboarded.guildId}/${onboarded.threadId}\n`,
+        )
       const voiceChannels = await ensureVoiceChannels(bot, { machine })
       if (voiceChannels instanceof Error) logger.warn('cannot create the Kimaki voice channel', voiceChannels)
       // Only the default port: the plugin checks that one. Runtime flags only;
       // credentials, onboarding and --voice are saved in SQLite.
       if (lock.port === DEFAULT_LOCK_PORT) {
-        const autostart = await writeAutostartScript({ dataDir, args: [
-          ...(options.worktrees ? ['--worktrees'] : []),
-          ...(options.allowAllUsers ? ['--allow-all-users'] : []),
-          ...(options.disableSkills ? ['--disable-skills', options.disableSkills] : []),
-          ...(options.noAnalytics ? ['--no-analytics'] : []),
-          ...(options.machineName ? ['--machine-name', options.machineName] : []),
-        ] })
+        const autostart = await writeAutostartScript({
+          dataDir,
+          args: [
+            ...(options.worktrees ? ['--worktrees'] : []),
+            ...(options.allowAllUsers ? ['--allow-all-users'] : []),
+            ...(options.disableSkills ? ['--disable-skills', options.disableSkills] : []),
+            ...(options.noAnalytics ? ['--no-analytics'] : []),
+            ...(options.machineName ? ['--machine-name', options.machineName] : []),
+          ],
+        })
         if (autostart instanceof Error) logger.warn('cannot write the autostart script', autostart)
       }
-      if (!process.stdin.isTTY) emitEvent({ type: 'ready', app_id: credentials.appId, guild_ids: [...bot.discord.guilds.cache.keys()] })
+      if (!process.stdin.isTTY)
+        emitEvent({ type: 'ready', app_id: credentials.appId, guild_ids: [...bot.discord.guilds.cache.keys()] })
     })
 }
 
 // login, login credential: OpenCode provider credentials through the bot.
 export function registerLoginCommands(cli: Goke) {
-  cli.command('login <provider>', 'Connect a provider using OpenCode integration credentials')
+  cli
+    .command('login <provider>', 'Connect a provider using OpenCode integration credentials')
     .option('--data-dir <path>', DATA_DIR_HELP)
     .option('--key <key>', 'API key to store in OpenCode')
     .option('--method <id>', 'OAuth method ID; without flags, list login methods')
@@ -271,17 +326,31 @@ export function registerLoginCommands(cli: Goke) {
     .option('--code <code>', 'Authorization code for the attempt')
     .option('--cancel', 'Cancel the native OAuth attempt')
     .action(async (provider, options) => {
-      await action({ route: 'login', dataDir: options.dataDir, input: {
-        provider, key: options.key, method: options.method, attempt: options.attempt, code: options.code, ...(options.cancel && { operation: 'cancel' }),
-      } })
+      await action({
+        route: 'login',
+        dataDir: options.dataDir,
+        input: {
+          provider,
+          key: options.key,
+          method: options.method,
+          attempt: options.attempt,
+          code: options.code,
+          ...(options.cancel && { operation: 'cancel' }),
+        },
+      })
     })
 
-  cli.command('login credential <id>', 'Activate, remove, or label an OpenCode credential')
+  cli
+    .command('login credential <id>', 'Activate, remove, or label an OpenCode credential')
     .option('--data-dir <path>', DATA_DIR_HELP)
     .option('--operation <name>', 'activate | remove | label')
     .option('--label <text>', 'Credential label')
     .action(async (id, options) => {
-      await action({ route: 'credential', dataDir: options.dataDir, input: { id, operation: options.operation ?? 'activate', label: options.label } })
+      await action({
+        route: 'credential',
+        dataDir: options.dataDir,
+        input: { id, operation: options.operation ?? 'activate', label: options.label },
+      })
     })
 }
 
@@ -300,7 +369,8 @@ async function storedApiKeys(dataDir: string): Promise<BotApiKeyRow | null> {
 }
 
 export function registerToolCommands(cli: Goke) {
-  cli.command('tts [text]', 'Text to speech with OpenAI or Gemini. Reads stdin if no text is given')
+  cli
+    .command('tts [text]', 'Text to speech with OpenAI or Gemini. Reads stdin if no text is given')
     .option('--data-dir <path>', DATA_DIR_HELP)
     .option('-o, --output <path>', 'Output file (default: speech.mp3 or speech.wav)')
     .option('-p, --provider <name>', 'openai | gemini (default: from the stored key)')
@@ -312,14 +382,24 @@ export function registerToolCommands(cli: Goke) {
       if (!text && !process.stdin.isTTY) for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk))
       const input = text ?? Buffer.concat(chunks).toString('utf8').trim()
       if (!input) fail(new Error('Pass the text as an argument or pipe it via stdin'))
-      if (options.provider && options.provider !== 'openai' && options.provider !== 'gemini') fail(new Error('--provider must be openai or gemini'))
+      if (options.provider && options.provider !== 'openai' && options.provider !== 'gemini')
+        fail(new Error('--provider must be openai or gemini'))
       const speed = options.speed ? Number(options.speed) : 1.25
       if (!(speed >= 0.25 && speed <= 4)) fail(new Error('--speed must be between 0.25 and 4'))
       const { audioKeyCandidates, generateSpeech } = await import('../voice.ts')
       const stored = await storedApiKeys(dataDirOrDefault(options.dataDir))
-      const key = audioKeyCandidates(stored).find((candidate) => !options.provider || candidate.provider === options.provider)
+      const key = audioKeyCandidates(stored).find(
+        (candidate) => !options.provider || candidate.provider === options.provider,
+      )
       if (!key) fail(new Error('No OpenAI or Gemini key. Set OPENAI_API_KEY or GEMINI_API_KEY'))
-      const result = await generateSpeech({ text: input, apiKey: key.apiKey, provider: key.provider, voice: options.voice, instructions: options.instructions, speed })
+      const result = await generateSpeech({
+        text: input,
+        apiKey: key.apiKey,
+        provider: key.provider,
+        voice: options.voice,
+        instructions: options.instructions,
+        speed,
+      })
       if (result instanceof Error) fail(result)
       const output = path.resolve(options.output ?? `speech.${result.mediaType === 'audio/mp3' ? 'mp3' : 'wav'}`)
       await fs.promises.writeFile(output, result.audio)
@@ -329,28 +409,36 @@ export function registerToolCommands(cli: Goke) {
 
 // status, logs, bot token / keys set / install-url
 export function registerBotCommands(cli: Goke) {
-  cli.command('status', 'Bot health: running, pid, runtime, uptime, OpenCode URL and version, guilds')
+  cli
+    .command('status', 'Bot health: running, pid, runtime, uptime, OpenCode URL and version, guilds')
     .option('--data-dir <path>', DATA_DIR_HELP)
     .option('--json', 'Output as JSON')
     .action(async (options) => {
       const result = await callBot({ dataDir: dataDirOrDefault(options.dataDir), route: 'status', input: {} })
       if (result instanceof Error) {
-        process.stdout.write(options.json ? `${JSON.stringify({ running: false, reason: result.message })}\n` : `not running: ${result.message}\n`)
+        process.stdout.write(
+          options.json
+            ? `${JSON.stringify({ running: false, reason: result.message })}\n`
+            : `not running: ${result.message}\n`,
+        )
         process.exitCode = 1
         return
       }
       const status = { running: true, ...result.data }
       if (options.json) return printJson(status)
-      process.stdout.write(dedent`
+      process.stdout.write(
+        dedent`
         running: pid ${status.pid}, up ${status.uptimeSec}s, mode ${JSON.stringify(status.mode)}
         runtime: ${status.runtime}
         opencode: ${JSON.stringify(status.opencode)}
         guilds: ${JSON.stringify(status.guilds)}
         data dir: ${JSON.stringify(status.dataDir)}
-      ` + '\n')
+      ` + '\n',
+      )
     })
 
-  cli.command('logs', 'Print the log file path. The bot resets the file on every start')
+  cli
+    .command('logs', 'Print the log file path. The bot resets the file on every start')
     .option('--data-dir <path>', DATA_DIR_HELP)
     .option('-f, --follow', 'Print the log and keep printing new lines')
     .action(async (options) => {
@@ -362,7 +450,8 @@ export function registerBotCommands(cli: Goke) {
       await followFile(file)
     })
 
-  cli.command('restart', 'Restart the running bot with the code on disk. Sessions keep running in OpenCode')
+  cli
+    .command('restart', 'Restart the running bot with the code on disk. Sessions keep running in OpenCode')
     .option('--data-dir <path>', DATA_DIR_HELP)
     .action(async (options) => {
       const result = await callBot({ dataDir: dataDirOrDefault(options.dataDir), route: 'restart', input: {} })
@@ -370,7 +459,8 @@ export function registerBotCommands(cli: Goke) {
       process.stdout.write(`Restarting bot (pid ${result.data.pid})\n`)
     })
 
-  cli.command('profile cpu', 'Record a CPU profile of the running bot and print the .cpuprofile path')
+  cli
+    .command('profile cpu', 'Record a CPU profile of the running bot and print the .cpuprofile path')
     .option('--data-dir <path>', DATA_DIR_HELP)
     .option('-d, --duration <duration>', 'How long to record, e.g. 20s or 2m (default: 20s)')
     .example('kimaki profile cpu --duration 30s')
@@ -382,47 +472,78 @@ export function registerBotCommands(cli: Goke) {
       process.once('SIGINT', () => controller.abort())
       const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(durationMs + 30_000)])
       process.stderr.write(`Recording for ${options.duration ?? '20s'}. Press Ctrl+C to stop early.\n`)
-      const result = await callBot({ dataDir: dataDirOrDefault(options.dataDir), route: 'profile.cpu', input: { durationMs }, signal })
-      if (result instanceof Error) fail(controller.signal.aborted ? new Error('Stopped early. The bot writes the profile to <data dir>/profiles/') : result)
+      const result = await callBot({
+        dataDir: dataDirOrDefault(options.dataDir),
+        route: 'profile.cpu',
+        input: { durationMs },
+        signal,
+      })
+      if (result instanceof Error)
+        fail(
+          controller.signal.aborted
+            ? new Error('Stopped early. The bot writes the profile to <data dir>/profiles/')
+            : result,
+        )
       process.stdout.write(`${result.data.path}\n`)
     })
 
-  cli.command('profile heap', 'Write a heap snapshot of the running bot and print the .heapsnapshot path')
+  cli
+    .command('profile heap', 'Write a heap snapshot of the running bot and print the .heapsnapshot path')
     .option('--data-dir <path>', DATA_DIR_HELP)
     .action(async (options) => {
-      const result = await callBot({ dataDir: dataDirOrDefault(options.dataDir), route: 'profile.heap', input: {}, signal: AbortSignal.timeout(300_000) })
+      const result = await callBot({
+        dataDir: dataDirOrDefault(options.dataDir),
+        route: 'profile.heap',
+        input: {},
+        signal: AbortSignal.timeout(300_000),
+      })
       if (result instanceof Error) fail(result)
       process.stdout.write(`${result.data.path}\n`)
     })
 
-  cli.command('bot token', 'Print saved bot credentials for automation')
+  cli
+    .command('bot token', 'Print saved bot credentials for automation')
     .option('--data-dir <path>', DATA_DIR_HELP)
     .action(async (options) => process.stdout.write(`${(await discordApi(options.dataDir)).credentials.token}\n`))
 
-  cli.command('bot keys set', 'Store OpenAI or Gemini API keys for voice transcription and kimaki tts')
+  cli
+    .command('bot keys set', 'Store OpenAI or Gemini API keys for voice transcription and kimaki tts')
     .option('--data-dir <path>', DATA_DIR_HELP)
     .option('--openai <key>', 'OpenAI API key')
     .option('--gemini <key>', 'Gemini API key')
     .action(async (options) => {
-      const [{ readSavedCredentials }, { saveAudioKeys }] = await Promise.all([import('../credentials.ts'), import('../voice.ts')])
+      const [{ readSavedCredentials }, { saveAudioKeys }] = await Promise.all([
+        import('../credentials.ts'),
+        import('../voice.ts'),
+      ])
       const opened = await openCliDb(options.dataDir)
       const result = await (async () => {
         const credentials = await readSavedCredentials({ db: opened.db })
         if (credentials instanceof Error) return credentials
         if (!credentials) return new Error('No saved bot credentials. Start kimaki once to onboard.')
-        return saveAudioKeys({ db: opened.db, token: credentials.token, openai: options.openai, gemini: options.gemini })
+        return saveAudioKeys({
+          db: opened.db,
+          token: credentials.token,
+          openai: options.openai,
+          gemini: options.gemini,
+        })
       })()
       await opened.close()
       if (result instanceof Error) fail(result)
-      process.stdout.write(`Saved ${[options.openai && 'OpenAI', options.gemini && 'Gemini'].filter(Boolean).join(' and ')} API key\n`)
+      process.stdout.write(
+        `Saved ${[options.openai && 'OpenAI', options.gemini && 'Gemini'].filter(Boolean).join(' and ')} API key\n`,
+      )
     })
 
-  cli.command('bot install-url', 'Print the Discord bot install URL')
+  cli
+    .command('bot install-url', 'Print the Discord bot install URL')
     .option('--data-dir <path>', DATA_DIR_HELP)
     .option('--gateway-callback-url <url>', 'Gateway only: redirect here after the install')
     .action(async (options) => {
       const { installUrlFor, gatewayUrlsFromEnv } = await import('../credentials.ts')
       const { credentials } = await discordApi(options.dataDir)
-      process.stdout.write(`${installUrlFor({ credentials, website: gatewayUrlsFromEnv().website, callbackUrl: options.gatewayCallbackUrl })}\n`)
+      process.stdout.write(
+        `${installUrlFor({ credentials, website: gatewayUrlsFromEnv().website, callbackUrl: options.gatewayCallbackUrl })}\n`,
+      )
     })
 }

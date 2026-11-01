@@ -301,7 +301,9 @@ test('code inside a list is lifted after its item, headings deeper than 3 are cl
 })
 
 test('3000-char code block splits into valid fences under 2000 chars', () => {
-  const code = Array.from({ length: 100 }, (_, index) => `console.log("line ${index} with some padding text")`).join('\n')
+  const code = Array.from({ length: 100 }, (_, index) => `console.log("line ${index} with some padding text")`).join(
+    '\n',
+  )
   const text = `Intro paragraph.\n\n\`\`\`ts\n${code}\n\`\`\`\n\nOutro.`
   const segments = renderMarkdown(text)
   expect(
@@ -362,7 +364,8 @@ test('backticks inside a code block keep the original fence', () => {
 test('long paragraph splits by sentences, tight paragraph-list spacing is kept', () => {
   const sentence = 'This sentence is long enough to need a few of them before the limit is reached. '
   const text = `Steps:\n- one\n- two\n\n${sentence.repeat(30)}`
-  expect(renderMarkdown(text, { limit: 500 }).map((segment) => segment.kind === 'text' && segment.markdown.length)).toMatchInlineSnapshot(`
+  expect(renderMarkdown(text, { limit: 500 }).map((segment) => segment.kind === 'text' && segment.markdown.length))
+    .toMatchInlineSnapshot(`
     [
       499,
       479,

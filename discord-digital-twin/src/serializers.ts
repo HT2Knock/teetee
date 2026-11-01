@@ -12,13 +12,7 @@
 // For enum bitfield "zero" values (no flags set), we use a small helper
 // that keeps the cast localized to one place.
 
-import {
-  GuildMemberFlags,
-  GuildSystemChannelFlags,
-  Locale,
-  RoleFlags,
-  ThreadMemberFlags,
-} from 'discord-api-types/v10'
+import { GuildMemberFlags, GuildSystemChannelFlags, Locale, RoleFlags, ThreadMemberFlags } from 'discord-api-types/v10'
 import type {
   APIUser,
   APIGuild,
@@ -29,15 +23,7 @@ import type {
   APIThreadMember,
   GuildFeature,
 } from 'discord-api-types/v10'
-import type {
-  User,
-  Guild,
-  Channel,
-  Message,
-  GuildMember,
-  Role,
-  ThreadMember,
-} from './generated/client.js'
+import type { User, Guild, Channel, Message, GuildMember, Role, ThreadMember } from './generated/client.js'
 
 // Discord bitfield enums don't include 0 as a member, but 0 is a valid
 // value meaning "no flags set". This helper keeps the cast in one place.
@@ -88,8 +74,7 @@ export function channelToAPI(channel: Channel): APIChannel {
   // We build the shape generically because the concrete variant is only
   // known at runtime. The `as APIChannel` cast is justified -- it's a
   // single-hop cast on an object that has all the fields discord.js reads.
-  const isThread =
-    channel.type === 10 || channel.type === 11 || channel.type === 12
+  const isThread = channel.type === 10 || channel.type === 11 || channel.type === 12
 
   const base = {
     id: channel.id,
@@ -110,9 +95,7 @@ export function channelToAPI(channel: Channel): APIChannel {
           thread_metadata: {
             archived: channel.archived,
             auto_archive_duration: channel.autoArchiveDuration,
-            archive_timestamp: (
-              channel.archiveTimestamp ?? channel.createdAt
-            ).toISOString().replace('Z', '+00:00'),
+            archive_timestamp: (channel.archiveTimestamp ?? channel.createdAt).toISOString().replace('Z', '+00:00'),
             locked: channel.locked,
           },
         }
@@ -122,9 +105,7 @@ export function channelToAPI(channel: Channel): APIChannel {
   return base as APIChannel
 }
 
-export function memberToAPI(
-  member: GuildMember & { user: User },
-): APIGuildMember {
+export function memberToAPI(member: GuildMember & { user: User }): APIGuildMember {
   return {
     user: userToAPI(member.user),
     nick: member.nick ?? undefined,
@@ -202,9 +183,7 @@ export function messageToAPI(
     pinned: message.pinned,
     type: message.type,
     ...(message.flags ? { flags: message.flags } : {}),
-    ...(message.components && message.components !== '[]'
-      ? { components: JSON.parse(message.components) }
-      : {}),
+    ...(message.components && message.components !== '[]' ? { components: JSON.parse(message.components) } : {}),
     ...(guildId ? { guild_id: guildId } : {}),
     ...(member
       ? (() => {
@@ -215,9 +194,7 @@ export function messageToAPI(
     ...(message.nonce ? { nonce: message.nonce } : {}),
     ...(message.webhookId ? { webhook_id: message.webhookId } : {}),
     ...(message.applicationId ? { application_id: message.applicationId } : {}),
-    ...(message.messageReference
-      ? { message_reference: JSON.parse(message.messageReference) }
-      : {}),
+    ...(message.messageReference ? { message_reference: JSON.parse(message.messageReference) } : {}),
   }
 
   return base as APIMessage

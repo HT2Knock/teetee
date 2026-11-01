@@ -34,11 +34,7 @@ describe('threads and channels', () => {
     testUserId = users[0]!.id
 
     client = new Client({
-      intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-      ],
+      intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
       rest: {
         api: discord.restUrl,
         version: '10',
@@ -70,9 +66,7 @@ describe('threads and channels', () => {
 
   test('create thread from message via startThread()', async () => {
     const guild = client.guilds.cache.first()!
-    const channel = guild.channels.cache.find(
-      (c) => c.name === 'general',
-    ) as TextChannel
+    const channel = guild.channels.cache.find((c) => c.name === 'general') as TextChannel
 
     const message = await channel.send('Thread starter message')
 
@@ -158,9 +152,7 @@ describe('threads and channels', () => {
 
   test('create standalone thread via channel.threads.create()', async () => {
     const guild = client.guilds.cache.first()!
-    const channel = guild.channels.cache.find(
-      (c) => c.name === 'general',
-    ) as TextChannel
+    const channel = guild.channels.cache.find((c) => c.name === 'general') as TextChannel
 
     const thread = await channel.threads.create({
       name: 'standalone-thread',

@@ -61,7 +61,8 @@ const text = (key: string) => {
 const oneOf = <const T extends readonly [string, ...string[]]>(values: T, error: string) =>
   z.string({ error }).pipe(z.enum(values, { error }))
 
-const routineId = z.number({ error: 'Routine ID must be a positive integer' })
+const routineId = z
+  .number({ error: 'Routine ID must be a positive integer' })
   .refine((id) => Number.isSafeInteger(id) && id >= 1, { error: 'Routine ID must be a positive integer' })
 
 // --- `kimaki send` (also remote envelopes in ingress.ts).
@@ -75,7 +76,12 @@ const sendFields = {
   agent: text('agent').optional(),
   model: text('model').optional(),
   // One ID or several (`--user` is repeatable); every user is added to the thread, the first is the author.
-  user: z.union([text('user').transform((id) => [id]), z.array(text('user'), { error: 'user must be a string or a list of strings' })]).optional(),
+  user: z
+    .union([
+      text('user').transform((id) => [id]),
+      z.array(text('user'), { error: 'user must be a string or a list of strings' }),
+    ])
+    .optional(),
   cwd: text('cwd').optional(),
   parentSessionId: text('parentSessionId').optional(),
   baseBranch: text('baseBranch').optional(),
@@ -84,7 +90,9 @@ const sendFields = {
   notifyOnly: z.boolean({ error: 'notifyOnly must be boolean' }).optional(),
   permissions: z.array(z.string(), { error: 'Permission rules must be strings' }).optional(),
   prompt: text('prompt'),
-  files: z.array(z.object({ uri: z.string(), name: z.string() }), { error: 'files must contain uri and name strings' }).optional(),
+  files: z
+    .array(z.object({ uri: z.string(), name: z.string() }), { error: 'files must contain uri and name strings' })
+    .optional(),
 }
 
 type SendFields = z.output<z.ZodObject<typeof sendFields>>
@@ -95,12 +103,18 @@ function checkSend(input: SendFields, ctx: z.RefinementCtx) {
     const valid = worktreeName(input.worktree)
     if (valid instanceof Error) return fail(valid.message)
   }
-  const newSessionOnly = input.cwd !== undefined || input.threadId !== undefined || input.sessionId !== undefined || input.notifyOnly === true
+  const newSessionOnly =
+    input.cwd !== undefined ||
+    input.threadId !== undefined ||
+    input.sessionId !== undefined ||
+    input.notifyOnly === true
   if (input.worktree !== undefined && newSessionOnly) {
     return fail('--worktree requires a new session; do not combine it with --cwd, --thread, --session or --notify-only')
   }
   if (input.baseBranch !== undefined && input.worktree === undefined) return fail('--base-branch requires --worktree')
-  const targets = [input.channelId, input.threadId, input.sessionId, input.project].filter((value) => value !== undefined)
+  const targets = [input.channelId, input.threadId, input.sessionId, input.project].filter(
+    (value) => value !== undefined,
+  )
   if (targets.length !== 1) return fail('Use exactly one of --channel, --thread, --session, --project')
 }
 
@@ -108,17 +122,26 @@ export const sendInput = z.object(sendFields, { error: 'Expected a send object' 
 
 export type SendInput = z.output<typeof sendInput>
 
-const sendRoute = z.object({
-  ...sendFields,
-  sendAt: z.string({ error: '--send-at must be a string' }).optional(),
-  preRun: z.string({ error: '--pre-run must be a command' }).trim().min(1, { error: '--pre-run must be a command' }).optional(),
-  allowConcurrency: z.boolean({ error: '--allow-concurrency must be boolean' }).optional(),
-}, { error: 'Expected a send object' }).superRefine((input, ctx) => {
-  checkSend(input, ctx)
-  if (input.sendAt === undefined && (input.preRun !== undefined || input.allowConcurrency !== undefined)) {
-    ctx.addIssue({ code: 'custom', message: '--pre-run and --allow-concurrency need --send-at' })
-  }
-})
+const sendRoute = z
+  .object(
+    {
+      ...sendFields,
+      sendAt: z.string({ error: '--send-at must be a string' }).optional(),
+      preRun: z
+        .string({ error: '--pre-run must be a command' })
+        .trim()
+        .min(1, { error: '--pre-run must be a command' })
+        .optional(),
+      allowConcurrency: z.boolean({ error: '--allow-concurrency must be boolean' }).optional(),
+    },
+    { error: 'Expected a send object' },
+  )
+  .superRefine((input, ctx) => {
+    checkSend(input, ctx)
+    if (input.sendAt === undefined && (input.preRun !== undefined || input.allowConcurrency !== undefined)) {
+      ctx.addIssue({ code: 'custom', message: '--pre-run and --allow-concurrency need --send-at' })
+    }
+  })
 
 // --- `kimaki channel|worktree …`: a project channel, from --channel or the directory.
 
@@ -128,7 +151,7 @@ const channelTarget = {
 }
 
 async function projectChannel(bot: Bot, input: { channelId?: string; directory?: string }) {
-  const channelId = input.channelId ?? await channelForDirectory(bot, path.resolve(input.directory ?? process.cwd()))
+  const channelId = input.channelId ?? (await channelForDirectory(bot, path.resolve(input.directory ?? process.cwd())))
   if (channelId instanceof Error) return channelId
   const project = await projectOf(bot, channelId)
   if (project instanceof Error) return project
@@ -139,27 +162,32 @@ async function projectChannel(bot: Bot, input: { channelId?: string; directory?:
 async function clearChannel(bot: Bot, { channelId, table }: { channelId: string; table: 'agent' | 'model' }) {
   // The table name is a constant of this file, never user input.
   const target = table === 'agent' ? 'channel_agents' : 'channel_models'
-  const result = await bot.db.unsafe(`DELETE FROM ${target} WHERE channel_id = ?`, [channelId])
+  const result = await bot.db
+    .unsafe(`DELETE FROM ${target} WHERE channel_id = ?`, [channelId])
     .catch((cause) => new DbError({ operation: `clear ${table}`, cause }))
   if (result instanceof Error) return result
   return { cleared: true }
 }
 
 async function clearGlobalModel(bot: Bot) {
-  const result = await bot.db`DELETE FROM global_models WHERE app_id = ${bot.appId}`
-    .catch((cause) => new DbError({ operation: 'clear global model', cause }))
+  const result = await bot.db`DELETE FROM global_models WHERE app_id = ${bot.appId}`.catch(
+    (cause) => new DbError({ operation: 'clear global model', cause }),
+  )
   if (result instanceof Error) return result
   return { cleared: true }
 }
 
 const invalidChannelValue = 'Invalid channel action or value'
 
-const worktreeOperation = z.object({
-  ...channelTarget,
-  text: text('text'),
-  targetBranch: text('targetBranch').optional(),
-  strategy: oneOf(['rebase', 'squash'], 'Use --strategy rebase or squash.').default('rebase'),
-}, { error: 'Expected action arguments' })
+const worktreeOperation = z.object(
+  {
+    ...channelTarget,
+    text: text('text'),
+    targetBranch: text('targetBranch').optional(),
+    strategy: oneOf(['rebase', 'squash'], 'Use --strategy rebase or squash.').default('rebase'),
+  },
+  { error: 'Expected action arguments' },
+)
 
 function worktreeRoute(operation: 'remove' | 'merge') {
   return route({
@@ -167,7 +195,13 @@ function worktreeRoute(operation: 'remove' | 'merge') {
     run: async (bot, input) => {
       const channelId = await projectChannel(bot, input)
       if (channelId instanceof Error) return channelId
-      return manageWorktree(bot, { channelId, directory: input.text, operation, strategy: input.strategy, targetBranch: input.targetBranch })
+      return manageWorktree(bot, {
+        channelId,
+        directory: input.text,
+        operation,
+        strategy: input.strategy,
+        targetBranch: input.targetBranch,
+      })
     },
   })
 }
@@ -183,7 +217,8 @@ function localSession(bot: Bot, input: { sessionId?: string; threadId?: string }
   const { sessionThreads, roots } = bot.store.getState()
   const threadId = input.threadId ?? (input.sessionId ? sessionThreads[input.sessionId] : undefined)
   const sessionId = threadId ? roots[threadId] : undefined
-  if (!threadId || !sessionId) return new ConfigError({ reason: 'No local session. Pass a session ID, thread ID or thread URL.' })
+  if (!threadId || !sessionId)
+    return new ConfigError({ reason: 'No local session. Pass a session ID, thread ID or thread URL.' })
   if (!bot.opencode.endpoint) return new OpenCodeUnavailableError({ reason: 'not connected' })
   return { threadId, sessionId }
 }
@@ -206,7 +241,8 @@ function sessionOf(bot: Bot, input: { sessionId?: string; threadId?: string }) {
   return root
 }
 
-const sessionInput = <T extends z.ZodRawShape>(shape: T) => z.object({ ...sessionTarget, ...shape }, { error: 'Expected action arguments' })
+const sessionInput = <T extends z.ZodRawShape>(shape: T) =>
+  z.object({ ...sessionTarget, ...shape }, { error: 'Expected action arguments' })
 
 const sessionText = sessionInput({ text: text('text') })
 
@@ -234,7 +270,8 @@ const buttonSpec = z.string().transform((value, ctx) => {
 // Snapshots can hold the bot token: owner-only files.
 async function profileFile({ dataDir, name }: { dataDir: string; name: string }): Promise<FilesystemError | string> {
   const directory = path.join(dataDir, 'profiles')
-  const created = await fs.promises.mkdir(directory, { recursive: true, mode: 0o700 })
+  const created = await fs.promises
+    .mkdir(directory, { recursive: true, mode: 0o700 })
     .catch((cause) => new FilesystemError({ operation: `mkdir ${directory}`, cause }))
   if (created instanceof Error) return created
   return path.join(directory, `${name}-${new Date().toISOString().replace(/[:.]/g, '-')}`)
@@ -244,7 +281,15 @@ async function profileFile({ dataDir, name }: { dataDir: string; name: string })
 const cpuProfile: { running: boolean } = { running: false }
 
 // Profiles for `durationMs`, or until the CLI disconnects, then writes a .cpuprofile.
-async function profileCpu({ dataDir, durationMs, signal }: { dataDir: string; durationMs: number; signal: AbortSignal }) {
+async function profileCpu({
+  dataDir,
+  durationMs,
+  signal,
+}: {
+  dataDir: string
+  durationMs: number
+  signal: AbortSignal
+}) {
   if (cpuProfile.running) return new ConfigError({ reason: 'A CPU profile is already running. Wait for it to finish.' })
   cpuProfile.running = true
   const session = new inspector.Session()
@@ -257,8 +302,10 @@ async function profileCpu({ dataDir, durationMs, signal }: { dataDir: string; du
     const file = await profileFile({ dataDir, name: 'cpu' })
     if (file instanceof Error) return file
     const target = `${file}.cpuprofile`
-    return fs.promises.writeFile(target, JSON.stringify(profile), { mode: 0o600 })
-      .then(() => ({ path: target }), (cause: Error) => new FilesystemError({ operation: `write ${target}`, cause }))
+    return fs.promises.writeFile(target, JSON.stringify(profile), { mode: 0o600 }).then(
+      () => ({ path: target }),
+      (cause: Error) => new FilesystemError({ operation: `write ${target}`, cause }),
+    )
   })().catch((cause: Error) => new FilesystemError({ operation: 'cpu profile', cause }))
   session.disconnect()
   cpuProfile.running = false
@@ -269,38 +316,57 @@ async function snapshotHeap({ dataDir }: { dataDir: string }) {
   const file = await profileFile({ dataDir, name: 'heap' })
   if (file instanceof Error) return file
   // Blocks the event loop for seconds on a large heap; that is the cost of a snapshot.
-  const written = attempt(() => v8.writeHeapSnapshot(`${file}.heapsnapshot`), (cause) => new FilesystemError({ operation: 'write heap snapshot', cause }))
+  const written = attempt(
+    () => v8.writeHeapSnapshot(`${file}.heapsnapshot`),
+    (cause) => new FilesystemError({ operation: 'write heap snapshot', cause }),
+  )
   if (written instanceof Error) return written
-  const chmod = await fs.promises.chmod(written, 0o600).catch((cause) => new FilesystemError({ operation: `chmod ${written}`, cause }))
+  const chmod = await fs.promises
+    .chmod(written, 0o600)
+    .catch((cause) => new FilesystemError({ operation: `chmod ${written}`, cause }))
   if (chmod instanceof Error) return chmod
   return { path: written }
 }
 
-const loginField = z.string({ error: 'Login fields must be non-empty strings' }).min(1, { error: 'Login fields must be non-empty strings' }).optional()
+const loginField = z
+  .string({ error: 'Login fields must be non-empty strings' })
+  .min(1, { error: 'Login fields must be non-empty strings' })
+  .optional()
 
 // `/btw` and `/queue` are `kimaki send` with the suffix that picks the mode.
-const sendMention = (suffix: 'btw' | 'queue') => route({
-  input: sessionText,
-  run: async (bot, input) => {
-    const target = localSession(bot, input)
-    if (target instanceof Error) return target
-    return send(bot, { threadId: target.threadId, prompt: `${input.text}. ${suffix}` })
-  },
-})
+const sendMention = (suffix: 'btw' | 'queue') =>
+  route({
+    input: sessionText,
+    run: async (bot, input) => {
+      const target = localSession(bot, input)
+      if (target instanceof Error) return target
+      return send(bot, { threadId: target.threadId, prompt: `${input.text}. ${suffix}` })
+    },
+  })
 
 const lockRoutes = {
   send: route({
     input: sendRoute,
     run: async (bot, { sendAt, preRun, allowConcurrency, ...input }) => {
       if (sendAt === undefined) return send(bot, input)
-      return createTask(bot, { send: input, options: { sendAt, preRun: preRun ?? null, allowConcurrency: allowConcurrency === true } })
+      return createTask(bot, {
+        send: input,
+        options: { sendAt, preRun: preRun ?? null, allowConcurrency: allowConcurrency === true },
+      })
     },
   }),
   upload: route({
-    input: z.object({
-      id: z.string({ error: 'Upload needs a session and files' }).min(1, { error: 'Upload needs a session and files' }),
-      files: z.array(z.object({ path: z.string(), name: z.string() }, { error: 'Invalid upload file' }), { error: 'Upload needs a session and files' }),
-    }, { error: 'Upload needs a session and files' }),
+    input: z.object(
+      {
+        id: z
+          .string({ error: 'Upload needs a session and files' })
+          .min(1, { error: 'Upload needs a session and files' }),
+        files: z.array(z.object({ path: z.string(), name: z.string() }, { error: 'Invalid upload file' }), {
+          error: 'Upload needs a session and files',
+        }),
+      },
+      { error: 'Upload needs a session and files' },
+    ),
     run: async (bot, input) => upload(bot, input),
   }),
   status: route({
@@ -313,7 +379,7 @@ const lockRoutes = {
         runtime: RUNTIME_NAME,
         uptimeSec: Math.round(process.uptime()),
         dataDir: bot.dataDir,
-        mode: bot.token.includes(':') ? 'gateway' as const : 'self_hosted' as const,
+        mode: bot.token.includes(':') ? ('gateway' as const) : ('self_hosted' as const),
         analytics: bot.analytics.enabled,
         opencode: { connected: bot.opencode.connected, url: endpoint?.url ?? null, version: endpoint?.version ?? null },
         guilds: [...bot.discord.guilds.cache.values()].map((guild) => ({ id: guild.id, name: guild.name })),
@@ -324,7 +390,10 @@ const lockRoutes = {
     input: z.object({}),
     run: async (bot) => {
       if (!bot.supervised) {
-        return new ConfigError({ reason: 'This bot was not started by the `kimaki` command, so nothing would start it again. Stop it and start it yourself.' })
+        return new ConfigError({
+          reason:
+            'This bot was not started by the `kimaki` command, so nothing would start it again. Stop it and start it yourself.',
+        })
       }
       // After the response: the SIGTERM handler stops the bot and exits with this code.
       process.exitCode = RESTART_EXIT_CODE
@@ -333,7 +402,13 @@ const lockRoutes = {
     },
   }),
   'profile.cpu': route({
-    input: z.object({ durationMs: z.number({ error: 'durationMs must be a number' }).int().min(100).max(600_000, { error: 'A CPU profile can run at most 10 minutes' }) }),
+    input: z.object({
+      durationMs: z
+        .number({ error: 'durationMs must be a number' })
+        .int()
+        .min(100)
+        .max(600_000, { error: 'A CPU profile can run at most 10 minutes' }),
+    }),
     run: async (bot, input, signal) => profileCpu({ dataDir: bot.dataDir, durationMs: input.durationMs, signal }),
   }),
   'profile.heap': route({
@@ -341,12 +416,15 @@ const lockRoutes = {
     run: async (bot) => snapshotHeap({ dataDir: bot.dataDir }),
   }),
   sleep: route({
-    input: z.object({
-      ...sessionTarget,
-      duration: z.string({ error: 'Sleep fields must be strings' }).optional(),
-      until: z.string({ error: 'Sleep fields must be strings' }).optional(),
-      reason: z.string({ error: 'Sleep fields must be strings' }).optional(),
-    }, { error: 'Expected a sleep object' }),
+    input: z.object(
+      {
+        ...sessionTarget,
+        duration: z.string({ error: 'Sleep fields must be strings' }).optional(),
+        until: z.string({ error: 'Sleep fields must be strings' }).optional(),
+        reason: z.string({ error: 'Sleep fields must be strings' }).optional(),
+      },
+      { error: 'Expected a sleep object' },
+    ),
     run: async (bot, { threadId, ...input }) => {
       const sessionId = sessionOf(bot, { ...input, threadId })
       if (sessionId instanceof Error) return sessionId
@@ -355,22 +433,31 @@ const lockRoutes = {
   }),
   // Routines keep the `task.*` route names so older CLIs and bots still talk to each other.
   'task.edit': route({
-    input: z.object({
-      id: routineId,
-      prompt: z.string({ error: 'prompt must be a string' }).trim().optional(),
-      sendAt: z.string({ error: 'sendAt must be a string' }).trim().optional(),
-      agent: z.string({ error: 'agent must be a string' }).trim().optional(),
-      model: z.string({ error: 'model must be a string' }).trim().optional(),
-      preRun: z.string({ error: 'preRun must be a string' }).trim().optional(),
-      user: z.string({ error: 'user must be a string' }).trim().optional(),
-      allowConcurrency: z.boolean({ error: 'allowConcurrency must be boolean' }).optional(),
-    }, { error: 'Expected a routine edit object' }).superRefine((edit, ctx) => {
-      if (Object.entries(edit).every(([key, value]) => key === 'id' || value === undefined)) {
-        ctx.addIssue({ code: 'custom', message: 'Pass at least one of --prompt, --send-at, --agent, --model, --pre-run, --allow-concurrency, --user' })
-        return
-      }
-      if (edit.prompt === '') ctx.addIssue({ code: 'custom', message: '--prompt cannot be empty' })
-    }),
+    input: z
+      .object(
+        {
+          id: routineId,
+          prompt: z.string({ error: 'prompt must be a string' }).trim().optional(),
+          sendAt: z.string({ error: 'sendAt must be a string' }).trim().optional(),
+          agent: z.string({ error: 'agent must be a string' }).trim().optional(),
+          model: z.string({ error: 'model must be a string' }).trim().optional(),
+          preRun: z.string({ error: 'preRun must be a string' }).trim().optional(),
+          user: z.string({ error: 'user must be a string' }).trim().optional(),
+          allowConcurrency: z.boolean({ error: 'allowConcurrency must be boolean' }).optional(),
+        },
+        { error: 'Expected a routine edit object' },
+      )
+      .superRefine((edit, ctx) => {
+        if (Object.entries(edit).every(([key, value]) => key === 'id' || value === undefined)) {
+          ctx.addIssue({
+            code: 'custom',
+            message:
+              'Pass at least one of --prompt, --send-at, --agent, --model, --pre-run, --allow-concurrency, --user',
+          })
+          return
+        }
+        if (edit.prompt === '') ctx.addIssue({ code: 'custom', message: '--prompt cannot be empty' })
+      }),
     run: async (bot, input) => editTask(bot, input),
   }),
   'task.delete': route({
@@ -382,12 +469,16 @@ const lockRoutes = {
     run: async (bot, { id }) => runTaskNow(bot, id),
   }),
   buttons: route({
-    input: z.object({
-      ...agentUiFields,
-      buttons: z.array(buttonSpec, { error: 'Use 1 to 3 --button flags' })
-        .min(1, { error: 'Use 1 to 3 --button flags' })
-        .max(3, { error: 'Use 1 to 3 --button flags' }),
-    }, { error: 'Expected agent UI input' }),
+    input: z.object(
+      {
+        ...agentUiFields,
+        buttons: z
+          .array(buttonSpec, { error: 'Use 1 to 3 --button flags' })
+          .min(1, { error: 'Use 1 to 3 --button flags' })
+          .max(3, { error: 'Use 1 to 3 --button flags' }),
+      },
+      { error: 'Expected agent UI input' },
+    ),
     run: async (bot, { buttons, threadId, ...input }, signal) => {
       const sessionId = sessionOf(bot, { ...input, threadId })
       if (sessionId instanceof Error) return sessionId
@@ -395,12 +486,22 @@ const lockRoutes = {
     },
   }),
   'upload-request': route({
-    input: z.object({
-      ...agentUiFields,
-      prompt: z.string({ error: 'Use --prompt and --max-files 1 to 10' }).min(1, { error: 'Use --prompt and --max-files 1 to 10' }).max(2000, { error: 'Use --prompt and --max-files 1 to 10' }),
-      maxFiles: z.number({ error: 'Use --prompt and --max-files 1 to 10' }).int({ error: 'Use --prompt and --max-files 1 to 10' })
-        .min(1, { error: 'Use --prompt and --max-files 1 to 10' }).max(10, { error: 'Use --prompt and --max-files 1 to 10' }).default(5),
-    }, { error: 'Expected agent UI input' }),
+    input: z.object(
+      {
+        ...agentUiFields,
+        prompt: z
+          .string({ error: 'Use --prompt and --max-files 1 to 10' })
+          .min(1, { error: 'Use --prompt and --max-files 1 to 10' })
+          .max(2000, { error: 'Use --prompt and --max-files 1 to 10' }),
+        maxFiles: z
+          .number({ error: 'Use --prompt and --max-files 1 to 10' })
+          .int({ error: 'Use --prompt and --max-files 1 to 10' })
+          .min(1, { error: 'Use --prompt and --max-files 1 to 10' })
+          .max(10, { error: 'Use --prompt and --max-files 1 to 10' })
+          .default(5),
+      },
+      { error: 'Expected agent UI input' },
+    ),
     run: async (bot, { prompt, maxFiles, threadId, ...input }, signal) => {
       const sessionId = sessionOf(bot, { ...input, threadId })
       if (sessionId instanceof Error) return sessionId
@@ -408,27 +509,36 @@ const lockRoutes = {
     },
   }),
   login: route({
-    input: z.object({
-      provider: z.string({ error: 'Provider is required' }).min(1, { error: 'Provider is required' }),
-      key: loginField,
-      method: loginField,
-      attempt: loginField,
-      code: loginField,
-      operation: loginField,
-    }, { error: 'Expected login object' }),
+    input: z.object(
+      {
+        provider: z.string({ error: 'Provider is required' }).min(1, { error: 'Provider is required' }),
+        key: loginField,
+        method: loginField,
+        attempt: loginField,
+        code: loginField,
+        operation: loginField,
+      },
+      { error: 'Expected login object' },
+    ),
     run: async (bot, input) => loginCli(bot, input),
   }),
   credential: route({
-    input: z.object({
-      id: z.string({ error: 'Invalid credential action' }).min(1, { error: 'Invalid credential action' }),
-      operation: oneOf(['activate', 'remove', 'label'], 'Invalid credential action'),
-      label: z.string({ error: 'Invalid credential action' }).optional(),
-    }, { error: 'Expected login object' }),
+    input: z.object(
+      {
+        id: z.string({ error: 'Invalid credential action' }).min(1, { error: 'Invalid credential action' }),
+        operation: oneOf(['activate', 'remove', 'label'], 'Invalid credential action'),
+        label: z.string({ error: 'Invalid credential action' }).optional(),
+      },
+      { error: 'Expected login object' },
+    ),
     run: async (bot, input) => credential(bot, input),
   }),
 
   'channel.worktrees': route({
-    input: z.object({ ...channelTarget, text: oneOf(['on', 'off'], invalidChannelValue) }, { error: 'Expected action arguments' }),
+    input: z.object(
+      { ...channelTarget, text: oneOf(['on', 'off'], invalidChannelValue) },
+      { error: 'Expected action arguments' },
+    ),
     run: async (bot, input) => {
       const channelId = await projectChannel(bot, input)
       if (channelId instanceof Error) return channelId
@@ -436,7 +546,11 @@ const lockRoutes = {
     },
   }),
   'channel.agent': route({
-    input: z.object({ ...channelTarget, agent: text('agent').optional(), clear: z.boolean().optional() }, { error: 'Expected action arguments' })
+    input: z
+      .object(
+        { ...channelTarget, agent: text('agent').optional(), clear: z.boolean().optional() },
+        { error: 'Expected action arguments' },
+      )
       .refine((input) => input.clear === true || input.agent !== undefined, { error: invalidChannelValue }),
     run: async (bot, input) => {
       const channelId = await projectChannel(bot, input)
@@ -449,7 +563,16 @@ const lockRoutes = {
     },
   }),
   'channel.model': route({
-    input: z.object({ ...channelTarget, model: text('model').optional(), variant: text('variant').optional(), clear: z.boolean().optional() }, { error: 'Expected action arguments' })
+    input: z
+      .object(
+        {
+          ...channelTarget,
+          model: text('model').optional(),
+          variant: text('variant').optional(),
+          clear: z.boolean().optional(),
+        },
+        { error: 'Expected action arguments' },
+      )
       .refine((input) => input.clear === true || input.model !== undefined, { error: invalidChannelValue }),
     run: async (bot, input) => {
       const channelId = await projectChannel(bot, input)
@@ -463,7 +586,11 @@ const lockRoutes = {
     },
   }),
   'global.model': route({
-    input: z.object({ model: text('model').optional(), variant: text('variant').optional(), clear: z.boolean().optional() }, { error: 'Expected action arguments' })
+    input: z
+      .object(
+        { model: text('model').optional(), variant: text('variant').optional(), clear: z.boolean().optional() },
+        { error: 'Expected action arguments' },
+      )
       .refine((input) => input.clear === true || input.model !== undefined, { error: invalidChannelValue }),
     run: async (bot, input) => {
       if (input.clear || !input.model) return clearGlobalModel(bot)
@@ -475,7 +602,10 @@ const lockRoutes = {
     },
   }),
   'channel.verbosity': route({
-    input: z.object({ ...channelTarget, text: oneOf(['text', 'tools'], invalidChannelValue) }, { error: 'Expected action arguments' }),
+    input: z.object(
+      { ...channelTarget, text: oneOf(['text', 'tools'], invalidChannelValue) },
+      { error: 'Expected action arguments' },
+    ),
     run: async (bot, input) => {
       const channelId = await projectChannel(bot, input)
       if (channelId instanceof Error) return channelId
@@ -493,7 +623,10 @@ const lockRoutes = {
     },
   }),
   'worktree.create': route({
-    input: z.object({ ...channelTarget, name: text('name').optional(), baseBranch: text('baseBranch').optional() }, { error: 'Expected action arguments' }),
+    input: z.object(
+      { ...channelTarget, name: text('name').optional(), baseBranch: text('baseBranch').optional() },
+      { error: 'Expected action arguments' },
+    ),
     run: async (bot, input) => {
       const channelId = await projectChannel(bot, input)
       if (channelId instanceof Error) return channelId
@@ -504,9 +637,12 @@ const lockRoutes = {
   'worktree.merge': worktreeRoute('merge'),
 
   'session.resume': route({
-    input: z.object({ sessionId: text('sessionId'), channelId: text('channelId').optional() }, { error: 'Expected action arguments' }),
+    input: z.object(
+      { sessionId: text('sessionId'), channelId: text('channelId').optional() },
+      { error: 'Expected action arguments' },
+    ),
     run: async (bot, input) => {
-      const channelId = input.channelId ?? await channelForSession(bot, input.sessionId)
+      const channelId = input.channelId ?? (await channelForSession(bot, input.sessionId))
       if (channelId instanceof Error) return channelId
       return resume(bot, { channelId, sessionId: input.sessionId, author: cliAuthor(bot) })
     },
@@ -525,9 +661,13 @@ const lockRoutes = {
       const target = await localThread(bot, input)
       if (target instanceof Error) return target
       const title = input.text
-      const renamed = await oc(bot, 'session.update', (client) => client.session.update({ sessionID: target.sessionId, title }))
+      const renamed = await oc(bot, 'session.update', (client) =>
+        client.session.update({ sessionID: target.sessionId, title }),
+      )
       if (renamed instanceof Error) return renamed
-      const updated = await target.thread.setName(title.slice(0, 100)).catch((cause) => new DiscordError({ operation: 'rename thread', cause }))
+      const updated = await target.thread
+        .setName(title.slice(0, 100))
+        .catch((cause) => new DiscordError({ operation: 'rename thread', cause }))
       if (updated instanceof Error) return updated
       return { title }
     },
@@ -537,7 +677,9 @@ const lockRoutes = {
     run: async (bot, input) => {
       const target = await localThread(bot, input)
       if (target instanceof Error) return target
-      const archived = await target.thread.setArchived(true).catch((cause) => new DiscordError({ operation: 'archive thread', cause }))
+      const archived = await target.thread
+        .setArchived(true)
+        .catch((cause) => new DiscordError({ operation: 'archive thread', cause }))
       if (archived instanceof Error) return archived
       return { archived: true }
     },
@@ -556,7 +698,13 @@ const lockRoutes = {
       const target = await localThread(bot, input)
       if (target instanceof Error) return target
       // A child session ID forks that child, not the root.
-      return fork(bot, { sourceThread: target.thread, sessionId: input.sessionId ?? target.sessionId, before: input.before, name: input.name, author: cliAuthor(bot) })
+      return fork(bot, {
+        sourceThread: target.thread,
+        sessionId: input.sessionId ?? target.sessionId,
+        before: input.before,
+        name: input.name,
+        author: cliAuthor(bot),
+      })
     },
   }),
   'session.command': route({
@@ -584,7 +732,9 @@ const lockRoutes = {
     run: async (bot, input) => {
       const target = localSession(bot, input)
       if (target instanceof Error) return target
-      const inbox = await oc(bot, 'session.inbox.list', (client) => client.session.inbox.list({ sessionID: target.sessionId }))
+      const inbox = await oc(bot, 'session.inbox.list', (client) =>
+        client.session.inbox.list({ sessionID: target.sessionId }),
+      )
       if (inbox instanceof Error) return inbox
       return inbox.filter((item) => item.delivery === 'queue')
     },
@@ -620,7 +770,10 @@ function isLockRouteName(name: string): name is LockRouteName {
 }
 
 // The lock server's one handler: `route` is the path after /kimaki/.
-export async function runLockRoute(bot: Bot, { route: name, input, signal }: { route: string; input: unknown; signal: AbortSignal }) {
+export async function runLockRoute(
+  bot: Bot,
+  { route: name, input, signal }: { route: string; input: unknown; signal: AbortSignal },
+) {
   if (!isLockRouteName(name)) return new ConfigError({ reason: `Unknown bot action: ${name}` })
   return lockRoutes[name].handle(bot, input, signal)
 }

@@ -11,8 +11,10 @@ import { loadFixture, rootSessionId } from './test/replay.ts'
 function foldFixture(file: string, { reasoning = 0 }: { reasoning?: number } = {}): AnalyticsEvent[] {
   // The recorded model reports no reasoning; add some to every step to check the total.
   const events = loadFixture(file).map((event): V2Event => {
-    if (event.type === 'session.step.ended') return { ...event, data: { ...event.data, tokens: { ...event.data.tokens, reasoning } } }
-    if (event.type === 'session.step.failed' && event.data.tokens) return { ...event, data: { ...event.data, tokens: { ...event.data.tokens, reasoning } } }
+    if (event.type === 'session.step.ended')
+      return { ...event, data: { ...event.data, tokens: { ...event.data.tokens, reasoning } } }
+    if (event.type === 'session.step.failed' && event.data.tokens)
+      return { ...event, data: { ...event.data, tokens: { ...event.data.tokens, reasoning } } }
     return event
   })
   const root = rootSessionId(events)

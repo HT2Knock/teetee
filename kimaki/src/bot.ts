@@ -87,8 +87,11 @@ export async function oc<T>(
 
 // The project row of a channel; null when the channel is not a project here.
 export async function projectOf(bot: Bot, channelId: string) {
-  const rows = await bot.db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories WHERE channel_id = ${channelId} LIMIT 1`
-    .catch((cause) => new DbError({ operation: 'read channel_directories', cause }))
+  const rows = await bot.db<
+    ChannelDirectoryRow[]
+  >`SELECT * FROM channel_directories WHERE channel_id = ${channelId} LIMIT 1`.catch(
+    (cause) => new DbError({ operation: 'read channel_directories', cause }),
+  )
   if (rows instanceof Error) return rows
   return parseFirst<ChannelDirectoryRow>('channel_directories', rows) ?? null
 }
@@ -101,7 +104,9 @@ export async function sessionDirectory(bot: Pick<Bot, 'opencode'>, sessionId: st
 }
 
 export function rootSession(bot: Bot, threadId: string): OpenCodeError | string {
-  return bot.store.getState().roots[threadId] ?? new OpenCodeError({ operation: `find the session of thread ${threadId}` })
+  return (
+    bot.store.getState().roots[threadId] ?? new OpenCodeError({ operation: `find the session of thread ${threadId}` })
+  )
 }
 
 // The thread whose root session this is; null for children and unknown sessions.
@@ -125,7 +130,8 @@ export async function textChannel(bot: Bot, channelId: string): Promise<DiscordE
     .fetch(channelId)
     .catch((cause) => new DiscordError({ operation: `fetch channel ${channelId}`, cause }))
   if (channel instanceof Error) return channel
-  if (channel?.type !== ChannelType.GuildText) return new DiscordError({ operation: `use non-text channel ${channelId}` })
+  if (channel?.type !== ChannelType.GuildText)
+    return new DiscordError({ operation: `use non-text channel ${channelId}` })
   return channel
 }
 
@@ -158,9 +164,14 @@ export function readMarker(metadata: SessionMetadata | undefined): SessionMarker
     dataDir: typeof dataDir === 'string' ? dataDir : null,
     lockPort: typeof lockPort === 'number' ? lockPort : null,
     parentSessionId: typeof parentSessionId === 'string' ? parentSessionId : null,
-    task: typeof taskId === 'number'
-      ? { id: taskId, cronExpr: typeof cronExpr === 'string' ? cronExpr : null, timezone: typeof timezone === 'string' ? timezone : null }
-      : null,
+    task:
+      typeof taskId === 'number'
+        ? {
+            id: taskId,
+            cronExpr: typeof cronExpr === 'string' ? cronExpr : null,
+            timezone: typeof timezone === 'string' ? timezone : null,
+          }
+        : null,
   }
 }
 
@@ -171,8 +182,9 @@ export function cliContext(bot: Bot) {
 
 // Default model of new sessions in channels without their own (/model "All channels").
 export async function globalModel(bot: Bot): Promise<DbError | ModelChoice | null> {
-  const rows = await bot.db<GlobalModelRow[]>`SELECT * FROM global_models WHERE app_id = ${bot.appId} LIMIT 1`
-    .catch((cause) => new DbError({ operation: 'read global_models', cause }))
+  const rows = await bot.db<GlobalModelRow[]>`SELECT * FROM global_models WHERE app_id = ${bot.appId} LIMIT 1`.catch(
+    (cause) => new DbError({ operation: 'read global_models', cause }),
+  )
   if (rows instanceof Error) return rows
   const row = parseFirst<GlobalModelRow>('global_models', rows)
   const model = parseModel(row?.model_id, row?.variant)

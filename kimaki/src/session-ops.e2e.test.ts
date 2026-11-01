@@ -31,7 +31,12 @@ const matchers: DeterministicMatcher[] = [
     when: { latestUserTextIncludes: 'You MUST use this format for your response' },
     then: { parts: textParts('## Objective\n- Test compaction') },
   },
-  { id: 'usage', priority: 500, when: { latestUserTextIncludes: 'usage-marker' }, then: { parts: textParts('counted') } },
+  {
+    id: 'usage',
+    priority: 500,
+    when: { latestUserTextIncludes: 'usage-marker' },
+    then: { parts: textParts('counted') },
+  },
   ...scriptedTurn({
     marker: 'write-marker',
     steps: [{ id: 'call-write-1', tool: 'write', input: { path: 'undo.txt', content: 'written by the agent\n' } }],
@@ -47,7 +52,12 @@ let dataDir: string
 beforeAll(async () => {
   dataDir = tempDataDir()
   ;[server, twin] = await Promise.all([startOpencodeTestServer({ matchers }), startTwin()])
-  await seedProjectChannel({ dataDir, channelId: twin.channelId, guildId: twin.discord.guildId, directory: server.projectDirectory })
+  await seedProjectChannel({
+    dataDir,
+    channelId: twin.channelId,
+    guildId: twin.discord.guildId,
+    directory: server.projectDirectory,
+  })
   await warmUp({ server })
   bot = await startTestBot({ dataDir, twin, server })
 })
@@ -63,7 +73,9 @@ async function newThread(content: string) {
   const { discord, channelId } = twin
   const before = new Set((await discord.channel(channelId).getThreads()).map((thread) => thread.id))
   await discord.channel(channelId).user(TEST_USER_ID).sendMessage({ content })
-  const thread = await discord.channel(channelId).waitForThread({ timeout: 8_000, predicate: (candidate) => !before.has(candidate.id) })
+  const thread = await discord
+    .channel(channelId)
+    .waitForThread({ timeout: 8_000, predicate: (candidate) => !before.has(candidate.id) })
   await waitForFooter({ discord, threadId: thread.id })
   return thread
 }

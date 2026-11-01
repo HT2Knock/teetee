@@ -4,16 +4,26 @@
 // import cycle through sessions.ts.
 
 import path from 'node:path'
-import {setTimeout as sleep} from 'node:timers/promises'
-import type {TextChannel, ThreadChannel} from 'discord.js'
+import { setTimeout as sleep } from 'node:timers/promises'
+import type { TextChannel, ThreadChannel } from 'discord.js'
 
-import {cliContext, oc, projectOf, readMarker, rootSession, sessionDirectory, textChannel, type Bot, type ModelChoice} from './bot.ts'
-import {ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError} from './errors.ts'
-import {createLogger} from './logger.ts'
-import type {OpencodeEndpoint} from './opencode-server.ts'
-import {type ChannelDirectoryRow} from './rows.ts'
-import {baseInstructions, INSTRUCTION_KEY, type ScheduledRun} from './system-prompt.ts'
-import {resolveWorkingDirectory} from './worktrees.ts'
+import {
+  cliContext,
+  oc,
+  projectOf,
+  readMarker,
+  rootSession,
+  sessionDirectory,
+  textChannel,
+  type Bot,
+  type ModelChoice,
+} from './bot.ts'
+import { ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
+import { createLogger } from './logger.ts'
+import type { OpencodeEndpoint } from './opencode-server.ts'
+import { type ChannelDirectoryRow } from './rows.ts'
+import { baseInstructions, INSTRUCTION_KEY, type ScheduledRun } from './system-prompt.ts'
+import { resolveWorkingDirectory } from './worktrees.ts'
 
 const logger = createLogger('SESSIONS')
 
@@ -32,7 +42,8 @@ export function channelDefaults(row: ChannelDefaultsRow | undefined) {
   if (!row) return undefined
   return {
     ...row,
-    channel_model: row.channel_model_id === null ? null : { model_id: row.channel_model_id, variant: row.channel_model_variant },
+    channel_model:
+      row.channel_model_id === null ? null : { model_id: row.channel_model_id, variant: row.channel_model_variant },
     channel_agent: row.channel_agent_name === null ? null : { agent_name: row.channel_agent_name },
     channel_worktree: row.channel_worktree_enabled === null ? null : { enabled: row.channel_worktree_enabled },
   }
@@ -74,17 +85,28 @@ export async function sessionCwd(bot: Bot, { thread, directory }: { thread: Thre
   if (plugin instanceof Error) return plugin
   const sessionId = rootSession(bot, thread.id)
   if (sessionId instanceof Error) return sessionId
-  const moved = await oc(bot, 'session.move', (client) => client.session.move({ sessionID: sessionId, directory: destination, delivery: 'steer' }))
+  const moved = await oc(bot, 'session.move', (client) =>
+    client.session.move({ sessionID: sessionId, directory: destination, delivery: 'steer' }),
+  )
   if (moved instanceof Error) return moved
   return { requestedDirectory: destination }
 }
 
 export async function bindThread(
   bot: Bot,
-  { threadId, sessionId, channelId, directory, isNew }: { threadId: string; sessionId: string; channelId: string; directory: string; isNew: boolean },
+  {
+    threadId,
+    sessionId,
+    channelId,
+    directory,
+    isNew,
+  }: { threadId: string; sessionId: string; channelId: string; directory: string; isNew: boolean },
 ): Promise<DbError | void> {
-  const inserted = await bot.db<unknown[]>`INSERT INTO thread_sessions (thread_id, session_id, source) VALUES (${threadId}, ${sessionId}, ${'kimaki'})`
-    .catch((cause) => new DbError({ operation: 'insert thread_sessions', cause }))
+  const inserted = await bot.db<
+    unknown[]
+  >`INSERT INTO thread_sessions (thread_id, session_id, source) VALUES (${threadId}, ${sessionId}, ${'kimaki'})`.catch(
+    (cause) => new DbError({ operation: 'insert thread_sessions', cause }),
+  )
   if (inserted instanceof Error) return inserted
   await bot.eventLoop.bind({ threadId, sessionId, channelId, directory, isNew })
   logger.log(`session ${sessionId} bound to thread ${threadId}`)
@@ -110,28 +132,43 @@ export async function primaryAgents(bot: Bot, directory: string) {
 export async function agentSelection(bot: Bot, { directory, agent }: { directory: string; agent: string }) {
   const agents = await primaryAgents(bot, directory)
   if (agents instanceof Error) return agents
-  const selected = agents.find((candidate) => candidate.id.toLowerCase() === agent.toLowerCase() || candidate.name.toLowerCase() === agent.toLowerCase())
-  if (!selected) return new ConfigError({ reason: `Agent \`${agent}\` is not available in this project. Use /agent to select one.` })
-  const model: ModelChoice | null = selected.model ? { ...selected.model, variant: selected.model.variant ?? null } : null
+  const selected = agents.find(
+    (candidate) =>
+      candidate.id.toLowerCase() === agent.toLowerCase() || candidate.name.toLowerCase() === agent.toLowerCase(),
+  )
+  if (!selected)
+    return new ConfigError({ reason: `Agent \`${agent}\` is not available in this project. Use /agent to select one.` })
+  const model: ModelChoice | null = selected.model
+    ? { ...selected.model, variant: selected.model.variant ?? null }
+    : null
   return { agent: selected.id, model }
 }
 
 // OpenCode switches the agent and model separately, including the configured variant.
 export async function switchAgent(
   bot: Bot,
-  { sessionId, directory, agent, model }: { sessionId: string; directory: string; agent: string; model?: ModelChoice | null },
+  {
+    sessionId,
+    directory,
+    agent,
+    model,
+  }: { sessionId: string; directory: string; agent: string; model?: ModelChoice | null },
 ) {
   const selected = await agentSelection(bot, { directory, agent })
   if (selected instanceof Error) return selected
   const choice = model ?? selected.model
   if (choice) {
-    const switched = await oc(bot, 'session.switchModel', (client) => client.session.switchModel({
-      sessionID: sessionId,
-      model: { providerID: choice.providerID, id: choice.id, ...(choice.variant && { variant: choice.variant }) },
-    }))
+    const switched = await oc(bot, 'session.switchModel', (client) =>
+      client.session.switchModel({
+        sessionID: sessionId,
+        model: { providerID: choice.providerID, id: choice.id, ...(choice.variant && { variant: choice.variant }) },
+      }),
+    )
     if (switched instanceof Error) return switched
   }
-  const switched = await oc(bot, 'session.switchAgent', (client) => client.session.switchAgent({ sessionID: sessionId, agent: selected.agent }))
+  const switched = await oc(bot, 'session.switchAgent', (client) =>
+    client.session.switchAgent({ sessionID: sessionId, agent: selected.agent }),
+  )
   if (switched instanceof Error) return switched
   return { ...selected, model: choice }
 }
@@ -161,7 +198,8 @@ export async function putInstructions(
   const found = await primaryAgents(bot, directory)
   if (found instanceof Error) logger.warn(`agent list for instructions failed`, found)
   // The ID is what switchAgent and session.create take.
-  const agents = found instanceof Error ? [] : found.map((agent) => ({ name: agent.id, description: agent.description ?? '' }))
+  const agents =
+    found instanceof Error ? [] : found.map((agent) => ({ name: agent.id, description: agent.description ?? '' }))
   const value = baseInstructions({
     sessionId,
     threadId: thread.id,
@@ -192,18 +230,20 @@ export function createPluginWait(bot: Pick<Bot, 'opencode'>): PluginWait {
   // CRAP is estimated from exports because fallow cannot see e2e coverage.
   // fallow-ignore-next-line complexity
   return async (directory) => {
-    const endpoint = bot.opencode.endpoint
-    if (endpoint && active.get(endpoint)?.has(directory)) return
+    const connected = bot.opencode.endpoint
+    if (connected && active.get(connected)?.has(directory)) return
     const location = { directory }
     const deadline = Date.now() + 10_000
     while (Date.now() < deadline) {
       const endpoint = bot.opencode.endpoint
       if (!endpoint) return new OpenCodeUnavailableError({ reason: 'not connected' })
       // The integration catalog waits for activations OpenCode already started; plugin.list does not.
-      const activated = await endpoint.client.integration.list({ location })
+      const activated = await endpoint.client.integration
+        .list({ location })
         .catch((cause) => new OpenCodeError({ operation: 'integration.list', cause }))
       if (activated instanceof Error) return activated
-      const plugins = await endpoint.client.plugin.list({ location })
+      const plugins = await endpoint.client.plugin
+        .list({ location })
         .catch((cause) => new OpenCodeError({ operation: 'plugin.list', cause }))
       if (plugins instanceof Error) return plugins
       if (bot.opencode.endpoint !== endpoint) continue
@@ -277,14 +317,17 @@ export async function refreshCliContext(bot: Bot) {
     if (!marker) continue
     if (marker.dataDir === bot.dataDir && marker.lockPort === bot.lockPort) continue
     const metadata = { ...info.metadata, kimaki: { ...marker.fields, ...cliContext(bot) } }
-    const result = await oc(bot, 'refresh Kimaki CLI context', (client) => client.session.update({ sessionID: sessionId, metadata }))
+    const result = await oc(bot, 'refresh Kimaki CLI context', (client) =>
+      client.session.update({ sessionID: sessionId, metadata }),
+    )
     if (result instanceof Error) return result
   }
 }
 // Applies a model to the running session, with its variant when it has one.
 export async function switchModel(bot: Bot, { sessionId, model }: { sessionId: string; model: ModelChoice }) {
   const choice = { providerID: model.providerID, id: model.id, ...(model.variant && { variant: model.variant }) }
-  const result = await oc(bot, 'session.switchModel', (client) => client.session.switchModel({ sessionID: sessionId, model: choice }))
+  const result = await oc(bot, 'session.switchModel', (client) =>
+    client.session.switchModel({ sessionID: sessionId, model: choice }),
+  )
   if (result instanceof Error) return result
 }
-

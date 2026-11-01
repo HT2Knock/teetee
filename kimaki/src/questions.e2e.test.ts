@@ -59,7 +59,12 @@ const matchers: DeterministicMatcher[] = [
   ...askTurn({ marker: 'ask-cancel', questions: [COLOR] }),
   ...askTurn({ marker: 'ask-restart', questions: [COLOR] }),
   ...askTurn({ marker: 'ask-denied', questions: [COLOR] }),
-  { id: 'instead', priority: 500, when: { latestUserTextIncludes: 'instead-marker' }, then: { parts: textParts('did the other thing') } },
+  {
+    id: 'instead',
+    priority: 500,
+    when: { latestUserTextIncludes: 'instead-marker' },
+    then: { parts: textParts('did the other thing') },
+  },
 ]
 
 let server: OpencodeTestServer
@@ -115,7 +120,12 @@ async function waitForSelects({ threadId, count }: { threadId: string; count: nu
 
 // Kimaki sessions deny the question tool; `--permission question:allow` turns it back on.
 async function startThread(content: string) {
-  const started = await send(bot, { channelId: twin.channelId, prompt: content, user: [TEST_USER_ID], permissions: ['question:allow'] })
+  const started = await send(bot, {
+    channelId: twin.channelId,
+    prompt: content,
+    user: [TEST_USER_ID],
+    permissions: ['question:allow'],
+  })
   if (started instanceof Error) throw started
   return { id: started.threadId }
 }
@@ -130,11 +140,14 @@ test('single question answered from the dropdown', async () => {
       "other",
     ]
   `)
-  await twin.discord.thread(thread.id).user(TEST_USER_ID).selectMenu({
-    messageId: select!.message.id,
-    customId: select!.customId,
-    values: [select!.values[1]!],
-  })
+  await twin.discord
+    .thread(thread.id)
+    .user(TEST_USER_ID)
+    .selectMenu({
+      messageId: select!.message.id,
+      customId: select!.customId,
+      values: [select!.values[1]!],
+    })
   await waitForFooter({ discord: twin.discord, threadId: thread.id })
   expect(await twin.discord.thread(thread.id).text({ showInteractions: true })).toMatchInlineSnapshot(`
     "--- from: assistant (TestBot)
@@ -153,7 +166,11 @@ test('two questions: the form is answered after both, multi-select keeps options
   const thread = await startThread('Two questions ask-two')
   const [color, fruits] = await waitForSelects({ threadId: thread.id, count: 2 })
   const user = twin.discord.thread(thread.id).user(TEST_USER_ID)
-  await user.selectMenu({ messageId: fruits!.message.id, customId: fruits!.customId, values: [fruits!.values[0]!, fruits!.values[1]!, 'other'] })
+  await user.selectMenu({
+    messageId: fruits!.message.id,
+    customId: fruits!.customId,
+    values: [fruits!.values[0]!, fruits!.values[1]!, 'other'],
+  })
   await user.submitModal({
     customId: fruits!.customId.replace(/^form:/, 'form_other:'),
     messageId: fruits!.message.id,
@@ -185,7 +202,11 @@ test('Other opens a modal and sends the typed answer', async () => {
   const user = twin.discord.thread(thread.id).user(TEST_USER_ID)
   await user.selectMenu({ messageId: select!.message.id, customId: select!.customId, values: ['other'] })
   const modalId = select!.customId.replace(/^form:/, 'form_other:')
-  await user.submitModal({ customId: modalId, messageId: select!.message.id, fields: [{ customId: 'answer', value: 'Teal' }] })
+  await user.submitModal({
+    customId: modalId,
+    messageId: select!.message.id,
+    fields: [{ customId: 'answer', value: 'Teal' }],
+  })
   await waitForFooter({ discord: twin.discord, threadId: thread.id })
   expect(await twin.discord.thread(thread.id).text()).toMatchInlineSnapshot(`
     "--- from: assistant (TestBot)
@@ -286,11 +307,14 @@ test('a restarted bot shows the pending question again and it still works', asyn
   bot = await startTestBot({ dataDir, twin, server })
   const selects = await waitForSelects({ threadId: thread.id, count: 2 })
   const fresh = selects[selects.length - 1]!
-  await twin.discord.thread(thread.id).user(TEST_USER_ID).selectMenu({
-    messageId: fresh.message.id,
-    customId: fresh.customId,
-    values: [fresh.values[0]!],
-  })
+  await twin.discord
+    .thread(thread.id)
+    .user(TEST_USER_ID)
+    .selectMenu({
+      messageId: fresh.message.id,
+      customId: fresh.customId,
+      values: [fresh.values[0]!],
+    })
   await waitForFooter({ discord: twin.discord, threadId: thread.id })
   expect(await twin.discord.thread(thread.id).text()).toMatchInlineSnapshot(`
     "--- from: assistant (TestBot)
@@ -310,7 +334,9 @@ test('Kimaki sessions hide the question tool by default', async () => {
   const { discord, channelId } = twin
   const before = new Set((await discord.channel(channelId).getThreads()).map((thread) => thread.id))
   await discord.channel(channelId).user(TEST_USER_ID).sendMessage({ content: 'No dropdowns ask-denied' })
-  const thread = await discord.channel(channelId).waitForThread({ timeout: 8_000, predicate: (thread) => !before.has(thread.id) })
+  const thread = await discord
+    .channel(channelId)
+    .waitForThread({ timeout: 8_000, predicate: (thread) => !before.has(thread.id) })
   await waitForFooter({ discord: twin.discord, threadId: thread.id })
   expect(await twin.discord.thread(thread.id).text()).toMatchInlineSnapshot(`
     "--- from: user (tommy)

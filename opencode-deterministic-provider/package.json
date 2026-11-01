@@ -13,12 +13,12 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest --run"
   },
+  "dependencies": {
+    "@ai-sdk/provider": "^3.0.8"
+  },
   "devDependencies": {
     "@types/node": "^24.3.0",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
-  },
-  "dependencies": {
-    "@ai-sdk/provider": "^3.0.8"
   }
 }

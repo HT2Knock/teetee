@@ -2,10 +2,7 @@
 
 import { describe, expect, test } from 'vitest'
 import type { LanguageModelV3StreamPart } from '@ai-sdk/provider'
-import {
-  buildDeterministicOpencodeConfig,
-  createDeterministicProvider,
-} from './deterministic-provider.js'
+import { buildDeterministicOpencodeConfig, createDeterministicProvider } from './deterministic-provider.js'
 
 describe('createDeterministicProvider', () => {
   test('emits v3 tool call for matched sleep prompt', async () => {
@@ -100,10 +97,12 @@ describe('createDeterministicProvider', () => {
 
     const model = provider.languageModel('deterministic-v2')
     const parent = await model.doGenerate({
-      prompt: [{
-        role: 'user',
-        content: [{ type: 'text', text: 'NATIVE_SUBAGENT_PARENT' }],
-      }],
+      prompt: [
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'NATIVE_SUBAGENT_PARENT' }],
+        },
+      ],
     })
 
     expect(parent.content).toMatchInlineSnapshot(`
@@ -116,15 +115,21 @@ describe('createDeterministicProvider', () => {
         },
       ]
     `)
-    await expect(model.doGenerate({
-      prompt: [{
-        role: 'user',
-        content: [{
-          type: 'text',
-          text: 'NATIVE_SUBAGENT_PARENT NATIVE_SUBAGENT_CHILD',
-        }],
-      }],
-    })).rejects.toThrow('No deterministic matcher matched current prompt')
+    await expect(
+      model.doGenerate({
+        prompt: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: 'NATIVE_SUBAGENT_PARENT NATIVE_SUBAGENT_CHILD',
+              },
+            ],
+          },
+        ],
+      }),
+    ).rejects.toThrow('No deterministic matcher matched current prompt')
   })
 
   test('throws for unmatched prompt in strict mode', async () => {
@@ -164,11 +169,7 @@ describe('buildDeterministicOpencodeConfig', () => {
   })
 })
 
-async function collectParts({
-  stream,
-}: {
-  stream: ReadableStream<LanguageModelV3StreamPart>
-}) {
+async function collectParts({ stream }: { stream: ReadableStream<LanguageModelV3StreamPart> }) {
   const reader = stream.getReader()
   const parts: LanguageModelV3StreamPart[] = []
   while (true) {

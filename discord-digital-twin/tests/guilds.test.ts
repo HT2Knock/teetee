@@ -3,13 +3,7 @@
 // the DigitalDiscord server and that gateway updates stay in sync.
 
 import { describe, test, expect, beforeAll, afterAll } from 'vitest'
-import {
-  ChannelType,
-  Client,
-  GatewayIntentBits,
-  TextChannel,
-  Role,
-} from 'discord.js'
+import { ChannelType, Client, GatewayIntentBits, TextChannel, Role } from 'discord.js'
 import { DigitalDiscord } from '../src/index.js'
 
 describe('guild management routes', () => {
@@ -141,9 +135,7 @@ describe('guild management routes', () => {
   })
 
   test('guild members list/search/get routes work', async () => {
-    const listResponse = await fetch(
-      `${discord.restUrl}/v10/guilds/${discord.guildId}/members?limit=10`,
-    )
+    const listResponse = await fetch(`${discord.restUrl}/v10/guilds/${discord.guildId}/members?limit=10`)
     expect(listResponse.status).toBe(200)
     const listMembers = (await listResponse.json()) as Array<{ user: { id: string } }>
     const listIds = listMembers.map((member) => {
@@ -161,9 +153,7 @@ describe('guild management routes', () => {
     })
     expect(searchIds).toContain(testUserId)
 
-    const singleResponse = await fetch(
-      `${discord.restUrl}/v10/guilds/${discord.guildId}/members/${testUserId}`,
-    )
+    const singleResponse = await fetch(`${discord.restUrl}/v10/guilds/${discord.guildId}/members/${testUserId}`)
     expect(singleResponse.status).toBe(200)
     const singleMember = (await singleResponse.json()) as {
       user: { id: string; username: string }
