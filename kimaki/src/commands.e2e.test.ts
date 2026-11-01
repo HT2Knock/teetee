@@ -113,7 +113,6 @@ test('the bot registers exactly the static and catalog commands in the guild', a
       "/routines: List routines, run one now, or delete it",
       "/session-id: Show the OpenCode session ID of this thread and how to open it in OpenCode",
       "/skill: Run any OpenCode skill in this project",
-      "/transcription-key: Set the OpenAI or Gemini API key for voice transcription and speech",
       "/undo: Undo the last turn (file changes are kept)",
       "/verbosity: Set what the bot shows in this channel",
       "/worktrees: List worktrees, delete a safe checkout, or toggle automatic worktrees",

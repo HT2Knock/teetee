@@ -29,7 +29,6 @@ import { ConfigError, DbError } from '../errors.ts'
 import { button, buttonRow, paginate, SELECT_PAGE_SIZE, selectedPage, selectRow } from '../format-parts.ts'
 import { replyError, resolveTarget, type InteractionRoutes } from '../interaction-context.ts'
 import { parseFirst, type ChannelDirectoryRow } from '../rows.ts'
-import { handleTranscriptionKeyModal, TRANSCRIPTION_KEY_MODAL, transcriptionKeyModal } from '../voice.ts'
 
 type LoginWizard = {
   userId: string
@@ -445,15 +444,9 @@ export function createLoginRoutes(): InteractionRoutes {
   return {
     admin: true,
     commands: {
-      login: {
+      'login': {
         definition: new SlashCommandBuilder().setName('login').setDescription('Connect an OpenCode provider'),
         run: loginCommand,
-      },
-      'transcription-key': {
-        definition: new SlashCommandBuilder()
-          .setName('transcription-key')
-          .setDescription('Set the OpenAI or Gemini API key for voice transcription and speech'),
-        run: (_bot, interaction) => interaction.showModal(transcriptionKeyModal()),
       },
     },
     selects: { 'login_provider:': providerSelect, 'login_method:': methodSelect },
@@ -461,7 +454,6 @@ export function createLoginRoutes(): InteractionRoutes {
     modals: {
       'login_key:': keyModal,
       'login_code:': codeModal,
-      [TRANSCRIPTION_KEY_MODAL]: (bot, interaction) => handleTranscriptionKeyModal({ interaction, db: bot.db }),
     },
   }
 }

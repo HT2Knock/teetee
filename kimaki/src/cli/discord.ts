@@ -145,15 +145,15 @@ export function registerDiscordCommands(cli: Goke) {
   cli
     .command(
       'upload-to-discord <...files>',
-      'Attach local files to a session thread or the Kimaki voice channel chat. Pass many files in one call: Discord shows them numbered in argument order',
+      'Attach local files to a session thread or a channel chat. Pass many files in one call: Discord shows them numbered in argument order',
     )
     .option('--data-dir <path>', DATA_DIR_HELP)
     .option('-s, --session <id>', SESSION_HELP)
-    .option('-c, --channel <id>', 'Kimaki voice channel to post in (default in voice calls: KIMAKI_CHANNEL_ID)')
+    .option('-c, --channel <id>', 'Channel to post in (default in scripts: KIMAKI_CHANNEL_ID)')
     .action(async (files, options) => {
       if (options.session && options.channel) fail(new Error('Use --session or --channel, not both'))
       const target = options.channel ? {} : targetOrEnv(options.session)
-      // Voice call shells have no session: KIMAKI_CHANNEL_ID is the voice channel.
+      // Scripts have no session: KIMAKI_CHANNEL_ID names the channel.
       const id = options.channel ?? target.sessionId ?? target.threadId ?? process.env['KIMAKI_CHANNEL_ID']
       if (!id) fail(new Error('Use --session or --channel, or run inside an OpenCode session'))
       const input = { id, files: files.map((file) => ({ path: path.resolve(file), name: path.basename(file) })) }

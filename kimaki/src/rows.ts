@@ -102,13 +102,6 @@ export interface BotApiKeyRow {
   created_at: Date | null
 }
 
-export interface BotSettingRow {
-  app_id: string
-  voice_call_voice: string | null
-  created_at: Date | null
-  updated_at: Date | null
-}
-
 export interface ChannelModelRow {
   channel_id: string
   model_id: string

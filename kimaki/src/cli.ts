@@ -6,7 +6,7 @@
 
 import { goke } from 'goke'
 
-import { registerBotCommands, registerLoginCommands, registerStartCommand, registerToolCommands } from './cli/bot.ts'
+import { registerBotCommands, registerLoginCommands, registerStartCommand } from './cli/bot.ts'
 import { registerAgentUiCommands, registerDiscordCommands } from './cli/discord.ts'
 import {
   registerChannelPreferenceCommands,
@@ -49,9 +49,6 @@ registerScheduleCommands(cli)
 
 cli.section('Discord')
 registerDiscordCommands(cli)
-
-cli.section('Tools')
-registerToolCommands(cli)
 
 cli.section('Bot')
 registerBotCommands(cli)

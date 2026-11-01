@@ -44,7 +44,6 @@ test('catalog names are sanitized, keep their suffix, skip collisions and MCP pr
       "worktrees",
       "merge-worktree",
       "login",
-      "transcription-key",
       "new-session",
       "resume",
       "fork",

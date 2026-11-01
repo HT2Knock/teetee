@@ -24,8 +24,6 @@ import type { PluginWait } from './session-context.ts'
 import type { SleepLock } from './sleeps.ts'
 import type { BotStore } from './store.ts'
 import type { ScheduledRun } from './system-prompt.ts'
-import type { TranscriptionBaseUrls } from './voice.ts'
-import type { RealtimeBaseUrls, VoiceCalls } from './voice-call.ts'
 
 export type Author = { id: string; username: string }
 
@@ -39,7 +37,6 @@ export type BotFeatures = {
   withSleepLock: SleepLock
   waitForPlugin: PluginWait
   agentUi: AgentUi
-  voiceCalls: VoiceCalls
 }
 
 export type Bot = {
@@ -57,14 +54,10 @@ export type Bot = {
   lockPort: number
   // Started by the `kimaki` supervisor: `kimaki restart` can respawn it.
   supervised: boolean
-  // Discord bot token: selects the bot_tokens row with the audio API keys.
+  // Discord bot token: selects the bot_tokens row.
   token: string
   // bot_tokens.app_id of these credentials: key of the global_models row.
   appId: string
-  // OpenCode's SQLite file, source of the ChatGPT credential for voice transcription.
-  opencodeDbFile: string
-  transcriptionBaseUrls: TranscriptionBaseUrls
-  realtimeBaseUrls: RealtimeBaseUrls
   // Default for channels without a channel_worktrees row.
   autoWorktrees: boolean
   // --allow-all-users: every guild member can use the bot (canUseKimaki). Admin-only commands stay admin-only.
