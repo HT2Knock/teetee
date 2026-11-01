@@ -8,7 +8,7 @@
 // write paths send toDbDate(). The tables keep the V1 columns unchanged
 // (migrations.ts imports a V1 discord-sessions.db into them).
 
-import type { SQL } from 'bun'
+import type { KimakiDb } from './db-client.ts'
 
 const TABLES = [
   'bot_api_keys',
@@ -193,11 +193,11 @@ export function upsert({
   key,
   values,
 }: {
-  db: SQL
+  db: KimakiDb
   table: string
   key: { column: string; value: string }
   values: Record<string, string | number | null | Date | undefined>
-}): SQL.Query<unknown[]> {
+}): Promise<unknown[]> {
   const entries = Object.entries(values).filter(([, value]) => value !== undefined)
   const columns = entries.map(([column]) => column)
   const inserted = entries.map(([, value]) => (value instanceof Date ? toDbDate(value) : value))

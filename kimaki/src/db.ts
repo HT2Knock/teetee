@@ -1,24 +1,30 @@
-// SQLite access through Bun's SQL client, file <dataDir>/kimaki.db. Only the bot
-// start opens with migrate: true (migrations.ts: V1 import + schema).
-// Subcommands open without migrating and fail with DbNotMigratedError when the
-// file or a table is missing; they never create the file, so the next bot
-// start still imports the V1 database.
+// SQLite access: file <dataDir>/kimaki.db, queried through the Effect SQL
+// client of `@effect/sql-sqlite-bun` (db-client.ts). Only the bot start opens
+// with migrate: true (migrations.ts: V1 import + schema). Subcommands open
+// without migrating and fail with DbNotMigratedError when the file or a table
+// is missing; they never create the file, so the next bot start still imports
+// the V1 database.
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { SQL } from 'bun'
+import { Context, Layer } from 'effect'
 
+import { openClient, type KimakiDb } from './db-client.ts'
 import { DbError, DbNotMigratedError, attempt } from './errors.ts'
 import { DB_FILE, migrateDb } from './migrations.ts'
 import { REQUIRED_TABLES, type V1Verbosity } from './rows.ts'
 
-// The one database handle every module receives. Queries use tagged templates:
-// await db`SELECT * FROM thread_sessions WHERE thread_id = ${threadId}`.
-export type KimakiDb = SQL
+export type { KimakiDb } from './db-client.ts'
 
 export type OpenedDb = {
   db: KimakiDb
   close: () => Promise<void>
+}
+
+// The database as a service: main.ts provides it after the file is open, tests
+// provide their own with `Layer.succeed(Database, opened)`.
+export class Database extends Context.Service<Database, OpenedDb>()('kimaki/Database') {
+  static readonly layer = (opened: OpenedDb): Layer.Layer<Database> => Layer.succeed(Database, opened)
 }
 
 function dbPath({ dataDir }: { dataDir: string }): string {
@@ -45,23 +51,26 @@ export async function openDb({
     if (migrated instanceof Error) return migrated
   }
   if (!fs.existsSync(dbPath({ dataDir }))) return new DbNotMigratedError({ missing: DB_FILE })
-  const db = new SQL(`sqlite://${dbPath({ dataDir })}`)
+  const opened = openClient({ filename: dbPath({ dataDir }) })
+  if (opened instanceof Error) return new DbError({ operation: 'open', cause: opened })
   const setup = await (async () => {
-    await db`PRAGMA journal_mode = WAL`
-    await db`PRAGMA busy_timeout = 5000`
-    const rows = await db<{ name: string }[]>`SELECT name FROM sqlite_master WHERE type = 'table'`
+    // The client enables WAL and a 5s busy timeout; the pragmas keep the file
+    // behaviour the same if a driver default ever changes.
+    await opened.db.unsafe('PRAGMA journal_mode = WAL')
+    await opened.db.unsafe('PRAGMA busy_timeout = 5000')
+    const rows = await opened.db<{ name: string }[]>`SELECT name FROM sqlite_master WHERE type = 'table'`
     return new Set(rows.map((row) => row.name))
   })().catch((e) => new DbError({ operation: 'open', cause: e }))
   if (setup instanceof Error) {
-    await db.close()
+    await opened.close()
     return setup
   }
   const missing = REQUIRED_TABLES.find((table) => !setup.has(table))
   if (missing) {
-    await db.close()
+    await opened.close()
     return new DbNotMigratedError({ missing: `table ${missing}` })
   }
-  return { db, close: () => db.close() }
+  return { db: opened.db, close: opened.close }
 }
 
 // V2 has two verbosity levels; the V1 enum stays on disk (spec section 17).

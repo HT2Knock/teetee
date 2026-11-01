@@ -39,10 +39,6 @@ import { parseFutureUtc, runDueWakes } from './sleeps.ts'
 const logger = createLogger('ROUTINE')
 const execAsync = promisify(exec)
 
-export type Clock = { now(): number }
-
-export const systemClock: Clock = { now: () => Date.now() }
-
 const DUE_BATCH = 20
 // A hung pre-run command must not block every later task and wake.
 const PRE_RUN_TIMEOUT_MS = 10 * 60_000

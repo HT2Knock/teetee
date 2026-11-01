@@ -22,7 +22,11 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noImplicitAny": false,
-    "useUnknownInCatchVariables": false
+    "useUnknownInCatchVariables": false,
+    // Named on purpose: with the @effect/sql packages in the program, bun check
+    // stops resolving the bun:* modules it would otherwise take from @types
+    // automatically. The explicit list keeps `bun check` and `tsc` equal.
+    "types": ["bun", "node"]
   },
   "include": ["src"]
 }
