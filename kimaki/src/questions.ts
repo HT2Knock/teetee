@@ -23,7 +23,7 @@ import {
   TextInputStyle,
   type ModalSubmitInteraction,
   type StringSelectMenuInteraction,
-} from 'discord.js'
+} from './adapters/discord/index.ts'
 import type { FormInfo, JsonValue, V2Event } from '@opencode/client'
 
 import { oc, type Bot } from './bot.ts'

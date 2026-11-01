@@ -14,7 +14,7 @@
 //   cold thread      a bound thread without a view yet (bound in an earlier
 //                    bot run): read its project channel and directory once.
 
-import { DiscordAPIError, RESTJSONErrorCodes, type Client } from 'discord.js'
+import { DiscordAPIError, RESTJSONErrorCodes, type Client } from './adapters/discord/index.ts'
 
 import { verbosityFromV1, type KimakiDb } from './db.ts'
 import type { EffectsRunner } from './effects.ts'

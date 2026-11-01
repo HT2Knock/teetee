@@ -7,7 +7,7 @@
 //   click              ─▶ permission.reply
 //   permission.replied ─▶ buttons removed, decision shown
 
-import { ButtonStyle, MessageFlags, type ButtonInteraction } from 'discord.js'
+import { ButtonStyle, MessageFlags, type ButtonInteraction } from './adapters/discord/index.ts'
 import type { PermissionRequest } from '@opencode/client'
 
 import { oc, type Bot } from './bot.ts'

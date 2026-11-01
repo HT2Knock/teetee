@@ -24,7 +24,7 @@ import {
   type APIMessageTopLevelComponent,
   type ButtonInteraction,
   type ChatInputCommandInteraction,
-} from 'discord.js'
+} from './adapters/discord/index.ts'
 
 import { oc, projectOf, threadOfSession, type Bot } from './bot.ts'
 import type { KimakiDb } from './db.ts'

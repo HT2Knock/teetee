@@ -4,15 +4,15 @@
 // bot in-process and stop it cleanly.
 
 import { setTimeout as sleep } from 'node:timers/promises'
-import { Client, Events, GatewayIntentBits, Partials } from 'discord.js'
 import { Effect, Layer } from 'effect'
+
+import { createDiscordClient, DISCORD_CLOSE_WAIT_MS, loginDiscord } from './adapters/discord/index.ts'
 
 import { createAgentUi } from './agent-ui.ts'
 import { oc, type Bot } from './bot.ts'
 import { Clock, type ClockShape } from './clock.ts'
 import { Database, openDb } from './db.ts'
 import { createEffectsRunner } from './effects.ts'
-import { DiscordError } from './errors.ts'
 import { createEventLoop } from './event-loop.ts'
 import { registerIngress } from './ingress.ts'
 import { runLockRoute } from './lock-routes.ts'
@@ -28,8 +28,6 @@ import { createSleepLock } from './sleeps.ts'
 import { ThreadRegistry, type BotStore } from './store.ts'
 
 const logger = createLogger('MAIN')
-// The close handshake takes ~120ms to Discord.
-const DISCORD_CLOSE_WAIT_MS = 500
 
 export type StartBotOptions = {
   dataDir: string
@@ -116,11 +114,8 @@ function appLayer(options: StartBotOptions) {
   )
 }
 
-async function loginDiscord({ discord, token }: { discord: Client; token: string }): Promise<DiscordError | void> {
-  const ready = new Promise<void>((resolve) => discord.once(Events.ClientReady, () => resolve()))
-  const login = await discord.login(token).catch((e) => new DiscordError({ operation: 'login', cause: e }))
-  if (login instanceof Error) return login
-  await ready
+async function login({ discord, token }: { discord: ReturnType<typeof createDiscordClient>; token: string }) {
+  return loginDiscord({ client: discord, token })
 }
 
 type BuildInput = {
@@ -148,36 +143,7 @@ const runBot = ({ options, settings, clock, store, cleanup }: BuildInput) =>
     cleanup.defer(() => database.close())
     const db = database.db
 
-    const discord = new Client({
-      intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
-      partials: [Partials.Channel, Partials.Message, Partials.User, Partials.ThreadMember],
-      ...(options.discordRestUrl && { rest: { api: options.discordRestUrl, version: '10' } }),
-    })
-    // TODO: drop this once @discordjs/rest can keep its token on 401. handleErrors()
-    // calls setToken(null) on any 401, and every later request fails with "Expected
-    // token to be set" until a restart. One transient 401 (gateway-proxy restarting
-    // with an empty client registry) must not kill the bot. Only Client.destroy()
-    // may clear it: it sets client.token to null first.
-    // https://github.com/discordjs/discord.js/blob/main/packages/rest/src/lib/handlers/Shared.ts
-    const setToken = discord.rest.setToken.bind(discord.rest)
-    discord.rest.setToken = (token) => {
-      // Typed string, but handleErrors() and destroy() pass null.
-      if (!token && discord.token !== null) {
-        logger.warn('Discord REST answered 401; keeping the bot token for the next request')
-        return discord.rest
-      }
-      return setToken(token)
-    }
-    // Gateway lifecycle, to debug reconnects that break event delivery.
-    discord.on(Events.ShardDisconnect, (event, id) =>
-      logger.warn(`gateway shard ${id} disconnected with code ${event.code}`),
-    )
-    discord.on(Events.ShardReconnecting, (id) => logger.warn(`gateway shard ${id} reconnecting`))
-    discord.on(Events.ShardResume, (id, replayed) =>
-      logger.info(`gateway shard ${id} resumed, ${replayed} events replayed`),
-    )
-    discord.on(Events.ShardReady, (id) => logger.info(`gateway shard ${id} ready`))
-    discord.on(Events.ShardError, (error, id) => logger.warn(`gateway shard ${id} error`, error))
+    const discord = createDiscordClient({ restUrl: options.discordRestUrl })
     // TODO: await destroy() fully once gateway-proxy uses Fly's `tls` handler. Fly's `http`
     // handler closes a WebSocket's client TCP ~5s after the proxy closed it, and destroy()
     // waits for that TCP close, so Ctrl+C took 5s. The close frames are exchanged by then.
@@ -276,7 +242,7 @@ const runBot = ({ options, settings, clock, store, cleanup }: BuildInput) =>
             if (pending.count === 0) resolve(null)
           }
           void opencode.ready.then(settle)
-          void loginDiscord({ discord, token: options.token }).then(settle)
+          void login({ discord, token: options.token }).then(settle)
         }),
     )
     if (failure) return failure

@@ -12,7 +12,7 @@ import {
   type APIActionRowComponent,
   type APIButtonComponentWithCustomId,
   type APIComponentInMessageActionRow,
-} from 'discord.js'
+} from './adapters/discord/index.ts'
 import { z } from 'zod'
 
 import type { Verbosity } from './db.ts'

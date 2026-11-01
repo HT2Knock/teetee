@@ -23,6 +23,28 @@
   },
   "overrides": [
     {
+      "files": ["kimaki/src/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "discord.js",
+                "message": "Import Discord types and clients from src/adapters/discord instead."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["kimaki/src/adapters/discord/**"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    },
+    {
       "files": ["kimaki/scripts/**", "docs/**"],
       "rules": {
         "eslint/no-console": "off"

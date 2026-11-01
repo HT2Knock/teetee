@@ -8,7 +8,7 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import * as clack from '@clack/prompts'
-import { OAuth2Scopes, PermissionFlagsBits } from 'discord.js'
+import { OAuth2Scopes, PermissionFlagsBits } from './adapters/discord/index.ts'
 import dedent from 'string-dedent'
 
 import type { KimakiDb } from './db.ts'

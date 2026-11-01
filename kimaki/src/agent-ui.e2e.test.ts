@@ -1,5 +1,5 @@
 import fs from 'node:fs'
-import { ComponentType } from 'discord.js'
+import { ComponentType } from './adapters/discord/index.ts'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 import type { BotHandle } from './main.ts'
 import {

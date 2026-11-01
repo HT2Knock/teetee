@@ -3,7 +3,7 @@
 // /fork-subagent, btw forks, the session marker and the instructions entry.
 
 import type { SessionMetadata } from '@opencode/client'
-import type { TextChannel, ThreadChannel } from 'discord.js'
+import type { TextChannel, ThreadChannel } from './adapters/discord/index.ts'
 
 import {
   cliContext,

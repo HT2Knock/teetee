@@ -12,7 +12,7 @@ import {
   SlashCommandBuilder,
   type AutocompleteInteraction,
   type ChatInputCommandInteraction,
-} from 'discord.js'
+} from '../adapters/discord/index.ts'
 import dedent from 'string-dedent'
 
 import { oc, type Bot } from '../bot.ts'

@@ -7,7 +7,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { Database } from 'bun:sqlite'
-import { ChannelType } from 'discord.js'
+import { ChannelType } from './adapters/discord/index.ts'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'

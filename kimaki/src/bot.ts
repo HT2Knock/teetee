@@ -8,7 +8,7 @@
 // marker.
 
 import type { JsonValue, SessionMetadata } from '@opencode/client'
-import { ChannelType, type Client, type TextChannel, type ThreadChannel } from 'discord.js'
+import { ChannelType, type Client, type TextChannel, type ThreadChannel } from './adapters/discord/index.ts'
 
 import type { AgentUi } from './agent-ui.ts'
 import type { ClockShape } from './clock.ts'

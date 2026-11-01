@@ -16,7 +16,7 @@ import {
   type AutocompleteInteraction,
   type ChatInputCommandInteraction,
   type StringSelectMenuInteraction,
-} from 'discord.js'
+} from '../adapters/discord/index.ts'
 
 import { oc, type Bot, type PromptFile } from '../bot.ts'
 import { ConfigError } from '../errors.ts'

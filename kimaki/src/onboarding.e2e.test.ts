@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { API } from '@discordjs/core/http-only'
-import { ChannelType } from 'discord.js'
+import { ChannelType } from './adapters/discord/index.ts'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'

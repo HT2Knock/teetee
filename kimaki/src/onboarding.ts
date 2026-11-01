@@ -16,7 +16,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import * as clack from '@clack/prompts'
-import { ChannelType, Events, type Client, type Guild } from 'discord.js'
+import { ChannelType, Events, type Client, type Guild } from './adapters/discord/index.ts'
 import dedent from 'string-dedent'
 
 import { API } from '@discordjs/core/http-only'

@@ -17,7 +17,7 @@ import {
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
   type StringSelectMenuInteraction,
   type ThreadChannel,
-} from 'discord.js'
+} from './adapters/discord/index.ts'
 
 import { projectOf, sessionDirectory, type Author, type Bot } from './bot.ts'
 import { ConfigError, DiscordError } from './errors.ts'

@@ -13,7 +13,7 @@
 // order (prompt, then interrupt with resume) parks queued items for good.
 
 import fs from 'node:fs'
-import { type Message } from 'discord.js'
+import { type Message } from './adapters/discord/index.ts'
 
 import { oc, projectOf, rootSession, type Author, type Bot, type PromptFile } from './bot.ts'
 import { ConfigError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'

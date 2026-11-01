@@ -14,7 +14,7 @@ import {
   type ButtonInteraction,
   type ChatInputCommandInteraction,
   type ThreadChannel,
-} from 'discord.js'
+} from '../adapters/discord/index.ts'
 
 import { oc, projectOf, rootSession, sessionDirectory, type Author, type Bot } from '../bot.ts'
 import { ConfigError, DbError } from '../errors.ts'

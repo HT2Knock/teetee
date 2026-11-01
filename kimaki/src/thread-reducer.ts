@@ -18,7 +18,7 @@
 // busy = root execution running OR any child running (29.2 #3). Typing
 // follows busy; the footer waits until nothing runs.
 
-import { ButtonStyle } from 'discord.js'
+import { ButtonStyle } from './adapters/discord/index.ts'
 import { produce, type Draft } from 'immer'
 import type {
   FormInfo,
