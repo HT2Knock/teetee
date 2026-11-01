@@ -1,4 +1,4 @@
-// First start in gateway mode (the twin plays gateway-proxy): the bot creates
+// First start: the bot creates
 // the default channel with an onboarding thread, the onboarding session adds a
 // project channel with `kimaki project add` (real CLI process, run by the
 // agent's shell tool, reading the saved gateway credentials), and the new
@@ -39,7 +39,7 @@ let otherProject: string
 
 beforeAll(async () => {
   dataDir = tempDataDir()
-  twin = await startTwin({ gateway: true })
+  twin = await startTwin()
   kimaki = kimakiShellCommand({
     command: entryArgv(path.join(import.meta.dirname, 'cli.ts')),
   })
@@ -95,8 +95,8 @@ test('onboarding thread adds a project channel through the kimaki CLI, which ans
     dataDir,
     guild,
     kimaki,
-    gateway: true,
-    installerId: TEST_USER_ID,
+    
+    
     machine: 'test-machine',
   })
   if (!onboarded || onboarded instanceof Error)
@@ -132,7 +132,7 @@ test('onboarding thread adds a project channel through the kimaki CLI, which ans
       "random",
       "quiet",
       "Kimaki test-machine",
-      "kimaki (in Kimaki test-machine)",
+      "kimaki-testbot (in Kimaki test-machine)",
       "other-project (in Kimaki test-machine)",
     ]
   `)
@@ -155,7 +155,7 @@ test('onboarding thread adds a project channel through the kimaki CLI, which ans
   await waitForFooter({ discord, threadId: thread.id })
 
   // Second start: nothing is created again.
-  expect(await runOnboarding({ bot, dataDir, guild, kimaki, gateway: true, machine: 'test-machine' })).toBe(null)
+  expect(await runOnboarding({ bot, dataDir, guild, kimaki,  machine: 'test-machine' })).toBe(null)
   await waitFor({ label: 'no extra channels', check: async () => (await guildChannels()).length === 6 })
 
   // An empty default channel means an earlier onboarding failed: retry in the same channel.
@@ -168,8 +168,8 @@ test('onboarding thread adds a project channel through the kimaki CLI, which ans
     dataDir,
     guild,
     kimaki,
-    gateway: true,
-    installerId: TEST_USER_ID,
+    
+    
     machine: 'test-machine',
   })
   if (retried instanceof Error || !retried) throw new Error(`expected a retried onboarding, got ${retried}`)
@@ -185,7 +185,7 @@ test('an upgraded setup with project mappings skips onboarding without selecting
       bot,
       dataDir: path.join(dataDir, 'upgraded-layout'),
       kimaki,
-      gateway: true,
+      
       machine: 'test-machine',
     }),
   ).toBe(null)

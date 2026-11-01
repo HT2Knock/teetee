@@ -34,8 +34,8 @@ function channelNameFor(name: string): string {
 
 // The default channel: "kimaki", with the bot name for self-hosted bots not
 // called "kimaki" (V1 names). The category is per machine, see addProjectChannel.
-export function defaultChannelName({ botName, gateway }: { botName: string; gateway: boolean }): string {
-  return gateway || botName.toLowerCase() === 'kimaki' ? 'kimaki' : channelNameFor(`kimaki-${botName}`)
+export function defaultChannelName({ botName }: { botName: string }): string {
+  return botName.toLowerCase() === 'kimaki' ? 'kimaki' : channelNameFor(`kimaki-${botName}`)
 }
 
 // "Tommys-MacBook-Pro.local" -> "Tommys-MacBook-Pro". --machine-name overrides it.

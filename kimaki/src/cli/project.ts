@@ -21,14 +21,14 @@ async function addProject({
   directory: string
   machine: string
 }) {
-  const [{ readSavedCredentials, restApiUrl }, { addProjectChannel, createApi, resolveGuildId }] =
+  const [{ readSavedCredentials }, { addProjectChannel, createApi, resolveGuildId }] =
     await Promise.all([import('../credentials.ts'), import('../project.ts')])
   const credentials = await readSavedCredentials({ db })
   if (credentials instanceof Error) return credentials
   if (!credentials) return new Error('No saved bot credentials. Start kimaki once to onboard.')
   const guildId = await resolveGuildId({ db, guildId: guild })
   if (guildId instanceof Error) return guildId
-  const api = createApi({ token: credentials.token, restUrl: restApiUrl(credentials) })
+  const api = createApi({ token: credentials.token, restUrl: process.env['KIMAKI_DISCORD_REST_URL'] ?? null })
   const added = await addProjectChannel({ api, db, guildId, directory, machine })
   return added
 }

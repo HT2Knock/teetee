@@ -3,11 +3,8 @@
 // ownership (only channels mapped in this machine's SQLite), permission.
 // Messages of one channel are handled in arrival order, after OpenCode is ready.
 //
-// Messages sent while the bot was offline are not fetched here: gateway-proxy
-// buffers MESSAGE_* and THREAD_* events for a disconnected client (200 max)
-// and replays them after the next READY, and discord.js RESUME replays short
-// drops. Both arrive as normal messageCreate events. The listener is
-// registered before login so the replayed events are not missed.
+// Messages sent while the bot was offline are not fetched here: discord.js
+// RESUME replays short drops.
 //
 // Attachments become prompt files; voice messages are transcribed into the
 // same Route as text. Edits and deletes of queued messages update the queue.

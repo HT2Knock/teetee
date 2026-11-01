@@ -365,21 +365,18 @@ test('CLI help documents the supported P7 commands', async () => {
 
       bot install-url                   Print the Discord bot install URL
         --data-dir <path>               Data directory (default: ~/.kimaki)
-        --gateway-callback-url <url>    Gateway only: redirect here after the install
 
     Options:
-      --data-dir <path>             Data directory (default: ~/.kimaki)
-      -g, --guild <guildId>         Server to onboard when the bot is in several
-      --gateway                     Use the shared Kimaki bot, no Discord app needed
-      --gateway-callback-url <url>  Redirect here after the gateway install (appends ?guild_id=<id>)
-      --install-url                 Print the install URL and exit (non-interactive onboarding)
-      --machine-name <name>         Name in this machine's category "Kimaki <name>" (default: hostname)
-      --restart-onboarding          Choose credentials again
-      --worktrees                   Use a fresh Git worktree for new sessions unless the channel overrides it
-      --allow-all-users             Every server member can use the bot (role "no-kimaki" still denies; provider login stays admin-only)
-      --disable-skills <list>       Built-in Kimaki skills to turn off: "all" or a comma separated list (kimaki-debug,kimaki-thread-ops)
-      --if-not-running              Start only if no bot runs; never stop the running one (used by autostart)
-      -h, --help                    Display this message
+      --data-dir <path>        Data directory (default: ~/.kimaki)
+      -g, --guild <guildId>    Server to onboard when the bot is in several
+      --install-url            Print the install URL and exit (non-interactive onboarding)
+      --machine-name <name>    Name in this machine's category "Kimaki <name>" (default: hostname)
+      --restart-onboarding     Choose credentials again
+      --worktrees              Use a fresh Git worktree for new sessions unless the channel overrides it
+      --allow-all-users        Every server member can use the bot (role "no-kimaki" still denies; provider login stays admin-only)
+      --disable-skills <list>  Built-in Kimaki skills to turn off: "all" or a comma separated list (kimaki-debug,kimaki-thread-ops)
+      --if-not-running         Start only if no bot runs; never stop the running one (used by autostart)
+      -h, --help               Display this message
     "
   `)
 })
@@ -494,7 +491,7 @@ test('status reports the running bot, logs prints and follows the log file', asy
   const opencode = running['opencode'] as { url: string; version: string; connected: boolean }
   expect({
     ...running,
-    mode: running['mode'] === (twin.discord.botToken.includes(':') ? 'gateway' : 'self_hosted'),
+    mode: running['mode'] === 'self_hosted',
     runtime: running['runtime'] === RUNTIME_NAME,
     guilds: (running['guilds'] as Array<{ id: string; name: string }>).map((guild) => ({
       ...guild,

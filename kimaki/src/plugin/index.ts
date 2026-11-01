@@ -115,10 +115,12 @@ export default Plugin.define({
       const info = await marker(event.sessionID)
       const dataDir = info?.get('dataDir')
       const lockPort = info?.get('lockPort')
+      const restUrl = info?.get('restUrl')
       if (typeof dataDir !== 'string' || typeof lockPort !== 'number') return
       if (!('command' in event.input) || typeof event.input.command !== 'string') return
       const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`
-      event.input.command = `export PATH=${quote(path.join(dataDir, 'bin'))}:"$PATH" KIMAKI_DATA_DIR=${quote(dataDir)} KIMAKI_LOCK_PORT=${quote(String(lockPort))} KIMAKI_TOOL_CALL=${quote(`${event.messageID}:${event.id}`)}; ${event.input.command}`
+      const restEnv = typeof restUrl === 'string' ? ` KIMAKI_DISCORD_REST_URL=${quote(restUrl)}` : ''
+      event.input.command = `export PATH=${quote(path.join(dataDir, 'bin'))}:"$PATH" KIMAKI_DATA_DIR=${quote(dataDir)} KIMAKI_LOCK_PORT=${quote(String(lockPort))} KIMAKI_TOOL_CALL=${quote(`${event.messageID}:${event.id}`)}${restEnv}; ${event.input.command}`
     })
     // File edits feed `kimaki session editors` (v1-compatible JSONL index).
     await ctx.tool.hook('execute.after', async (event) => {

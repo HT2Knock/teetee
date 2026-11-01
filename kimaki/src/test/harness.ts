@@ -6,7 +6,6 @@
 
 import { execFile, execFileSync, spawn, type ChildProcess } from 'node:child_process'
 import { promisify } from 'node:util'
-import crypto from 'node:crypto'
 import fs from 'node:fs'
 import net from 'node:net'
 import os from 'node:os'
@@ -20,7 +19,7 @@ import { ChannelType, ComponentType, type APIMessage } from 'discord.js'
 import { DigitalDiscord } from 'discord-digital-twin/src'
 import { buildDeterministicOpencode2Config, type DeterministicMatcher } from 'opencode-deterministic-provider'
 
-import { GATEWAY_APP_ID, saveCredentials, type Credentials } from '../credentials.ts'
+import { saveCredentials, type Credentials } from '../credentials.ts'
 import { openDb, verbosityToV1, type Verbosity } from '../db.ts'
 import type { ToolInput } from '../format-parts.ts'
 import { startLockServer } from '../lock-server.ts'
@@ -231,11 +230,7 @@ export type TestTwin = {
   unregisteredChannelId: string
 }
 
-export async function startTwin({
-  gateway = process.env['KIMAKI_TEST_GATEWAY'] === '1',
-}: {
-  gateway?: boolean
-} = {}): Promise<TestTwin> {
+export async function startTwin(): Promise<TestTwin> {
   const channelId = '200000000000000100'
   const unregisteredChannelId = '200000000000000101'
   const quietChannelId = '200000000000000102'
@@ -244,10 +239,6 @@ export async function startTwin({
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kimaki-twin-'))
   const discord = new DigitalDiscord({
     dbUrl: `file:${path.join(root, 'twin.db')}`,
-    ...(gateway && {
-      gatewayProxy: true,
-      botToken: `${crypto.randomUUID()}:${crypto.randomBytes(32).toString('hex')}`,
-    }),
     guild: { name: 'Kimaki Test', ownerId: TEST_USER_ID },
     channels: [
       { id: channelId, name: 'project', type: ChannelType.GuildText },
@@ -316,14 +307,10 @@ export async function startTestBot({
   schedulerIntervalMs?: number | null
 }): Promise<BotHandle> {
   // What credential resolution saves in production; `kimaki project add` reads it.
-  const credentials: Credentials = twin.discord.botToken.includes(':')
-    ? {
-        mode: 'gateway',
-        appId: GATEWAY_APP_ID,
-        token: twin.discord.botToken,
-        baseUrl: new URL('/', twin.discord.restUrl).toString(),
-      }
-    : { mode: 'self_hosted', appId: twin.discord.botUserId, token: twin.discord.botToken, baseUrl: null }
+  const credentials: Credentials = {
+    appId: twin.discord.botUserId,
+    token: twin.discord.botToken,
+  }
   if (saveTwinCredentials) {
     const opened = await openDb({ dataDir, migrate: true })
     if (opened instanceof Error) throw opened
@@ -331,6 +318,8 @@ export async function startTestBot({
     opened.close()
     if (saved instanceof Error) throw saved
   }
+  // The bot's agent shells and CLI children talk to the twin, not discord.com.
+  process.env['KIMAKI_DISCORD_REST_URL'] = twin.discord.restUrl
   const lock = await startLockServer({ port: lockPort ?? (await freePort()), dataDir })
   if (lock instanceof Error) throw lock
   const bot = await startBot({
