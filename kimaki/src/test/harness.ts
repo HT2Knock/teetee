@@ -20,7 +20,6 @@ import { ChannelType, ComponentType, type APIMessage } from 'discord.js'
 import { DigitalDiscord } from 'discord-digital-twin/src'
 import { buildDeterministicOpencode2Config, type DeterministicMatcher } from 'opencode-deterministic-provider'
 
-import { disabledAnalytics, type Analytics } from '../analytics.ts'
 import { GATEWAY_APP_ID, saveCredentials, type Credentials } from '../credentials.ts'
 import { openDb, verbosityToV1, type Verbosity } from '../db.ts'
 import type { ToolInput } from '../format-parts.ts'
@@ -303,7 +302,6 @@ export async function startTestBot({
   server,
   lockPort,
   saveTwinCredentials = true,
-  analytics,
   clock,
   schedulerIntervalMs,
 }: {
@@ -313,8 +311,6 @@ export async function startTestBot({
   lockPort?: number
   // false: the data dir is used as is (a V1 database the bot start must import).
   saveTwinCredentials?: boolean
-  // Default: off. Tests pass createAnalytics() with a local OTLP endpoint.
-  analytics?: Analytics
   // Scheduling tests pass manualClock() and null, then call bot.scheduler.runDueTasks().
   clock?: Clock
   schedulerIntervalMs?: number | null
@@ -347,7 +343,6 @@ export async function startTestBot({
     opencodeServiceFile: server.serviceFile,
     opencodeConfigDir: server.configDir,
     ensureOpencode: false,
-    analytics: analytics ?? disabledAnalytics,
     ...(clock && { clock }),
     ...(schedulerIntervalMs !== undefined && { schedulerIntervalMs }),
   })

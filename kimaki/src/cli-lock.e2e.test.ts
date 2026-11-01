@@ -336,19 +336,10 @@ test('CLI help documents the supported P7 commands', async () => {
         -q, --query <text>              Name filter
         --json                          Output as JSON
 
-      upload-to-discord <...files>      Attach local files to a session thread or the Kimaki voice channel chat. Pass many files in one call: Discord shows them numbered in argument order
+      upload-to-discord <...files>      Attach local files to a session thread or a channel chat. Pass many files in one call: Discord shows them numbered in argument order
         --data-dir <path>               Data directory (default: ~/.kimaki)
         -s, --session <id>              Session ID, Discord thread ID or thread URL (default: OPENCODE_SESSION_ID)
-        -c, --channel <id>              Kimaki voice channel to post in (default in voice calls: KIMAKI_CHANNEL_ID)
-
-      Tools:
-      tts [text]                        Text to speech with OpenAI or Gemini. Reads stdin if no text is given
-        --data-dir <path>               Data directory (default: ~/.kimaki)
-        -o, --output <path>             Output file (default: speech.mp3 or speech.wav)
-        -p, --provider <name>           openai | gemini (default: from the stored key)
-        -v, --voice <voice>             Voice ID (default: alloy for OpenAI, Kore for Gemini)
-        -i, --instructions <text>       Style instructions (OpenAI only)
-        --speed <n>                     0.25 to 4.0 (OpenAI only, default: 1.25)
+        -c, --channel <id>              Channel to post in (default in scripts: KIMAKI_CHANNEL_ID)
 
       Bot:
       status                            Bot health: running, pid, runtime, uptime, OpenCode URL and version, guilds
@@ -372,11 +363,6 @@ test('CLI help documents the supported P7 commands', async () => {
       bot token                         Print saved bot credentials for automation
         --data-dir <path>               Data directory (default: ~/.kimaki)
 
-      bot keys set                      Store OpenAI or Gemini API keys for voice transcription and kimaki tts
-        --data-dir <path>               Data directory (default: ~/.kimaki)
-        --openai <key>                  OpenAI API key
-        --gemini <key>                  Gemini API key
-
       bot install-url                   Print the Discord bot install URL
         --data-dir <path>               Data directory (default: ~/.kimaki)
         --gateway-callback-url <url>    Gateway only: redirect here after the install
@@ -391,9 +377,7 @@ test('CLI help documents the supported P7 commands', async () => {
       --restart-onboarding          Choose credentials again
       --worktrees                   Use a fresh Git worktree for new sessions unless the channel overrides it
       --allow-all-users             Every server member can use the bot (role "no-kimaki" still denies; provider login stays admin-only)
-      --voice <name>                Voice of voice calls, saved for later starts (e.g. cove, juniper, sol). "default" resets it
       --disable-skills <list>       Built-in Kimaki skills to turn off: "all" or a comma separated list (kimaki-debug,kimaki-thread-ops)
-      --no-analytics                Disable anonymous usage analytics (same as KIMAKI_STRADA_ENABLED=0)
       --if-not-running              Start only if no bot runs; never stop the running one (used by autostart)
       -h, --help                    Display this message
     "
@@ -522,7 +506,6 @@ test('status reports the running bot, logs prints and follows the log file', asy
     opencode: { ...opencode, url: opencode.url === bot.opencode.endpoint?.url, version: typeof opencode.version },
   }).toMatchInlineSnapshot(`
     {
-      "analytics": false,
       "dataDir": true,
       "guilds": [
         {

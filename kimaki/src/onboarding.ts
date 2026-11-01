@@ -288,7 +288,6 @@ export async function runOnboarding({
     machine,
   })
   if (channel instanceof Error) return channel
-  if (channel.created) bot.analytics.track('project_registered', { project_kind: 'default', source: 'onboarding' })
 
   const textChannel = await bot.discord.channels
     .fetch(channel.channelId)

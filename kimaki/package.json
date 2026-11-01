@@ -23,7 +23,6 @@
     "@discordjs/core": "2.5.0",
     "@opencode/client": "2.0.29",
     "@opencode/plugin": "2.0.29",
-    "@strada.sh/sdk": "^0.8.0",
     "cron-parser": "^5.5.0",
     "discord-api-types": "^0.38.40",
     "discord.js": "^14.26.3",

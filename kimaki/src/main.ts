@@ -6,7 +6,6 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { Client, Events, GatewayIntentBits, Partials } from 'discord.js'
 
 import { createAgentUi } from './agent-ui.ts'
-import type { Analytics } from './analytics.ts'
 import { oc, type Bot } from './bot.ts'
 import { openDb } from './db.ts'
 import { createEffectsRunner } from './effects.ts'
@@ -17,7 +16,6 @@ import { runLockRoute } from './lock-routes.ts'
 import { installShim, type LockServer } from './lock-server.ts'
 import { createLogger } from './logger.ts'
 import { installPluginShim, watchOpencode, type OpencodeEndpoint } from './opencode-server.ts'
-import { countUserProjects } from './project.ts'
 import { createScheduler, systemClock, type Clock } from './scheduler.ts'
 import { createEventRecorder, syncSessionTranscript } from './session-events.ts'
 import { createPluginWait, refreshCliContext } from './session-context.ts'
@@ -47,8 +45,6 @@ export type StartBotOptions = {
   opencodeConfigDir: string
   // Shell command that runs this install (given to agents), from kimakiShellCommand().
   kimakiCommand: string
-  // Product analytics sink (createAnalytics or disabledAnalytics).
-  analytics: Analytics
   // The scheduler's only source of time. Tests pass a manual clock.
   clock?: Clock
   // How often due tasks and wakes run; null: never (tests call scheduler.runDueTasks).
@@ -124,7 +120,6 @@ export async function startBot(options: StartBotOptions): Promise<Error | BotHan
   // handler closes a WebSocket's client TCP ~5s after the proxy closed it, and destroy()
   // waits for that TCP close, so Ctrl+C took 5s. The close frames are exchanged by then.
   cleanup.defer(() => Promise.race([discord.destroy(), sleep(DISCORD_CLOSE_WAIT_MS, undefined, { ref: false })]))
-  cleanup.defer(() => options.analytics.flush())
   const store = createBotStore()
   const recorder = createEventRecorder({ dataDir: options.dataDir })
   cleanup.defer(() => recorder.close())
@@ -152,7 +147,6 @@ export async function startBot(options: StartBotOptions): Promise<Error | BotHan
     discord,
     effects,
     recorder,
-    analytics: options.analytics,
     onTranscriptDue,
   })
   const loaded = await eventLoop.load()
@@ -180,7 +174,6 @@ export async function startBot(options: StartBotOptions): Promise<Error | BotHan
     opencode,
     eventLoop,
     effects,
-    analytics: options.analytics,
     clock: options.clock ?? systemClock,
     dataDir: options.dataDir,
     lockPort: lock.port,
@@ -232,12 +225,6 @@ export async function startBot(options: StartBotOptions): Promise<Error | BotHan
   const scheduling = await scheduler.start()
   if (scheduling instanceof Error) return scheduling
   logger.info(`bot ready as ${discord.user?.tag} in ${discord.guilds.cache.size} server(s)`)
-  const projects = await countUserProjects({ db, dataDir: options.dataDir })
-  if (projects instanceof Error) logger.warn(projects)
-  options.analytics.track('bot_started', {
-    guild_count: discord.guilds.cache.size,
-    ...(!(projects instanceof Error) && { user_project_count: projects }),
-  })
   const resources = cleanup.move()
   let stopping: Promise<void> | undefined
   return {
