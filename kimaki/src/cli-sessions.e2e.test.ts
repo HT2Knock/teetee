@@ -1,13 +1,14 @@
 // CLI session commands: editors, command, named fork, resume by folder.
 
-import fs from 'node:fs'
-import path from 'node:path'
-import { execFile } from 'node:child_process'
-import os from 'node:os'
-import { promisify } from 'node:util'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
+import { execFile } from 'node:child_process'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { promisify } from 'node:util'
 
 import { openDb } from './db.ts'
+import { send } from './input.ts'
 import type { BotHandle } from './main.ts'
 import {
   cliCommand,
@@ -23,7 +24,6 @@ import {
   type OpencodeTestServer,
   type TestTwin,
 } from './test/harness.ts'
-import { send } from './input.ts'
 
 const exec = promisify(execFile)
 const dataDir = tempDataDir()

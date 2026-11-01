@@ -4,7 +4,7 @@
 // All routes are defined inline since each is small.
 
 import http from 'node:http'
-import { Spiceflow } from 'spiceflow'
+
 import {
   ApplicationFlags,
   ApplicationWebhookEventStatus,
@@ -39,9 +39,10 @@ import type {
   APIInteractionResponseCallbackData,
   RESTPostAPIInteractionCallbackJSONBody,
 } from 'discord-api-types/v10'
+import { Spiceflow } from 'spiceflow'
+
 import { DiscordGateway } from './gateway.js'
 import type { GatewayAuthorize, GatewayOfflineClients, GatewayState } from './gateway.js'
-import type { DiscordVoiceServer } from './voice.js'
 import type { PrismaClient } from './generated/client.js'
 import {
   userToAPI,
@@ -53,6 +54,7 @@ import {
   memberToAPI,
 } from './serializers.js'
 import { generateSnowflake } from './snowflake.js'
+import type { DiscordVoiceServer } from './voice.js'
 
 // Discord's JSON error body, as discord.js expects it.
 function discordError({ code, message, status }: { code: number; message: string; status: number }): never {

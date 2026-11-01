@@ -9,15 +9,15 @@
 
 import type { JsonValue, SessionMetadata } from '@opencode/client'
 import { Effect } from 'effect'
-import { ChannelType, type Client, type TextChannel, type ThreadChannel } from './adapters/discord/index.ts'
 
+import { ChannelType, type Client, type TextChannel, type ThreadChannel } from './adapters/discord/index.ts'
+import type { OpenCodeClient, OpencodeConnection } from './adapters/opencode/index.ts'
 import type { AgentUi } from './agent-ui.ts'
 import type { ClockShape } from './clock.ts'
 import type { DbQuery, KimakiDb } from './db-client.ts'
 import type { EffectsRunner } from './effects.ts'
 import { ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
 import type { EventLoop } from './event-loop.ts'
-import type { OpenCodeClient, OpencodeConnection } from './adapters/opencode/index.ts'
 import type { Route } from './routes.ts'
 import { parseFirst, type ChannelDirectoryRow, type GlobalModelRow } from './rows.ts'
 import type { PluginWait } from './session-context.ts'

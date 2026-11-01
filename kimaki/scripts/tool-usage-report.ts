@@ -6,8 +6,8 @@
 
 import os from 'node:os'
 import path from 'node:path'
-import { parseArgs } from 'node:util'
 import { DatabaseSync } from 'node:sqlite'
+import { parseArgs } from 'node:util'
 
 const { values: args } = parseArgs({
   options: {

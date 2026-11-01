@@ -8,6 +8,7 @@ import inspector from 'node:inspector/promises'
 import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import v8 from 'node:v8'
+
 import { Effect } from 'effect'
 import { z } from 'zod'
 
@@ -17,6 +18,7 @@ import { credential, loginCli } from '../../commands/login-commands.ts'
 import { setChannelAgent, setChannelModel, setGlobalModel, setVerbosity } from '../../commands/preference-commands.ts'
 import { channelWorktrees, manageWorktree, newWorktree, setAutoWorktrees } from '../../commands/worktree-commands.ts'
 import { envCredentials, installUrlFor, readSavedCredentials } from '../../credentials.ts'
+import { runResult } from '../../effect-bridge.ts'
 import {
   ConfigError,
   DbError,
@@ -26,13 +28,13 @@ import {
   OpenCodeUnavailableError,
   attempt,
 } from '../../errors.ts'
-import { runResult } from '../../effect-bridge.ts'
 import { send } from '../../input.ts'
 import { addProjectChannel, createApi, defaultMachineName, listProjects, resolveGuildId } from '../../project.ts'
 import { abort, cancelQueuedPrompt, clearQueue, shell, upload } from '../../prompt.ts'
 import { parseRows, type ThreadSessionRow } from '../../rows.ts'
 import { RUNTIME_NAME } from '../../runtime.ts'
 import { createTask, deleteTask, editTask, listTasks, runTaskNow } from '../../scheduler.ts'
+import { sessionCwd } from '../../session-context.ts'
 import {
   allMessages,
   allSessions,
@@ -41,9 +43,9 @@ import {
   type ResolvedSession,
 } from '../../session-events.ts'
 import { channelForDirectory, channelForSession, fork, resume } from '../../sessions.ts'
-import { sessionCwd } from '../../session-context.ts'
 import { createSleep } from '../../sleeps.ts'
 import { worktreeName } from '../../worktrees.ts'
+
 import { RESTART_EXIT_CODE } from './rpc.ts'
 
 type LockRoute<S extends z.ZodType, R> = {

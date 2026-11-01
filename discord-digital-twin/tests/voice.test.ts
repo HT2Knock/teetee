@@ -3,8 +3,7 @@
 // short TTS clip (egaki speech, Cartesia sonic-3, converted with ffmpeg).
 
 import fs from 'node:fs'
-import { afterAll, beforeAll, expect, test } from 'vitest'
-import { ChannelType, Client, GatewayIntentBits } from 'discord.js'
+
 import {
   EndBehaviorType,
   StreamType,
@@ -14,7 +13,10 @@ import {
   entersState,
   joinVoiceChannel,
 } from '@discordjs/voice'
+import { ChannelType, Client, GatewayIntentBits } from 'discord.js'
 import prism from 'prism-media'
+import { afterAll, beforeAll, expect, test } from 'vitest'
+
 import { DigitalDiscord } from '../src/index.js'
 
 const GUILD = '400000000000000001'

@@ -18,8 +18,6 @@
 // busy = root execution running OR any child running (29.2 #3). Typing
 // follows busy; the footer waits until nothing runs.
 
-import { ButtonStyle } from './adapters/discord/index.ts'
-import { produce, type Draft } from 'immer'
 import type {
   FormInfo,
   JsonValue,
@@ -28,7 +26,9 @@ import type {
   SessionMessageInfo,
   V2Event,
 } from '@opencode/client'
+import { produce, type Draft } from 'immer'
 
+import { ButtonStyle } from './adapters/discord/index.ts'
 import type { Verbosity } from './db.ts'
 import {
   asSubtext,

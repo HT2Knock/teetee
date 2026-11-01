@@ -2,9 +2,10 @@
 // Validates that discord.js Client can create threads, send messages in them,
 // archive them, and manage thread members through the DigitalDiscord server.
 
-import { describe, test, expect, beforeAll, afterAll } from 'vitest'
 import { Client, GatewayIntentBits, ChannelType } from 'discord.js'
 import type { TextChannel, ThreadChannel } from 'discord.js'
+import { describe, test, expect, beforeAll, afterAll } from 'vitest'
+
 import { DigitalDiscord } from '../src/index.js'
 
 describe('threads and channels', () => {

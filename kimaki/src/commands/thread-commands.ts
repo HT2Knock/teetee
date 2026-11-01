@@ -6,6 +6,9 @@
 import { execFile } from 'node:child_process'
 import path from 'node:path'
 import { promisify } from 'node:util'
+
+import dedent from 'string-dedent'
+
 import {
   EmbedBuilder,
   MessageFlags,
@@ -13,10 +16,10 @@ import {
   type AutocompleteInteraction,
   type ChatInputCommandInteraction,
 } from '../adapters/discord/index.ts'
-import dedent from 'string-dedent'
-
 import { oc, type Bot } from '../bot.ts'
+import { runResult } from '../effect-bridge.ts'
 import { ConfigError, DiscordError, attempt } from '../errors.ts'
+import { dispatch } from '../input.ts'
 import {
   authorOf,
   replyError,
@@ -27,9 +30,7 @@ import {
   type InteractionRoutes,
   type SessionTarget,
 } from '../interaction-context.ts'
-import { runResult } from '../effect-bridge.ts'
 import { shellQuote } from '../onboarding.ts'
-import { dispatch } from '../input.ts'
 import { abort, clearQueue, redo, undo } from '../prompt.ts'
 import type { Route } from '../routes.ts'
 import { forkBtw } from '../sessions.ts'

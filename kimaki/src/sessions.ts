@@ -3,8 +3,9 @@
 // /fork-subagent, btw forks, the session marker and the instructions entry.
 
 import type { SessionMetadata } from '@opencode/client'
-import type { TextChannel, ThreadChannel } from './adapters/discord/index.ts'
 
+import type { TextChannel, ThreadChannel } from './adapters/discord/index.ts'
+import type { OpenCodeClient } from './adapters/opencode/index.ts'
 import {
   cliContext,
   oc,
@@ -17,16 +18,15 @@ import {
   type Bot,
   type PromptFile,
 } from './bot.ts'
-import { ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
+import { disabledSkillRules } from './builtin-skills.ts'
 import { runResult } from './effect-bridge.ts'
+import { ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
 import { SILENT_MESSAGE_FLAGS } from './format-parts.ts'
 import { createLogger } from './logger.ts'
-import type { OpenCodeClient } from './adapters/opencode/index.ts'
 import { prompt } from './prompt.ts'
 import { parseRows, type ChannelDirectoryRow } from './rows.ts'
-import { disabledSkillRules } from './builtin-skills.ts'
-import { type ScheduledRun } from './system-prompt.ts'
 import { NO_QUESTION_TOOL, bindThread, putInstructions, switchAgent, threadProject } from './session-context.ts'
+import { type ScheduledRun } from './system-prompt.ts'
 import { createWorktree, resolveWorkingDirectory } from './worktrees.ts'
 
 const logger = createLogger('SESSIONS')

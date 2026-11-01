@@ -1,7 +1,10 @@
-import fs from 'node:fs'
-import { ComponentType } from './adapters/discord/index.ts'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
+import fs from 'node:fs'
+
+import { ComponentType } from './adapters/discord/index.ts'
+import { send } from './input.ts'
 import type { BotHandle } from './main.ts'
+import { shell } from './prompt.ts'
 import {
   TEST_USER_ID,
   seedProjectChannel,
@@ -17,8 +20,6 @@ import {
   type OpencodeTestServer,
   type TestTwin,
 } from './test/harness.ts'
-import { send } from './input.ts'
-import { shell } from './prompt.ts'
 
 const dataDir = tempDataDir()
 let server: OpencodeTestServer

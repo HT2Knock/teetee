@@ -4,6 +4,7 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+
 import {
   FileUploadBuilder,
   LabelBuilder,
@@ -15,8 +16,8 @@ import {
 import { sessionDirectory, type Bot } from './bot.ts'
 import { runResult } from './effect-bridge.ts'
 import { ConfigError, DiscordError } from './errors.ts'
-import type { InteractionRoutes } from './interaction-context.ts'
 import { send } from './input.ts'
+import type { InteractionRoutes } from './interaction-context.ts'
 import type { AgentButton, AgentPrompt, ThreadView } from './thread-reducer.ts'
 
 export function parseButton(value: string): ConfigError | AgentButton {

@@ -4,12 +4,12 @@
 // database, and a message in the old thread continues that same session,
 // which the bot adopts (marker + instructions entry).
 
+import { Database } from 'bun:sqlite'
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import path from 'node:path'
-import { Database } from 'bun:sqlite'
-import { ChannelType } from './adapters/discord/index.ts'
-import { afterAll, beforeAll, expect, test } from 'bun:test'
 
+import { ChannelType } from './adapters/discord/index.ts'
 import type { BotHandle } from './main.ts'
 import { LEGACY_DB_FILE } from './migrations.ts'
 import { createApi } from './project.ts'

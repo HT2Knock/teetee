@@ -4,9 +4,9 @@
 // loaded, so the plugin arrives through OpenCode's watcher reload, like for a
 // user whose service runs before the first Kimaki start.
 
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import path from 'node:path'
-import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
 import {

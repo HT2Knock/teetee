@@ -2,9 +2,10 @@
 // commands run through native session.shell: they do not interrupt a busy
 // run, their output shows in the thread and reaches the model context.
 
-import fs from 'node:fs'
-import type { DeterministicMatcher } from 'opencode-deterministic-provider'
 import { afterAll, beforeAll, expect, test } from 'bun:test'
+import fs from 'node:fs'
+
+import type { DeterministicMatcher } from 'opencode-deterministic-provider'
 
 import type { BotHandle } from './main.ts'
 import {

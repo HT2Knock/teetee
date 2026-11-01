@@ -1,9 +1,13 @@
+import { afterAll, beforeAll, expect, test } from 'bun:test'
+import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
-import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { afterAll, beforeAll, expect, test } from 'bun:test'
+
+import { runResult } from './effect-bridge.ts'
+import { send } from './input.ts'
 import type { BotHandle } from './main.ts'
+import { abort } from './prompt.ts'
 import {
   cliCommand,
   scriptedTurn,
@@ -18,9 +22,6 @@ import {
   type OpencodeTestServer,
   type TestTwin,
 } from './test/harness.ts'
-import { send } from './input.ts'
-import { abort } from './prompt.ts'
-import { runResult } from './effect-bridge.ts'
 
 const exec = promisify(execFile)
 const dataDir = tempDataDir()

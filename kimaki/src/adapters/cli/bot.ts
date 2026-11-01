@@ -4,11 +4,13 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
-import dedent from 'string-dedent'
-import type { Goke } from 'goke'
 
-import { callBot } from '../http/rpc.ts'
+import type { Goke } from 'goke'
+import dedent from 'string-dedent'
+
 import { parseDuration } from '../../duration.ts'
+import { callBot } from '../http/rpc.ts'
+
 import { action, DATA_DIR_HELP, dataDirOrDefault, discordApi, fail, printJson } from './shared.ts'
 
 // null when the file vanished meanwhile (bot restart).

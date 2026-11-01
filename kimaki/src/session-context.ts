@@ -5,8 +5,9 @@
 
 import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
-import type { TextChannel, ThreadChannel } from './adapters/discord/index.ts'
 
+import type { TextChannel, ThreadChannel } from './adapters/discord/index.ts'
+import type { OpencodeEndpoint } from './adapters/opencode/index.ts'
 import {
   cliContext,
   oc,
@@ -21,7 +22,6 @@ import {
 import { runResult } from './effect-bridge.ts'
 import { ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
 import { createLogger } from './logger.ts'
-import type { OpencodeEndpoint } from './adapters/opencode/index.ts'
 import { type ChannelDirectoryRow } from './rows.ts'
 import { baseInstructions, INSTRUCTION_KEY, type ScheduledRun } from './system-prompt.ts'
 import { resolveWorkingDirectory } from './worktrees.ts'

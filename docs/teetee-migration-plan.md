@@ -199,6 +199,8 @@ Gate changes, done:
   `no-unsafe-optional-chaining`, `no-explicit-any`, `no-console`, `eqeqeq`,
   and `import/no-duplicates`. Tests relax `no-shadow` and `no-useless-escape`.
 - `.oxfmtrc.jsonc` uses `printWidth: 120` and leaves Markdown and YAML alone.
+  `sortImports` orders every import block as builtin, external, then local
+  (`./`, `../`), so a file no longer carries its own order.
 - `.github/workflows/ci.yml` no longer builds the deleted `errore` workspace,
   and runs `bun run verify` before the tests.
 - Phase 1 fixes the 39 duplicate groups before the duplicate gate turns on.

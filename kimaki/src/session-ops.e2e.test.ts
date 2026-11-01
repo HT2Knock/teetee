@@ -1,10 +1,11 @@
 // Thread commands that act on the session history and project: /diff,
 // /context-usage, /compact, /undo and /redo.
 
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import path from 'node:path'
+
 import type { DeterministicMatcher } from 'opencode-deterministic-provider'
-import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
 import {

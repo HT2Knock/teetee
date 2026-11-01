@@ -10,6 +10,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+
 import {
   MessageFlags,
   SlashCommandBuilder,
@@ -17,12 +18,11 @@ import {
   type ChatInputCommandInteraction,
   type StringSelectMenuInteraction,
 } from '../adapters/discord/index.ts'
-
 import { oc, type Bot, type PromptFile } from '../bot.ts'
 import { ConfigError } from '../errors.ts'
 import { selectRow, truncate } from '../format-parts.ts'
-import { authorOf, replyError, resolveTarget, respondChoices, type InteractionRoutes } from '../interaction-context.ts'
 import { startSession } from '../input.ts'
+import { authorOf, replyError, resolveTarget, respondChoices, type InteractionRoutes } from '../interaction-context.ts'
 import { fork, resume } from '../sessions.ts'
 import { stripTurnContext } from '../system-prompt.ts'
 import { resolveWorkingDirectory } from '../worktrees.ts'

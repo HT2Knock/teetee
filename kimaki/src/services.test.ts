@@ -3,6 +3,7 @@
 // them with `Layer.succeed` and nothing else changes.
 
 import { expect, test } from 'bun:test'
+
 import { Effect, Layer } from 'effect'
 
 import { Clock, systemClock } from './clock.ts'

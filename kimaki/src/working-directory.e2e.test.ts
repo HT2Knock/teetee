@@ -1,12 +1,15 @@
+import { afterAll, beforeAll, expect, test } from 'bun:test'
+import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
-import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { ComponentType } from './adapters/discord/index.ts'
-import { afterAll, beforeAll, expect, test } from 'bun:test'
 
+import { ComponentType } from './adapters/discord/index.ts'
+import { runLockRoute } from './adapters/http/routes.ts'
+import { manageWorktree, newWorktree, setAutoWorktrees } from './commands/worktree-commands.ts'
+import { send } from './input.ts'
 import type { BotHandle } from './main.ts'
-import { git, listWorktrees } from './worktrees.ts'
+import { forkBtw } from './sessions.ts'
 import {
   cliCommand,
   TEST_USER_ID,
@@ -23,10 +26,7 @@ import {
   type OpencodeTestServer,
   type TestTwin,
 } from './test/harness.ts'
-import { manageWorktree, newWorktree, setAutoWorktrees } from './commands/worktree-commands.ts'
-import { runLockRoute } from './adapters/http/routes.ts'
-import { send } from './input.ts'
-import { forkBtw } from './sessions.ts'
+import { git, listWorktrees } from './worktrees.ts'
 
 let server: OpencodeTestServer
 let twin: TestTwin

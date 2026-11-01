@@ -16,9 +16,9 @@
 // downgrade: changes made by kimaki stay in kimaki.db. Future schema changes
 // (ALTER TABLE ... ADD COLUMN) go in migrateSchema() below.
 
+import { Database } from 'bun:sqlite'
 import fs from 'node:fs'
 import path from 'node:path'
-import { Database } from 'bun:sqlite'
 
 import { DbError, attempt } from './errors.ts'
 import { createLogger } from './logger.ts'

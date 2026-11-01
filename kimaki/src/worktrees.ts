@@ -1,10 +1,11 @@
-// Custom Git checkouts. OpenCode owns session cwd, not checkout creation.
-import { Data } from 'effect'
 import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+import { promisify } from 'node:util'
+
+// Custom Git checkouts. OpenCode owns session cwd, not checkout creation.
+import { Data } from 'effect'
 
 import { ConfigError } from './errors.ts'
 import { canonicalPath } from './file-edit-log.ts'

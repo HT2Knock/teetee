@@ -9,6 +9,9 @@
 // secrets of the whole bot, so only the server owner or an administrator may use them.
 
 import crypto from 'node:crypto'
+
+import type { IntegrationInfo } from '@opencode/client'
+
 import {
   ActionRowBuilder,
   ModalBuilder,
@@ -22,8 +25,6 @@ import {
   type ButtonInteraction,
   type MessageComponentInteraction,
 } from '../adapters/discord/index.ts'
-import type { IntegrationInfo } from '@opencode/client'
-
 import { oc, type Bot } from '../bot.ts'
 import { ConfigError, DbError } from '../errors.ts'
 import { button, buttonRow, paginate, SELECT_PAGE_SIZE, selectedPage, selectRow } from '../format-parts.ts'

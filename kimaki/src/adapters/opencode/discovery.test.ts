@@ -1,13 +1,14 @@
 // OpenCode binary lookup: the first supported binary wins. Only OpenCode 1
 // is an error with install instructions, never replaced.
 
+import { expect, test } from 'bun:test'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { expect, test } from 'bun:test'
+
+import { opencodeBinary } from '../../test/harness.ts'
 
 import { findOpencodeBinary } from './index.ts'
-import { opencodeBinary } from '../../test/harness.ts'
 
 test('supported binary wins over OpenCode 1, only OpenCode 1 is an error, nothing found is null', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kimaki-opencode-bin-'))

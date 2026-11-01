@@ -13,10 +13,11 @@
 // order (prompt, then interrupt with resume) parks queued items for good.
 
 import fs from 'node:fs'
+
 import type { SessionMessageInfo } from '@opencode/client'
 import { Effect } from 'effect'
-import { type Message } from './adapters/discord/index.ts'
 
+import { type Message } from './adapters/discord/index.ts'
 import { ocEffect, projectOf, rootSession, type Author, type Bot, type PromptFile } from './bot.ts'
 import { runResult } from './effect-bridge.ts'
 import { ConfigError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'

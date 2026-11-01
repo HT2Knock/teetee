@@ -1,8 +1,9 @@
+import { execFile } from 'node:child_process'
+import path from 'node:path'
+import { promisify } from 'node:util'
+
 import { Plugin, Skill } from '@opencode/plugin'
 import { Schema } from 'effect'
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
-import path from 'node:path'
 
 import { readMcpState } from '../adapters/opencode/config-dir.ts'
 import { autostartBot } from '../autostart.ts'

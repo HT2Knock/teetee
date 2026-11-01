@@ -2,10 +2,11 @@
 // names and verbosity, markdown tables and callouts as Components V2, long
 // text split into valid messages, and foreground subagent tool lines.
 
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import path from 'node:path'
+
 import type { DeterministicMatcher } from 'opencode-deterministic-provider'
-import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
 import {

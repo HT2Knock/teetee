@@ -7,6 +7,7 @@
 //   /merge-worktree            ─▶ mergeWorktree, refused while a session runs there
 
 import crypto from 'node:crypto'
+
 import {
   ButtonStyle,
   ComponentType,
@@ -15,16 +16,15 @@ import {
   type ChatInputCommandInteraction,
   type ThreadChannel,
 } from '../adapters/discord/index.ts'
-
 import { oc, projectOf, rootSession, sessionDirectory, type Author, type Bot } from '../bot.ts'
-import { ConfigError, DbError } from '../errors.ts'
 import { runResult } from '../effect-bridge.ts'
+import { ConfigError, DbError } from '../errors.ts'
 import { canonicalPath } from '../file-edit-log.ts'
+import { startSession } from '../input.ts'
 import { authorOf, replyError, resolveTarget, type InteractionRoutes } from '../interaction-context.ts'
 import { parseFirst, toDbDate, type ChannelDirectoryRow, type ChannelWorktreeRow } from '../rows.ts'
-import { startSession } from '../input.ts'
-import { fork } from '../sessions.ts'
 import { sessionCwd } from '../session-context.ts'
+import { fork } from '../sessions.ts'
 import {
   deleteWorktree,
   git,

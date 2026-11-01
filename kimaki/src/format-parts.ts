@@ -4,7 +4,10 @@
 // markdown/ instead.
 
 import path from 'node:path'
+
 import type { JsonValue } from '@opencode/client'
+import { z } from 'zod'
+
 import {
   ButtonStyle,
   ComponentType,
@@ -13,8 +16,6 @@ import {
   type APIButtonComponentWithCustomId,
   type APIComponentInMessageActionRow,
 } from './adapters/discord/index.ts'
-import { z } from 'zod'
-
 import type { Verbosity } from './db.ts'
 
 // Bot messages never show link previews. Only messages that need the user

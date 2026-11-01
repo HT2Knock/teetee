@@ -2,8 +2,9 @@
 // only their authorized guilds over the WebSocket, and REST follows the
 // rest_proxy.rs scope rules (fail closed).
 
-import { afterAll, beforeAll, expect, test } from 'vitest'
 import { ChannelType, Client, GatewayIntentBits } from 'discord.js'
+import { afterAll, beforeAll, expect, test } from 'vitest'
+
 import { DigitalDiscord, resolveRouteScope } from '../src/index.js'
 
 const OWN_GUILD = '300000000000000001'

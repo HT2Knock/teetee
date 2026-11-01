@@ -3,10 +3,12 @@
 
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+
 import { wrapJsonSchema, type Goke } from 'goke'
 
 import { BotNotRunningError } from '../../errors.ts'
 import { callBot } from '../http/rpc.ts'
+
 import {
   action,
   DATA_DIR_HELP,

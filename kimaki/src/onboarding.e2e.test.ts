@@ -4,17 +4,18 @@
 // agent's shell tool, reading the saved gateway credentials), and the new
 // channel answers without a bot restart.
 
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
-import { API } from '@discordjs/core/http-only'
-import { ChannelType } from './adapters/discord/index.ts'
-import { afterAll, beforeAll, expect, test } from 'bun:test'
 
+import { API } from '@discordjs/core/http-only'
+
+import { ChannelType } from './adapters/discord/index.ts'
 import type { BotHandle } from './main.ts'
-import { entryArgv } from './runtime.ts'
-import { parseRows, type ChannelDirectoryRow } from './rows.ts'
 import { kimakiShellCommand, runOnboarding } from './onboarding.ts'
+import { parseRows, type ChannelDirectoryRow } from './rows.ts'
+import { entryArgv } from './runtime.ts'
 import {
   TEST_USER_ID,
   scriptedTurn,

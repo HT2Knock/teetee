@@ -23,6 +23,7 @@ import type {
   APIThreadMember,
   GuildFeature,
 } from 'discord-api-types/v10'
+
 import type { User, Guild, Channel, Message, GuildMember, Role, ThreadMember } from './generated/client.js'
 
 // Discord bitfield enums don't include 0 as a member, but 0 is a valid

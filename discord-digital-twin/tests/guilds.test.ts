@@ -2,8 +2,9 @@
 // Validates that discord.js managers can call guild REST endpoints against
 // the DigitalDiscord server and that gateway updates stay in sync.
 
-import { describe, test, expect, beforeAll, afterAll } from 'vitest'
 import { ChannelType, Client, GatewayIntentBits, TextChannel, Role } from 'discord.js'
+import { describe, test, expect, beforeAll, afterAll } from 'vitest'
+
 import { DigitalDiscord } from '../src/index.js'
 
 describe('guild management routes', () => {

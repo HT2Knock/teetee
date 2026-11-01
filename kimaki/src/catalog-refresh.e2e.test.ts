@@ -1,12 +1,13 @@
 // OpenCode loads agents lazily: user agents missing at startup get their
 // /<agent>-agent command when agent.updated arrives.
 
+import { afterAll, beforeAll, expect, test } from 'bun:test'
 import fs from 'node:fs'
 import path from 'node:path'
-import { Routes } from './adapters/discord/index.ts'
-import type { DeterministicMatcher } from 'opencode-deterministic-provider'
-import { afterAll, beforeAll, expect, test } from 'bun:test'
 
+import type { DeterministicMatcher } from 'opencode-deterministic-provider'
+
+import { Routes } from './adapters/discord/index.ts'
 import type { BotHandle } from './main.ts'
 import {
   TEST_USER_ID,

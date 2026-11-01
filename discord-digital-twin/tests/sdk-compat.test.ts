@@ -2,8 +2,9 @@
 // connect to the DigitalDiscord server, complete the Gateway handshake,
 // and see the seeded guild/channels.
 
-import { describe, test, expect, beforeAll, afterAll } from 'vitest'
 import { Client, GatewayIntentBits, ChannelType } from 'discord.js'
+import { describe, test, expect, beforeAll, afterAll } from 'vitest'
+
 import { DigitalDiscord } from '../src/index.js'
 
 describe('discord.js SDK compatibility', () => {

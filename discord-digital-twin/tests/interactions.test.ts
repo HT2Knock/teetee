@@ -2,9 +2,10 @@
 // Validates that discord.js Client can receive INTERACTION_CREATE events and
 // respond via interaction callback, webhook follow-up, and edit endpoints.
 
-import { describe, test, expect, beforeAll, afterAll } from 'vitest'
 import { Client, GatewayIntentBits, ChannelType, InteractionType } from 'discord.js'
 import type { ChatInputCommandInteraction, Interaction, ButtonInteraction, TextChannel } from 'discord.js'
+import { describe, test, expect, beforeAll, afterAll } from 'vitest'
+
 import { DigitalDiscord } from '../src/index.js'
 
 describe('interactions', () => {

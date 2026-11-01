@@ -3,12 +3,13 @@
 // fixtures/v1-schema.sql and the rows copy the value formats of a real V1
 // install (mixed datetime formats, NULL guild_id, 'self-hosted' bot_mode).
 
+import { Database } from 'bun:sqlite'
+import { afterEach, expect, test } from 'bun:test'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { Database } from 'bun:sqlite'
-import { afterEach, expect, test } from 'bun:test'
+
 import { Effect } from 'effect'
 
 import { openDb, verbosityFromV1, verbosityToV1, type KimakiDb } from './db.ts'

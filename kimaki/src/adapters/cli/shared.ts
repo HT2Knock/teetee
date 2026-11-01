@@ -10,14 +10,15 @@
 
 import os from 'node:os'
 import path from 'node:path'
+
 import type { OpenCodeClient } from '@opencode/client'
 import { ChannelType } from 'discord-api-types/v10'
 
 import { canonicalPath } from '../../file-edit-log.ts'
+import { readSessionMarkdown, waitForSessionReady } from '../../session-events.ts'
 import type { LockRouteInput, LockRouteName } from '../http/routes.ts'
 import { callBot } from '../http/rpc.ts'
 import { resolveOpencode } from '../opencode/index.ts'
-import { readSessionMarkdown, waitForSessionReady } from '../../session-events.ts'
 
 export const DATA_DIR_HELP = 'Data directory (default: ~/.kimaki)'
 export const SESSION_HELP = 'Session ID, Discord thread ID or thread URL (default: OPENCODE_SESSION_ID)'

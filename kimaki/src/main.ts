@@ -4,10 +4,15 @@
 // bot in-process and stop it cleanly.
 
 import { setTimeout as sleep } from 'node:timers/promises'
+
 import { Effect, Layer } from 'effect'
 
 import { createDiscordClient, DISCORD_CLOSE_WAIT_MS, loginDiscord } from './adapters/discord/index.ts'
-
+import { handleMcp, type McpRequest } from './adapters/http/mcp.ts'
+import { runLockRoute } from './adapters/http/routes.ts'
+import { installShim, type LockServer } from './adapters/http/rpc.ts'
+import { installPluginShim, watchOpencode, type OpencodeEndpoint } from './adapters/opencode/index.ts'
+import { removeMcpState, writeMcpState } from './adapters/opencode/mcp-state.ts'
 import { createAgentUi } from './agent-ui.ts'
 import { oc, type Bot } from './bot.ts'
 import { Clock, type ClockShape } from './clock.ts'
@@ -15,15 +20,10 @@ import { Database, openDb } from './db.ts'
 import { createEffectsRunner } from './effects.ts'
 import { createEventLoop } from './event-loop.ts'
 import { registerIngress } from './ingress.ts'
-import { handleMcp, type McpRequest } from './adapters/http/mcp.ts'
-import { removeMcpState, writeMcpState } from './adapters/opencode/mcp-state.ts'
-import { runLockRoute } from './adapters/http/routes.ts'
-import { installShim, type LockServer } from './adapters/http/rpc.ts'
 import { createLogger } from './logger.ts'
-import { installPluginShim, watchOpencode, type OpencodeEndpoint } from './adapters/opencode/index.ts'
 import { createScheduler } from './scheduler.ts'
-import { createEventRecorder, syncSessionTranscript } from './session-events.ts'
 import { createPluginWait, refreshCliContext } from './session-context.ts'
+import { createEventRecorder, syncSessionTranscript } from './session-events.ts'
 import { Settings, type BotSettings } from './settings.ts'
 import { createInteractionRegistry, registerSlashCommands } from './slash-commands.ts'
 import { createSleepLock } from './sleeps.ts'

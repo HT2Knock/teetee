@@ -9,16 +9,17 @@
 // bot: a killed bot alone looks like a crash. Both wrappers forward SIGTERM
 // and then exit without spawning the bot again.
 
-import http from 'node:http'
-import fs from 'node:fs'
-import path from 'node:path'
 import crypto from 'node:crypto'
+import fs from 'node:fs'
+import http from 'node:http'
+import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 
 import { DEFAULT_LOCK_PORT } from '../../autostart.ts'
 import { BotNotRunningError, ConfigError, LockPortError, attempt } from '../../errors.ts'
-import type { LockRouteInput, LockRouteName, LockRouteOutput } from './routes.ts'
 import { createLogger } from '../../logger.ts'
+
+import type { LockRouteInput, LockRouteName, LockRouteOutput } from './routes.ts'
 import { mcpScopeFor, type BotTokens, type McpScope } from './tokens.ts'
 
 const logger = createLogger('LOCK')
