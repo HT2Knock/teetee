@@ -3,9 +3,13 @@
 
 import { Cause, Effect, Exit } from 'effect'
 
-export async function runResult<A>(effect: Effect.Effect<A, Error>): Promise<Error | A> {
+// The failure keeps its tagged type, so a still-promise caller returns the same
+// union it returned before the conversion.
+export async function runResult<A, E extends Error>(effect: Effect.Effect<A, E>): Promise<E | A> {
   const exit = await Effect.runPromiseExit(effect)
   if (Exit.isSuccess(exit)) return exit.value
   const cause = Cause.squash(exit.cause)
-  return cause instanceof Error ? cause : new Error(String(cause))
+  // A typed failure squashes back to E. A defect is not E, so it becomes a plain
+  // Error with the same message, which every caller already reports.
+  return (cause instanceof Error ? cause : new Error(String(cause))) as E
 }

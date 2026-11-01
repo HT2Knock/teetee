@@ -7,10 +7,11 @@
 
 import crypto from 'node:crypto'
 import dedent from 'string-dedent'
+import { Effect, Semaphore } from 'effect'
 
 import { fetchThread, threadOfSession, type Bot } from './bot.ts'
 import { parseDuration } from './duration.ts'
-import { ConfigError, DbError } from './errors.ts'
+import { ConfigError, DbError, type DiscordError } from './errors.ts'
 import { asSubtext } from './format-parts.ts'
 import { createLogger } from './logger.ts'
 import { prompt } from './prompt.ts'
@@ -20,8 +21,6 @@ const logger = createLogger('TASK')
 
 const WAKE_RETRY_MS = 30_000
 const WAKE_MAX_ATTEMPTS = 5
-
-type SleepRow = SessionSleepRow
 
 const UTC_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?Z$/
 
@@ -82,66 +81,60 @@ function sleepOutput({ wakeAt, reason }: { wakeAt: number; reason: string | null
   ].join(' ')
 }
 
-export type SleepLock = <T>(input: { sessionId: string; run: () => Promise<T> }) => Promise<T>
+export type SleepLock = <A, E>(input: { sessionId: string; run: Effect.Effect<A, E> }) => Effect.Effect<A, E>
 
 // Writing a sleep, cancelling it on new input and delivering its wake run one
 // at a time per session, so a wake never goes out after the input that cancelled it.
-// One per bot (bot.features.withSleepLock); the chains stay in this closure.
+// One per bot (bot.features.withSleepLock); the semaphores stay in this closure.
 export function createSleepLock(): SleepLock {
-  // sessionId -> tail of its write/cancel/wake chain.
-  const locks = new Map<string, Promise<void>>()
-  return function withSleepLock<T>({ sessionId, run }: { sessionId: string; run: () => Promise<T> }): Promise<T> {
-    const previous = locks.get(sessionId) ?? Promise.resolve()
-    const next = previous.then(run, run)
-    const settled = next.then(
-      () => undefined,
-      () => undefined,
-    )
-    locks.set(sessionId, settled)
-    void settled.then(() => {
-      if (locks.get(sessionId) === settled) locks.delete(sessionId)
-    })
-    return next
+  // sessionId -> its write/cancel/wake lock.
+  const locks = new Map<string, Semaphore.Semaphore>()
+  return function withSleepLock<A, E>({ sessionId, run }: { sessionId: string; run: Effect.Effect<A, E> }) {
+    let lock = locks.get(sessionId)
+    if (!lock) {
+      lock = Semaphore.makeUnsafe(1)
+      locks.set(sessionId, lock)
+    }
+    return lock.withPermits(1)(run)
   }
-}
-
-// WHERE clause of the planned sleep of one delivery, in the raw `?` form
-// `db.unsafe` takes: the values go with it in the same order.
-function sleepRow(sessionId: string, deliveryId: string) {
-  return { where: 'session_id = ? AND delivery_id = ? AND status = ?', values: [sessionId, deliveryId, 'planned'] }
 }
 
 // New input supersedes a pending sleep of the session (prompt.ts dispatch, /abort).
 // `kimaki sleep`. One planned sleep per session; a new one replaces the old (new delivery ID).
-export async function createSleep(
+export function createSleep(
   bot: Bot,
   { sessionId, duration, until, reason }: { sessionId: string; duration?: string; until?: string; reason?: string },
-) {
-  const state = bot.store.getState()
-  const threadId = state.sessionThreads[sessionId]
-  const root = threadId ? state.roots[threadId] : undefined
-  if (!threadId || !root) {
-    return new ConfigError({
-      reason: `Session ${sessionId} has no Kimaki thread on this machine. Run kimaki sleep inside a Kimaki session.`,
-    })
-  }
-  const time = bot.clock.now()
-  const wakeAt = parseWakeAt({ duration, until, now: time })
-  if (wakeAt instanceof Error) return wakeAt
-  const why = reason?.trim() || null
-  const values = {
-    wake_at: new Date(wakeAt),
-    reason: why,
-    status: 'planned' as const,
-    delivery_id: crypto.randomUUID(),
-    attempts: 0,
-    last_attempt_at: null,
-    created_at: new Date(time),
-  }
-  const saved = await bot.features.withSleepLock({
-    sessionId: root,
-    run: () =>
-      bot.db`INSERT INTO session_sleeps (session_id, wake_at, reason, status, delivery_id, attempts, last_attempt_at, created_at)
+): Effect.Effect<{ sessionId: string; threadId: string; wakeAt: string; output: string }, ConfigError | DbError> {
+  return Effect.gen(function* () {
+    const state = bot.store.getState()
+    const threadId = state.sessionThreads[sessionId]
+    const root = threadId ? state.roots[threadId] : undefined
+    if (!threadId || !root) {
+      return yield* Effect.fail(
+        new ConfigError({
+          reason: `Session ${sessionId} has no Kimaki thread on this machine. Run kimaki sleep inside a Kimaki session.`,
+        }),
+      )
+    }
+    const time = bot.clock.now()
+    const wakeAt = parseWakeAt({ duration, until, now: time })
+    if (typeof wakeAt !== 'number') return yield* Effect.fail(wakeAt)
+    const why = reason?.trim() || null
+    const values = {
+      wake_at: new Date(wakeAt),
+      reason: why,
+      status: 'planned' as const,
+      delivery_id: crypto.randomUUID(),
+      attempts: 0,
+      last_attempt_at: null,
+      created_at: new Date(time),
+    }
+    yield* bot.features.withSleepLock({
+      sessionId: root,
+      run: bot.query(
+        'write session_sleeps',
+        (sql) =>
+          sql`INSERT INTO session_sleeps (session_id, wake_at, reason, status, delivery_id, attempts, last_attempt_at, created_at)
         VALUES (${root}, ${toDbDate(values.wake_at)}, ${values.reason}, ${values.status}, ${values.delivery_id}, ${values.attempts}, ${values.last_attempt_at}, ${toDbDate(values.created_at)})
         ON CONFLICT(session_id) DO UPDATE SET
           wake_at = ${toDbDate(values.wake_at)},
@@ -150,19 +143,18 @@ export async function createSleep(
           delivery_id = ${values.delivery_id},
           attempts = ${values.attempts},
           last_attempt_at = ${values.last_attempt_at},
-          created_at = ${toDbDate(values.created_at)}`.catch(
-        (cause) => new DbError({ operation: 'write session_sleeps', cause }),
+          created_at = ${toDbDate(values.created_at)}`,
       ),
+    })
+    bot.eventLoop.dispatch(threadId, { type: 'kimaki.sleep' })
+    logger.log(`session ${root} sleeps until ${new Date(wakeAt).toISOString()}`)
+    return {
+      sessionId: root,
+      threadId,
+      wakeAt: new Date(wakeAt).toISOString(),
+      output: sleepOutput({ wakeAt, reason: why }),
+    }
   })
-  if (saved instanceof Error) return saved
-  bot.eventLoop.dispatch(threadId, { type: 'kimaki.sleep' })
-  logger.log(`session ${root} sleeps until ${new Date(wakeAt).toISOString()}`)
-  return {
-    sessionId: root,
-    threadId,
-    wakeAt: new Date(wakeAt).toISOString(),
-    output: sleepOutput({ wakeAt, reason: why }),
-  }
 }
 
 // Delivers a due wake if it is still the planned sleep and its retry delay
@@ -170,49 +162,48 @@ export async function createSleep(
 // deliver twice: OpenCode returns the existing inbox item for a repeated ID
 // (sleep.e2e.test.ts checks this). No interrupt: a wake joins a running turn
 // at its next step.
-async function wake(bot: Bot, row: SleepRow): Promise<Error | void> {
-  const sessionId = row.session_id
-  const deliveryId = row.delivery_id
-  const wakeAt = row.wake_at.getTime()
-  const reason = row.reason?.trim() || null
-  const time = bot.clock.now()
-  const echo = asSubtext(`Woke after sleeping until ${utcLabel(wakeAt)}${reason ? `. Reason: ${reason}` : ''}`)
-  const text = dedent`
-    Woke after sleeping until ${utcLabel(wakeAt)}.${reason ? `\nReason: ${reason}` : ''}
-    Continue the work you were waiting for.
-  `
-  const deliver = async () => {
-    // session_id, delivery_id and status = 'planned' of this wake.
-    const planned = sleepRow(sessionId, deliveryId)
-    const claimed = await bot.db
-      .unsafe<{ attempts: number }[]>(
-        `UPDATE session_sleeps
-        SET attempts = attempts + 1, last_attempt_at = ?
-        WHERE ${planned.where}
-          AND (last_attempt_at IS NULL OR last_attempt_at <= ?)
-        RETURNING attempts`,
-        [toDbDate(new Date(time)), ...planned.values, toDbDate(new Date(time - WAKE_RETRY_MS))],
+function wake(bot: Bot, row: SessionSleepRow): Effect.Effect<void, DbError | ConfigError | DiscordError> {
+  return Effect.gen(function* () {
+    const sessionId = row.session_id
+    const deliveryId = row.delivery_id
+    const wakeAt = row.wake_at.getTime()
+    const reason = row.reason?.trim() || null
+    const time = bot.clock.now()
+    const echo = asSubtext(`Woke after sleeping until ${utcLabel(wakeAt)}${reason ? `. Reason: ${reason}` : ''}`)
+    const text = dedent`
+      Woke after sleeping until ${utcLabel(wakeAt)}.${reason ? `\nReason: ${reason}` : ''}
+      Continue the work you were waiting for.
+    `
+    const settle = (status: 'consumed' | 'failed') =>
+      bot
+        .query(
+          `settle wake of ${sessionId}`,
+          (sql) =>
+            sql`UPDATE session_sleeps SET status = ${status}
+          WHERE session_id = ${sessionId} AND delivery_id = ${deliveryId} AND status = ${'planned'}`,
+        )
+        .pipe(Effect.as(status === 'consumed' ? ('woke' as const) : ('failed' as const)))
+
+    const deliver = Effect.gen(function* () {
+      const claimed = yield* bot.query(
+        `claim wake of ${sessionId}`,
+        (sql) =>
+          sql<{ attempts: number }>`UPDATE session_sleeps
+          SET attempts = attempts + 1, last_attempt_at = ${toDbDate(new Date(time))}
+          WHERE session_id = ${sessionId} AND delivery_id = ${deliveryId} AND status = ${'planned'}
+            AND (last_attempt_at IS NULL OR last_attempt_at <= ${toDbDate(new Date(time - WAKE_RETRY_MS))})
+          RETURNING attempts`,
       )
-      .catch((cause) => new DbError({ operation: `claim wake of ${sessionId}`, cause }))
-    if (claimed instanceof Error) return claimed
-    const attempt = parseFirst<{ attempts: number }>('session_sleeps', claimed)
-    if (!attempt) return 'stale' as const
-    const settle = async (status: 'consumed' | 'failed') => {
-      const settled = await bot.db
-        .unsafe(`UPDATE session_sleeps SET status = ? WHERE ${planned.where}`, [status, ...planned.values])
-        .catch((cause) => new DbError({ operation: `settle wake of ${sessionId}`, cause }))
-      return settled instanceof Error ? settled : status === 'consumed' ? ('woke' as const) : ('failed' as const)
-    }
-    // Resolved now, not at sleep time: /resume may have moved the session.
-    const threadId = threadOfSession(bot, sessionId)
-    if (!threadId) {
-      logger.warn(`no thread owns session ${sessionId}, dropping its wake`)
-      return settle('failed')
-    }
-    const sent = await (async () => {
-      const thread = await fetchThread(bot, threadId)
-      if (thread instanceof Error) return thread
-      return prompt(bot, {
+      const attempt = parseFirst<{ attempts: number }>('session_sleeps', claimed)
+      if (!attempt) return 'stale' as const
+      // Resolved now, not at sleep time: /resume may have moved the session.
+      const threadId = threadOfSession(bot, sessionId)
+      if (!threadId) {
+        logger.warn(`no thread owns session ${sessionId}, dropping its wake`)
+        return yield* settle('failed')
+      }
+      const thread = yield* fetchThread(bot, threadId)
+      const sent = yield* prompt(bot, {
         sessionId,
         threadId,
         threadName: thread.name,
@@ -222,31 +213,35 @@ async function wake(bot: Bot, row: SleepRow): Promise<Error | void> {
         author: { id: bot.discord.user!.id, username: 'kimaki' },
         messageId: deliveryId,
         id: `msg_sleep_${deliveryId}`,
-      })
-    })()
-    if (!(sent instanceof Error)) return settle('consumed')
-    logger.warn(`wake of ${sessionId} failed (attempt ${attempt.attempts})`, sent)
-    if (attempt.attempts >= WAKE_MAX_ATTEMPTS) return settle('failed')
-    return 'retry' as const
-  }
-  const result = await bot.features.withSleepLock({ sessionId, run: deliver })
-  if (result instanceof Error) return result
-  if (result === 'woke') logger.log(`woke session ${sessionId}`)
+      }).pipe(Effect.match({ onFailure: (error) => error, onSuccess: () => null }))
+      if (!sent) return yield* settle('consumed')
+      logger.warn(`wake of ${sessionId} failed (attempt ${attempt.attempts})`, sent)
+      if (attempt.attempts >= WAKE_MAX_ATTEMPTS) return yield* settle('failed')
+      return 'retry' as const
+    })
+
+    const result = yield* bot.features.withSleepLock({ sessionId, run: deliver })
+    if (result === 'woke') logger.log(`woke session ${sessionId}`)
+  })
 }
 
 // Due wakes, oldest first, one at a time. A failed attempt waits
 // WAKE_RETRY_MS; the claim in wake() checks it again.
-export async function runDueWakes(bot: Bot, { time, limit }: { time: number; limit: number }): Promise<void> {
-  const rows = await bot.db<SessionSleepRow[]>`
-    SELECT * FROM session_sleeps
-    WHERE status = ${'planned'} AND wake_at <= ${toDbDate(new Date(time))}
-      AND (last_attempt_at IS NULL OR last_attempt_at <= ${toDbDate(new Date(time - WAKE_RETRY_MS))})
-    ORDER BY wake_at ASC
-    LIMIT ${limit}`.catch((cause) => new DbError({ operation: 'read due sleeps', cause }))
-  if (rows instanceof Error) return logger.error(rows)
-  const sleeps = parseRows<SessionSleepRow>('session_sleeps', rows)
-  for (const row of sleeps) {
-    const woke = await wake(bot, row)
-    if (woke instanceof Error) logger.warn(woke)
-  }
+export function runDueWakes(bot: Bot, { time, limit }: { time: number; limit: number }): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    const rows = yield* bot.query(
+      'read due sleeps',
+      (sql) =>
+        sql<SessionSleepRow>`SELECT * FROM session_sleeps
+      WHERE status = ${'planned'} AND wake_at <= ${toDbDate(new Date(time))}
+        AND (last_attempt_at IS NULL OR last_attempt_at <= ${toDbDate(new Date(time - WAKE_RETRY_MS))})
+      ORDER BY wake_at ASC
+      LIMIT ${limit}`,
+    )
+    const sleeps = parseRows<SessionSleepRow>('session_sleeps', rows)
+    for (const row of sleeps) {
+      const failed = yield* wake(bot, row).pipe(Effect.match({ onFailure: (error) => error, onSuccess: () => null }))
+      if (failed) logger.warn(failed)
+    }
+  }).pipe(Effect.catchTag('DbError', (error) => Effect.sync(() => logger.error(error))))
 }

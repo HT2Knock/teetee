@@ -379,6 +379,17 @@ ConfigError>` end to end. Callers that still return `T | Error` go through
 `effect-bridge.ts` `runResult`; the bridge is deleted when the last caller
 converts. `db.test.ts` covers the tagged `DbError`.
 
+Second slice, done: the sleep path is Effect end to end. `sleeps.ts`
+(`createSleep`, `wake`, `runDueWakes`), `sleep-store.ts` (`cancelSleep`) and
+`prompt.ts` `prompt()` return `Effect` with tagged failures, and every query
+yields `bot.query`. The per-session write/cancel/wake lock is now an Effect
+`Semaphore` (`SleepLock` takes an `Effect` instead of a `Promise`), so the lock
+cannot be escaped by a failure. `bot.ts` gains `ocEffect` and `fetchThread`
+returns `Effect`. `runResult` now keeps the tagged failure type (`E extends
+Error`) so a converted function still fits the `T | Error` union of its
+promise-shaped callers. Pure parsers (`parseWakeAt`, `parseFutureUtc`) keep
+their `ConfigError | number` return: they touch no database and no I/O.
+
 Exit: zero cycles, core imports no `discord.js`, no `instanceof Error` in
 production code.
 
