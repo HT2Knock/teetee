@@ -15,7 +15,7 @@ import { Effect } from 'effect'
 
 import { ChannelType, REST, type RESTPostAPIGuildChannelJSONBody } from './adapters/discord/index.ts'
 import type { DbQuery } from './db-client.ts'
-import { ConfigError, DbError, DiscordError } from './errors.ts'
+import { ConfigError, type DbError, DiscordError } from './errors.ts'
 import { parseFirst, parseRows, type ChannelDirectoryRow, type GuildCategoryRow } from './rows.ts'
 
 // Typed Discord REST calls (the discord.js REST client returns unknown).

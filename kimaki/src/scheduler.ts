@@ -665,6 +665,13 @@ export async function runTaskNow(bot: Bot, id: number) {
   return { routineId: id, ran: true, threadId: outcome.threadId, sessionId: outcome.sessionId }
 }
 
+// The thread or channel a routine posts into, or "-" when it has no target.
+function formatTaskTarget({ threadId, channelId }: { threadId: string | null; channelId: string | null }): string {
+  if (threadId) return `<#${threadId}>`
+  if (channelId) return `<#${channelId}>`
+  return '-'
+}
+
 // --- /routines: one ephemeral message with a row and Run now / Delete per task.
 
 async function renderTasks(bot: Bot, { notice, guildId }: { notice: string | null; guildId: string }) {
@@ -687,7 +694,7 @@ async function renderTasks(bot: Bot, { notice, guildId }: { notice: string | nul
     .join('\n')
   const rows = shown.flatMap((task): APIMessageTopLevelComponent[] => {
     const next = Math.floor(Date.parse(task.nextRunAt) / 1_000)
-    const where = task.threadId ? `<#${task.threadId}>` : task.channelId ? `<#${task.channelId}>` : '-'
+    const where = formatTaskTarget(task)
     const when = task.status === 'failed' ? `failed: ${task.lastError ?? 'unknown error'}` : `next <t:${next}:R>`
     return [
       {

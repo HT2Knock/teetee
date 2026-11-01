@@ -24,7 +24,7 @@ import {
   type Guild,
   type Message,
 } from './adapters/discord/index.ts'
-import { parseInput, sendInput } from './adapters/http/routes.ts'
+import { parseInput, sendInput, type SendInput } from './adapters/http/routes.ts'
 import { projectOf, type Bot, type PromptFile } from './bot.ts'
 import { runResult } from './effect-bridge.ts'
 import { attempt } from './errors.ts'
@@ -34,7 +34,7 @@ import { createLogger } from './logger.ts'
 import { cancelQueuedPrompt, requeueEdited } from './prompt.ts'
 import { queuedItemFor } from './queue.ts'
 import { REMOTE_PROMPT_FILE, REMOTE_RESULT_PREFIX, REMOTE_SEND_PREFIX } from './remote-send.ts'
-import { parseTextMessage } from './routes.ts'
+import { parseTextMessage, type Route } from './routes.ts'
 
 const logger = createLogger('INGRESS')
 
@@ -118,6 +118,36 @@ async function remotePromptText(url: string) {
   return response.text().catch((cause) => new AttachmentError({ file: REMOTE_PROMPT_FILE, cause }))
 }
 
+// The envelope carries the full prompt in a file when Discord truncated the content.
+async function envelopePrompt(attachment: Attachment | undefined) {
+  if (!attachment) {
+    return new AttachmentError({ file: REMOTE_PROMPT_FILE, cause: new Error('missing from the remote envelope') })
+  }
+  return remotePromptText(attachment.url)
+}
+
+// A bad payload or an unsaved attachment never reaches a session.
+async function deliverEnvelope({
+  bot,
+  input,
+  files,
+}: {
+  bot: Bot
+  input: SendInput | Error
+  files: PromptFile[] | Error
+}) {
+  if (input instanceof Error) return input
+  if (files instanceof Error) return files
+  return send(bot, { ...input, files }, { localOnly: true })
+}
+
+// Only commands and skills have a name worth echoing; a plain prompt echoes its text.
+function routeDetail(route: Route): string {
+  if (route.kind === 'command') return ` /${route.name}`
+  if (route.kind === 'skill') return ` ${route.id}`
+  return ''
+}
+
 async function download(url: string): Promise<AttachmentError | Buffer> {
   const response = await fetch(url).catch((e) => new AttachmentError({ file: url, cause: e }))
   if (response instanceof Error) return response
@@ -149,21 +179,12 @@ async function handleRemoteEnvelope(
   const first = message.attachments.first()
   const promptAttachment = promptInFile && first?.name === REMOTE_PROMPT_FILE ? first : undefined
   // Never fall back to the truncated preview in the message content.
-  const prompt = !promptInFile
-    ? message.content
-    : promptAttachment
-      ? await remotePromptText(promptAttachment.url)
-      : new AttachmentError({ file: REMOTE_PROMPT_FILE, cause: new Error('missing from the remote envelope') })
+  const prompt = promptInFile ? await envelopePrompt(promptAttachment) : message.content
   const target = threadId ? { threadId } : { channelId }
   const input = prompt instanceof Error ? prompt : parseInput(sendInput, { ...value.options, ...target, prompt })
   const attachments = [...message.attachments.values()].filter((attachment) => attachment !== promptAttachment)
   const files = await saveAttachments({ dataDir: bot.dataDir, messageId: message.id, attachments })
-  const result =
-    input instanceof Error
-      ? input
-      : files instanceof Error
-        ? files
-        : await send(bot, { ...input, files }, { localOnly: true })
+  const result = await deliverEnvelope({ bot, input, files })
   const answer = JSON.stringify(result instanceof Error ? { error: result.message } : result)
   await message
     .reply({
@@ -212,7 +233,7 @@ async function handleMessage(bot: Bot, message: Message) {
     parseTextMessage({ content: message.content }) ?? (files.length > 0 ? { kind: 'steer' as const, text: '' } : null)
   if (route instanceof Error) return reportError(route)
   if (!route) return
-  const detail = route.kind === 'command' ? ` /${route.name}` : route.kind === 'skill' ? ` ${route.id}` : ''
+  const detail = routeDetail(route)
   const attached = files.length > 0 ? `, ${files.length} file(s)` : ''
   logger.log(
     `${route.kind}${detail} from ${author.username} in ${thread ? `thread ${thread.id}` : `channel ${channelId}`}${attached}`,

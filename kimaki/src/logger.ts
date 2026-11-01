@@ -104,14 +104,19 @@ function time(): string {
   return [now.getHours(), now.getMinutes(), now.getSeconds()].map((n) => String(n).padStart(2, '0')).join(':')
 }
 
+// Nothing before the first argument; an error after text reads as a cause.
+function separator({ arg, index }: { arg: LogArg; index: number }): string {
+  if (index === 0) return ''
+  return arg instanceof Error ? ': ' : ' '
+}
+
+function shown(arg: LogArg): string {
+  return arg instanceof Error ? errorChain(arg) : String(arg)
+}
+
 function write({ level, prefix, args }: { level: Level; prefix: string; args: LogArg[] }) {
   // Strings joined by spaces; an Error after text is joined with ": ".
-  const text = args
-    .map(
-      (arg, index) =>
-        `${index === 0 ? '' : arg instanceof Error ? ': ' : ' '}${arg instanceof Error ? errorChain(arg) : String(arg)}`,
-    )
-    .join('')
+  const text = args.map((arg, index) => `${separator({ arg, index })}${shown(arg)}`).join('')
   const error = level === 'error' ? args.find((arg): arg is Error => arg instanceof Error) : undefined
   const stack = error && rootStack(error)
   const fd = logTarget.fd

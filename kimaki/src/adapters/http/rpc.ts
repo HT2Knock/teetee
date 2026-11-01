@@ -222,6 +222,13 @@ export async function startLockServer({
     }
     json(res, result.status, result.body)
   }
+  // Two routers on one port: /mcp for MCP, /rpc/* (and the older /kimaki/*) for the CLI.
+  function handlerFor(pathname: string) {
+    if (pathname === '/mcp') return handleMcp
+    if (pathname.startsWith('/rpc/') || pathname.startsWith('/kimaki/')) return handle
+    return null
+  }
+
   const server = http.createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
       res.writeHead(200, { 'content-type': 'application/json' })
@@ -229,8 +236,7 @@ export async function startLockServer({
       return
     }
     const pathname = (req.url ?? '').split('?')[0] ?? ''
-    const handler =
-      pathname === '/mcp' ? handleMcp : pathname.startsWith('/rpc/') || pathname.startsWith('/kimaki/') ? handle : null
+    const handler = handlerFor(pathname)
     if (!handler) {
       res.writeHead(404)
       res.end()

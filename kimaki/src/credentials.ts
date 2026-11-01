@@ -115,8 +115,15 @@ export function emitEvent(event: ProgrammaticEvent): void {
   process.stdout.write(`data: ${JSON.stringify(event)}\n\n`)
 }
 
+// The desktop opener of each platform.
+function browserCommand(): string {
+  if (process.platform === 'darwin') return 'open'
+  if (process.platform === 'win32') return 'explorer'
+  return 'xdg-open'
+}
+
 async function openInBrowser(url: string): Promise<void> {
-  const command = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open'
+  const command = browserCommand()
   await execFileAsync(command, [url]).catch(() => undefined)
 }
 

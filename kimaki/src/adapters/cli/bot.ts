@@ -115,7 +115,8 @@ export function registerBotCommands(cli: Goke) {
         opencode: ${JSON.stringify(status.opencode)}
         guilds: ${JSON.stringify(status.guilds)}
         data dir: ${JSON.stringify(status.dataDir)}
-      ` + '\n',
+
+      `,
       )
     })
 

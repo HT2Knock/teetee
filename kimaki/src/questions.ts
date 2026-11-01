@@ -98,6 +98,14 @@ function questionFields(form: FormLike): QuestionField[] | null {
   return fields.every((field) => field !== null) ? fields : null
 }
 
+// One answer for every field kind: a list for multiselect, a flag for boolean,
+// the first value for a string.
+function fieldValue({ field, values }: { field: QuestionField; values: string[] }): FieldValue {
+  if (field.type === 'multiselect') return values
+  if (field.type === 'boolean') return values[0] === 'true'
+  return values[0] ?? ''
+}
+
 function header({ field, label }: { field: QuestionField; label: string | null }): string {
   const from = label ? `**From:** \`${label}\`\n` : ''
   const title = field.title ? `**${field.title.slice(0, 200)}**\n` : ''
@@ -320,8 +328,7 @@ export function createQuestionHandlers(): InteractionRoutes {
       )
       return
     }
-    const value =
-      field.type === 'multiselect' ? values : field.type === 'boolean' ? values[0] === 'true' : (values[0] ?? '')
+    const value = fieldValue({ field, values })
     await record(bot, { interaction, ...pending, value })
   }
 

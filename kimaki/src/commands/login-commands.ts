@@ -433,13 +433,11 @@ export function createLoginRoutes(): InteractionRoutes {
       })
     }
     wizards.delete(found.id)
-    const content =
-      status.status === 'complete'
-        ? `${found.provider.name} OAuth connected`
-        : status.status === 'failed'
-          ? status.message
-          : 'Login expired. Run /login again.'
-    return interaction.editReply({ content, components: [] })
+    if (status.status === 'complete') {
+      return interaction.editReply({ content: `${found.provider.name} OAuth connected`, components: [] })
+    }
+    if (status.status === 'failed') return interaction.editReply({ content: status.message, components: [] })
+    return interaction.editReply({ content: 'Login expired. Run /login again.', components: [] })
   }
 
   return {

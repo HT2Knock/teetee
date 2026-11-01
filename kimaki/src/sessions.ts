@@ -20,7 +20,7 @@ import {
 } from './bot.ts'
 import { disabledSkillRules } from './builtin-skills.ts'
 import { runResult } from './effect-bridge.ts'
-import { ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
+import { ConfigError, DbError, DiscordError, type OpenCodeError, type OpenCodeUnavailableError } from './errors.ts'
 import { SILENT_MESSAGE_FLAGS } from './format-parts.ts'
 import { createLogger } from './logger.ts'
 import { prompt } from './prompt.ts'

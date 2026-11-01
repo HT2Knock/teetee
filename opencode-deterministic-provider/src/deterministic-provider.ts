@@ -181,6 +181,11 @@ export function createDeterministicProvider(settings: DeterministicProviderSetti
   return provider
 }
 
+// A provider npm package is an aisdk package unless the caller said so already.
+function aisdkPackage(npm: string): string {
+  return npm.startsWith('aisdk:') ? npm : `aisdk:${npm}`
+}
+
 export function buildDeterministicOpencodeConfig({
   model,
   smallModel,
@@ -192,11 +197,7 @@ export function buildDeterministicOpencodeConfig({
     model,
     extraModels: smallModel ? [smallModel] : undefined,
     providerName,
-    providerPackage: providerNpm
-      ? providerNpm.startsWith('aisdk:')
-        ? providerNpm
-        : `aisdk:${providerNpm}`
-      : undefined,
+    providerPackage: providerNpm ? aisdkPackage(providerNpm) : undefined,
     settings,
     permissions: [
       { action: 'shell', resource: '*', effect: 'allow' },

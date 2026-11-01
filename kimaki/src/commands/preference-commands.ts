@@ -500,6 +500,33 @@ async function renderStep(
   )
 }
 
+// /model writes to the session, to every channel, or to this channel.
+function setModelForScope({
+  bot,
+  scope,
+  sessionId,
+  wizard,
+  model,
+}: {
+  bot: Bot
+  scope: string
+  sessionId: string | null | undefined
+  wizard: ModelWizard
+  model: ModelChoice
+}) {
+  if (scope === 'session' && sessionId) return switchModel(bot, { sessionId, model })
+  if (scope === 'global') return setGlobalModel(bot, { model })
+  return setChannelModel(bot, { channelId: wizard.target.channelId, model })
+}
+
+// What /model answers for the scope it wrote.
+function modelScopeMessage({ scope, label }: { scope: string; label: string }): string {
+  if (scope === 'session') return `Model set for this session:\n${label}\nApplies from the next step.`
+  if (scope === 'global')
+    return `Model preference set for all channels:\n${label}\nNew sessions use this model, except in channels with their own model.`
+  return `Model preference set for this channel:\n${label}\nAll new sessions in this channel will use this model.`
+}
+
 async function applyModel(
   bot: Bot,
   { interaction, wizard, scope }: { interaction: StringSelectMenuInteraction; wizard: ModelWizard; scope: string },
@@ -507,20 +534,10 @@ async function applyModel(
   if (!wizard.providerID || !wizard.modelID || !wizard.providerName) return
   const model: ModelChoice = { providerID: wizard.providerID, id: wizard.modelID, variant: wizard.variant }
   const sessionId = wizard.target.sessionId
-  const result =
-    scope === 'session' && sessionId
-      ? await switchModel(bot, { sessionId, model })
-      : scope === 'global'
-        ? await setGlobalModel(bot, { model })
-        : await setChannelModel(bot, { channelId: wizard.target.channelId, model })
+  const result = await setModelForScope({ bot, scope, sessionId, wizard, model })
   if (result instanceof Error) return replyError(interaction, result)
   const label = `**${wizard.providerName}** / **${wizard.modelID}**${model.variant ? ` (${model.variant})` : ''}\n\`${modelLabel(model)}\``
-  const content =
-    scope === 'session'
-      ? `Model set for this session:\n${label}\nApplies from the next step.`
-      : scope === 'global'
-        ? `Model preference set for all channels:\n${label}\nNew sessions use this model, except in channels with their own model.`
-        : `Model preference set for this channel:\n${label}\nAll new sessions in this channel will use this model.`
+  const content = modelScopeMessage({ scope, label })
   await interaction.editReply({ content, components: [] })
 }
 

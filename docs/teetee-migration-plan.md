@@ -198,6 +198,14 @@ Gate changes, done:
   `no-shadow`, `no-unused-vars`, `no-useless-escape`, `no-unsafe-finally`,
   `no-unsafe-optional-chaining`, `no-explicit-any`, `no-console`, `eqeqeq`,
   and `import/no-duplicates`. Tests relax `no-shadow` and `no-useless-escape`.
+- The same file gates readability: no nested ternary, no `else` after `return`,
+  no lonely `if`, `prefer-const`, template literals, object shorthand, type-only
+  imports, `Number.parseInt`, the `node:` protocol, and promise parameter names.
+  The code follows every one of them, so a new file cannot relax them.
+- Three design rules are restricted imports rather than comments: `discord.js`
+  only in `src/adapters/discord`, no OpenCode V1 SDK, and no `execSync` or
+  `spawnSync`. `src/plugin/**` additionally cannot import the logger or the
+  database client, because it runs inside the OpenCode process.
 - `.oxfmtrc.jsonc` uses `printWidth: 120` and leaves Markdown and YAML alone.
   `sortImports` orders every import block as builtin, external, then local
   (`./`, `../`), so a file no longer carries its own order.

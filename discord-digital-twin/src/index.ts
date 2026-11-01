@@ -68,6 +68,14 @@ function collectComponentText({ components, lines }: { components: unknown[]; li
   }
 }
 
+// Footer and queue lines start with a markdown prefix, and the twin compares
+// the body: strip the prefix before normalizing the line.
+function stripMessagePrefix(content: string): string {
+  if (content.startsWith('-# ')) return content.slice(3)
+  if (content.startsWith('> ')) return content.slice(2)
+  return content
+}
+
 export function getMessageVisibleText(message: {
   content?: string | null
   components?: readonly unknown[] | null
@@ -1252,11 +1260,7 @@ export class ChannelScope {
         let content = visibleText
         // Footer lines look like: -# *project ⋅ main ⋅ <1s ⋅ 2% ⋅ model-name*
         // Replace duration and percentage with stable placeholders.
-        const footerBody = content.startsWith('-# ')
-          ? content.slice(3)
-          : content.startsWith('> ')
-            ? content.slice(2)
-            : content
+        const footerBody = stripMessagePrefix(content)
         if (
           deterministicFooters &&
           footerBody.startsWith('*') &&

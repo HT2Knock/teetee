@@ -159,9 +159,17 @@ export type RouteScope =
 
 const SNOWFLAKE = /^\d+$/
 
+// /api/v10/... is the current REST prefix and /v10/... the older one, so the
+// first route segment starts after the prefix.
+function apiBaseIndex(segments: readonly string[]): number {
+  if (segments[0] === 'api' && segments[1] === 'v10') return 2
+  if (segments[0] === 'v10') return 1
+  return -1
+}
+
 export function resolveRouteScope(pathname: string): RouteScope {
   const segments = pathname.split('/').filter((segment) => segment.length > 0)
-  const base = segments[0] === 'api' && segments[1] === 'v10' ? 2 : segments[0] === 'v10' ? 1 : -1
+  const base = apiBaseIndex(segments)
   if (base === -1 || segments.length <= base) return { kind: 'denied' }
   const route = segments.slice(base)
   const [first = '', second = '', third = '', fourth = ''] = route
@@ -208,9 +216,8 @@ export function createServer({
   const state = { port: 0 }
   const typingEvents: TypingEventRecord[] = []
 
-  // Route handlers close over `gateway`. It's assigned after httpServer
-  // creation but before any request arrives (server hasn't started listening).
-  let gateway!: DiscordGateway
+  // Route handlers close over `gateway`. It's created after httpServer but
+  // before any request arrives (the server hasn't started listening).
 
   const app = new Spiceflow({ basePath: '/api/v10' })
     .onError(({ error }) => {
@@ -634,7 +641,7 @@ export function createServer({
         const url = new URL(request.url, 'http://localhost')
         const before = url.searchParams.get('before')
         const after = url.searchParams.get('after')
-        const parsedLimit = parseInt(url.searchParams.get('limit') ?? '50', 10)
+        const parsedLimit = Number.parseInt(url.searchParams.get('limit') ?? '50', 10)
         const limit = Math.min(Number.isNaN(parsedLimit) ? 50 : parsedLimit, 100)
 
         let messages = await prisma.message.findMany({
@@ -1176,7 +1183,7 @@ export function createServer({
         }
         const url = new URL(request.url, 'http://localhost')
         const query = url.searchParams.get('query') ?? ''
-        const parsedLimit = parseInt(url.searchParams.get('limit') ?? '1', 10)
+        const parsedLimit = Number.parseInt(url.searchParams.get('limit') ?? '1', 10)
         const limit = Math.min(Number.isNaN(parsedLimit) ? 1 : parsedLimit, 1000)
         const members = await prisma.guildMember.findMany({
           where: {
@@ -1201,7 +1208,7 @@ export function createServer({
         }
         const url = new URL(request.url, 'http://localhost')
         const after = url.searchParams.get('after')
-        const parsedLimit = parseInt(url.searchParams.get('limit') ?? '1', 10)
+        const parsedLimit = Number.parseInt(url.searchParams.get('limit') ?? '1', 10)
         const limit = Math.min(Number.isNaN(parsedLimit) ? 1 : parsedLimit, 1000)
         const members = await prisma.guildMember.findMany({
           where: {
@@ -1725,7 +1732,7 @@ export function createServer({
     return app.handleForNode(req, res)
   }
 
-  gateway = new DiscordGateway({
+  const gateway = new DiscordGateway({
     httpServer,
     port: 0,
     loadState: loadGatewayState,

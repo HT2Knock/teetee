@@ -302,10 +302,16 @@ export function buildCommands({
     commands.push(builder.toJSON())
   }
 
+  function compareKeys({ a, b }: { a: string; b: string }): number {
+    if (a < b) return -1
+    if (a > b) return 1
+    return 0
+  }
+
   // Sorted: the same catalog always keeps the same commands under the limit,
   // whatever order OpenCode lists them in.
   const sorted = <T>(items: readonly T[], key: (item: T) => string) =>
-    items.toSorted((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0))
+    items.toSorted((a, b) => compareKeys({ a: key(a), b: key(b) }))
   for (const agent of sorted(catalog.agents, (candidate) => candidate.id)) {
     if (agent.mode === 'subagent' || agent.hidden) continue
     add({

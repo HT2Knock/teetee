@@ -12,7 +12,7 @@ import dedent from 'string-dedent'
 
 import { fetchThread, threadOfSession, type Bot } from './bot.ts'
 import { parseDuration } from './duration.ts'
-import { ConfigError, DbError, type DiscordError } from './errors.ts'
+import { ConfigError, type DbError, type DiscordError } from './errors.ts'
 import { asSubtext } from './format-parts.ts'
 import { createLogger } from './logger.ts'
 import { prompt } from './prompt.ts'
