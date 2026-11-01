@@ -164,12 +164,8 @@ export function opencodeConfigDir(): string {
 // through its index module. Always dist, also when the bot runs from src: OpenCode
 // reloads the plugin when its files change, so a src target would reload half
 // edited code on every save. dist only changes on `pnpm build`.
-// `kimaki` acts only on marked sessions (except the session ID line);
-// `kimaki-anthropic` (provider auth) applies to every session.
-const PLUGIN_SHIMS = [
-  { name: 'kimaki', directory: '' },
-  { name: 'kimaki-anthropic', directory: 'anthropic' },
-] as const
+// `kimaki` acts only on marked sessions (except the session ID line).
+const PLUGIN_SHIMS = [{ name: 'kimaki', directory: '' }] as const
 
 // Shims of older Kimaki versions, removed on bot start. kimaki-session-id moved into the kimaki plugin.
 const LEGACY_SHIMS = ['kimaki-session-id']
