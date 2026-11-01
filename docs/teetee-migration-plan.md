@@ -271,13 +271,17 @@ Exit: `bun run verify` passes locally and CI is green on `main`.
 
 ### Phase 1: delete dead surface
 
-- Gateway, Strada, Anthropic plugin, voice, legacy docs, changesets.
-- Fix the 39 duplicate groups, mostly in the test twin.
-- Turn the duplicate gate on.
-- Update `AGENTS.md` and the README.
+Status: done. Commits on `main` from `5a5e1c1` onward.
 
-Exit: type check, lint, fallow, and the full suite pass. Target: about 4,000
-fewer lines (2,600 production, 1,400 test) and 6 fewer dependencies.
+- Removed voice, Strada, the hosted gateway, the Anthropic plugin, the
+  changesets, the upstream changelog, and the stale docs.
+- Removed 6 dependencies and about 9,600 lines.
+- Duplicate gate: four or more copies report; the 13x, 7x, 6x and 4x groups
+  are gone. Pairs and triples remain, almost all in the test twin.
+- `AGENTS.md` is down to the parts that are still true.
+
+Exit met: type check, lint, format, fallow, build, and the full suite pass.
+Suite: 160 tests across 42 files.
 
 ### Phase 2: core skeleton
 
