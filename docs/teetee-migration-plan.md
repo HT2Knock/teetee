@@ -366,10 +366,18 @@ Suite: 169 tests across 46 files.
 
 ### Phase 4: control flow
 
+Status: in progress.
+
 - Convert `T | Error` returns to `Effect` with tagged failures.
 - Replace `instanceof` with `catchTag`. Delete `attempt()`.
 - Use `Queue` for effects, `Stream` for OpenCode events, `Schedule` for retries.
 - Delete `bot.ts`.
+
+First slice, done: the database client has an Effect-native `query`
+(`DbQuery`), and `project.ts` returns `Effect<T, DbError | DiscordError |
+ConfigError>` end to end. Callers that still return `T | Error` go through
+`effect-bridge.ts` `runResult`; the bridge is deleted when the last caller
+converts. `db.test.ts` covers the tagged `DbError`.
 
 Exit: zero cycles, core imports no `discord.js`, no `instanceof Error` in
 production code.

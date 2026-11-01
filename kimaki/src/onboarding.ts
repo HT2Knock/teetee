@@ -40,6 +40,7 @@ import {
 } from './adapters/opencode/index.ts'
 import type { Bot } from './bot.ts'
 import { startSession } from './input.ts'
+import { runResult } from './effect-bridge.ts'
 import { addProjectChannel, defaultChannelName, defaultProjectDirectory } from './project.ts'
 import { parseRows, type ChannelDirectoryRow } from './rows.ts'
 
@@ -263,15 +264,17 @@ export async function runOnboarding({
   const directoryReady = await createDefaultDirectory(directory)
   if (directoryReady instanceof Error) return directoryReady
   const botName = bot.discord.user?.username ?? 'kimaki'
-  const channel = await addProjectChannel({
-    api: new API(bot.discord.rest),
-    db,
-    guildId: selectedGuild.id,
-    directory,
-    name: defaultChannelName({ botName }),
-    topic: DEFAULT_CHANNEL_TOPIC,
-    machine,
-  })
+  const channel = await runResult(
+    addProjectChannel({
+      api: new API(bot.discord.rest),
+      query: bot.query,
+      guildId: selectedGuild.id,
+      directory,
+      name: defaultChannelName({ botName }),
+      topic: DEFAULT_CHANNEL_TOPIC,
+      machine,
+    }),
+  )
   if (channel instanceof Error) return channel
 
   const textChannel = await bot.discord.channels

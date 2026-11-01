@@ -143,6 +143,7 @@ const runBot = ({ options, settings, clock, store, cleanup, onBot }: BuildInput)
     const database = yield* Database
     cleanup.defer(() => database.close())
     const db = database.db
+    const query = database.query
 
     const discord = createDiscordClient({ restUrl: options.discordRestUrl })
     // TODO: await destroy() fully once gateway-proxy uses Fly's `tls` handler. Fly's `http`
@@ -200,6 +201,7 @@ const runBot = ({ options, settings, clock, store, cleanup, onBot }: BuildInput)
     const bot: Bot = {
       discord,
       db,
+      query,
       store,
       opencode,
       eventLoop,

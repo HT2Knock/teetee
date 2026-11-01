@@ -11,6 +11,8 @@ import { Cause, Effect, Exit, ManagedRuntime } from 'effect'
 import { SqlClient } from 'effect/sql'
 import { SqliteClient } from '@effect/sql-sqlite-bun'
 
+import { DbError } from './errors.ts'
+
 // The one database handle every module receives. Queries use tagged templates:
 // await db`SELECT * FROM thread_sessions WHERE thread_id = ${threadId}`.
 // The generic is the whole result, as in Bun's `db<T>`: `db<Row[]>` is `Row[]`.
@@ -22,8 +24,17 @@ export type KimakiDb = {
   (values: readonly unknown[]): unknown
 }
 
+// Effect-native query on the same connection. Phase 4 moves query call sites
+// here from the promise-shaped `db` handle; the operation names the failing
+// statement in the DbError.
+export type DbQuery = <A>(
+  operation: string,
+  run: (sql: SqlClient.SqlClient) => Effect.Effect<A, unknown>,
+) => Effect.Effect<A, DbError>
+
 export type DbClient = {
   db: KimakiDb
+  query: DbQuery
   close: () => Promise<void>
 }
 
@@ -77,5 +88,11 @@ export function openClient({ filename }: { filename: string }): Error | DbClient
     const cause = Cause.squash(exit.cause)
     return cause instanceof Error ? cause : new Error(String(cause))
   }
-  return { db: makeDb(runtime, exit.value), close: () => runtime.dispose() }
+  const sql = exit.value
+  const query: DbQuery = (operation, run) =>
+    Effect.tryPromise({
+      try: () => runtime.runPromise(run(sql)),
+      catch: (cause) => new DbError({ operation, cause }),
+    })
+  return { db: makeDb(runtime, sql), query, close: () => runtime.dispose() }
 }
