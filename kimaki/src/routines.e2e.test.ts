@@ -10,6 +10,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test'
 
 import type { BotHandle } from './main.ts'
 import { abort } from './prompt.ts'
+import { runResult } from './effect-bridge.ts'
 import { parseFirst, toDbDate, type ScheduledTaskRow } from './rows.ts'
 import {
   cliCommand,
@@ -87,7 +88,7 @@ test('runs do not overlap by default; --allow-concurrency starts another session
     nextRunAt: '2030-01-01T20:00:00.000Z',
   })
   for (const threadId of [...first, ...second]) {
-    const aborted = await abort(bot, { threadId })
+    const aborted = await runResult(abort(bot, { threadId }))
     if (aborted instanceof Error) throw aborted
   }
   for (const id of [serial.routineId, parallel.routineId]) await request('task.delete', { id })

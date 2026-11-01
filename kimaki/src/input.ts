@@ -493,12 +493,12 @@ async function command(
   const typed = `/${route.name}${route.arguments ? ` ${route.arguments}` : ''}`
   if (!commands.data.some((candidate) => candidate.name === route.name)) {
     if (route.queue) return runResult(prompt(bot, { ...input, text: typed, delivery: 'queue' }))
-    return steer(bot, { ...input, text: typed })
+    return runResult(steer(bot, { ...input, text: typed }))
   }
   if (!route.queue) {
-    const cancelled = await cancelPendingUi(bot, input.threadId)
+    const cancelled = await runResult(cancelPendingUi(bot, input.threadId))
     if (cancelled instanceof Error) return cancelled
-    const interrupted = await interrupt(bot, input.sessionId)
+    const interrupted = await runResult(interrupt(bot, input.sessionId))
     if (interrupted instanceof Error) return interrupted
   }
   const { attached, attachments } = await splitPromptFiles(input.files)
@@ -553,7 +553,7 @@ async function runInSession(
     case 'command':
       return command(bot, { ...base, directory, route })
     case 'skill':
-      return steer(bot, { ...base, text: route.arguments, skills: [route.id] })
+      return runResult(steer(bot, { ...base, text: route.arguments, skills: [route.id] }))
     case 'queue':
       // A queued voice message does not switch the agent: that would change the running turn.
       if (route.agent) logger.log(`ignoring agent ${route.agent} of a queued message`)
@@ -564,7 +564,7 @@ async function runInSession(
         const switched = await switchAgent(bot, { sessionId, directory, agent, model })
         if (switched instanceof Error) return switched
       }
-      return steer(bot, { ...base, text: route.text })
+      return runResult(steer(bot, { ...base, text: route.text }))
     }
   }
 }

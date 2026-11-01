@@ -720,7 +720,7 @@ const lockRoutes = {
     run: async (bot, input) => {
       const target = localSession(bot, input)
       if (target instanceof Error) return target
-      return abort(bot, { threadId: target.threadId })
+      return runResult(abort(bot, { threadId: target.threadId }))
     },
   }),
   'session.fork': route({
@@ -775,7 +775,7 @@ const lockRoutes = {
     run: async (bot, input) => {
       const target = localSession(bot, input)
       if (target instanceof Error) return target
-      const removed = await cancelQueuedPrompt(bot, { threadId: target.threadId, inboxID: input.inboxId })
+      const removed = await runResult(cancelQueuedPrompt(bot, { threadId: target.threadId, inboxID: input.inboxId }))
       if (removed instanceof Error) return removed
       return { removed: true }
     },
@@ -785,7 +785,7 @@ const lockRoutes = {
     run: async (bot, input) => {
       const target = localSession(bot, input)
       if (target instanceof Error) return target
-      return clearQueue(bot, { threadId: target.threadId })
+      return runResult(clearQueue(bot, { threadId: target.threadId }))
     },
   }),
 

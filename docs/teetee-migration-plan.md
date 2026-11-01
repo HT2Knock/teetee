@@ -390,6 +390,15 @@ Error`) so a converted function still fits the `T | Error` union of its
 promise-shaped callers. Pure parsers (`parseWakeAt`, `parseFutureUtc`) keep
 their `ConfigError | number` return: they touch no database and no I/O.
 
+Third slice, done: the rest of the prompt run-control path is Effect.
+`cancelPendingUi`, `interrupt`, `steer`, `cancelQueuedPrompt`, `clearQueue`,
+`abort`, `requeueEdited`, `killShells`, `idleSession`, `undo` and `redo` return
+`Effect` and fail with tagged errors; `/abort` reads its sleep cancellation as
+a `DbError` it logs instead of a value it tests. `prompt.ts` keeps two async
+functions on purpose: `shell` is fire and forget (the request returns when the
+command ends, output arrives as events) and `upload` waits on the effects
+runner, so both move with the `Queue` slice.
+
 Exit: zero cycles, core imports no `discord.js`, no `instanceof Error` in
 production code.
 
