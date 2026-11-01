@@ -40,6 +40,8 @@ import {
 } from '../../errors.ts'
 import { createLogger } from '../../logger.ts'
 
+export { opencodeConfigDir } from './config-dir.ts'
+
 export type { OpenCodeClient, V2Event }
 
 const logger = createLogger('OPENCODE')
@@ -151,14 +153,6 @@ export async function checkOpencode({
 // The plugins folder is watched and any change reloads every location, which
 // cancels pending forms and permissions everywhere. So the shim is written
 // only when its content differs (first start, or another Kimaki install).
-
-// Same rule as OpenCode's global config dir (packages/util/src/global-roots.ts).
-export function opencodeConfigDir(): string {
-  const explicit = process.env['OPENCODE_CONFIG_DIR']
-  if (explicit) return path.resolve(explicit)
-  const xdg = process.env['XDG_CONFIG_HOME'] || path.join(os.homedir(), '.config')
-  return path.join(xdg, 'opencode')
-}
 
 // Shim folder under plugins/ -> plugin directory under dist/plugin/, loaded
 // through its index module. Always dist, also when the bot runs from src: OpenCode

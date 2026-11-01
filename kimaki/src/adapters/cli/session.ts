@@ -1,5 +1,6 @@
-// `session ...` commands. Reads go straight to OpenCode and SQLite; writes
-// (abort, title, queue, fork, ...) go through the running bot's lock routes.
+// `session ...` commands. Reads go to OpenCode and the bot's control routes;
+// writes (abort, title, queue, fork, ...) go through the same routes. No
+// command opens kimaki.db.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -165,6 +166,7 @@ export function registerSessionQueryCommands(cli: Goke) {
       if (session instanceof Error) fail(session)
       const result = await execFileAsync('critique', ['--web', session.title ?? 'Session diff'], {
         cwd: session.location.directory,
+        timeout: 120_000,
       }).catch(
         (cause: Error & { stderr?: string }) =>
           new Error(`critique failed: ${cause.stderr?.trim() || cause.message}`, { cause }),

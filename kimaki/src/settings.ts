@@ -9,10 +9,6 @@ export type BotSettings = {
   dataDir: string
   // Port of this bot's lock server; written into session markers for the agent's `kimaki` calls.
   lockPort: number
-  // Control token of the local HTTP server: every RPC route and every MCP tool.
-  controlToken: string
-  // Notify token: message, upload and button MCP tools only, for other machines.
-  notifyToken: string
   // Discord REST base URL when it is not discord.com (tests use the twin).
   restUrl: string | null
   // bot_tokens.app_id of these credentials: key of the global_models row.

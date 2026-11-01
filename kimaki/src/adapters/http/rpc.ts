@@ -114,7 +114,7 @@ async function waitForExit({ pid, timeoutMs }: { pid: number; timeoutMs: number 
   return !isAlive(pid)
 }
 
-function signal({ pid, name }: { pid: number; name: NodeJS.Signals }): void {
+function sendSignal({ pid, name }: { pid: number; name: NodeJS.Signals }): void {
   const sent = attempt(
     () => process.kill(pid, name),
     (cause) => new ConfigError({ reason: `${name} to PID ${pid}`, cause }),
@@ -138,12 +138,12 @@ async function evictRunningBot({ port, graceMs = 20_000 }: { port: number; grace
   const reportedWrapper = field('wrapperPid')
   const wrapper = reportedWrapper && reportedWrapper !== process.ppid ? reportedWrapper : null
   logger.log(`stopping the kimaki bot on port ${port} (PID ${pid}, wrapper ${wrapper ?? 'none'})`)
-  signal({ pid: wrapper ?? pid, name: 'SIGTERM' })
+  sendSignal({ pid: wrapper ?? pid, name: 'SIGTERM' })
   if (await waitForExit({ pid, timeoutMs: graceMs })) return
   logger.warn(`PID ${pid} still runs after ${graceMs / 1000}s, sending SIGKILL`)
   // Wrapper first, so it cannot spawn the bot again.
-  if (wrapper) signal({ pid: wrapper, name: 'SIGKILL' })
-  signal({ pid, name: 'SIGKILL' })
+  if (wrapper) sendSignal({ pid: wrapper, name: 'SIGKILL' })
+  sendSignal({ pid, name: 'SIGKILL' })
   await waitForExit({ pid, timeoutMs: 5_000 })
 }
 
@@ -159,9 +159,17 @@ export async function startLockServer({
   supervised?: boolean
   evict?: boolean
 }): Promise<LockPortError | LockServer> {
+  // A plugin loaded by OpenCode keeps the token it registered in its MCP
+  // config. Regenerating on every start would leave that registration dead
+  // until the next plugin reload, so reuse the saved tokens. They stay mode
+  // 0600 in the data dir.
+  const savedToken = async (file: string) =>
+    (await fs.promises.readFile(file, 'utf8').catch(() => '')).trim() || crypto.randomBytes(32).toString('hex')
+  const controlFile = path.join(dataDir, 'lock-token')
+  const notifyFile = path.join(dataDir, 'notify-token')
   const tokens: BotTokens = {
-    control: crypto.randomBytes(32).toString('hex'),
-    notify: crypto.randomBytes(32).toString('hex'),
+    control: await savedToken(controlFile),
+    notify: await savedToken(notifyFile),
   }
   const state: { handler: LockHandler | null; mcp: McpHandler | null } = { handler: null, mcp: null }
   const json = (res: http.ServerResponse, status: number, value: unknown) => {
@@ -247,8 +255,6 @@ export async function startLockServer({
   }
 
   logger.info(`lock server listening on 127.0.0.1:${port}`)
-  const controlFile = path.join(dataDir, 'lock-token')
-  const notifyFile = path.join(dataDir, 'notify-token')
   const written = await fs.promises
     .mkdir(dataDir, { recursive: true, mode: 0o700 })
     .then(async () => {
@@ -275,13 +281,8 @@ export async function startLockServer({
     close: async () => {
       server.closeAllConnections()
       await new Promise<void>((resolve) => server.close(() => resolve()))
-      for (const [file, token] of [
-        [controlFile, tokens.control],
-        [notifyFile, tokens.notify],
-      ] as const) {
-        const saved = await fs.promises.readFile(file, 'utf8').catch(() => null)
-        if (saved === token) await fs.promises.unlink(file).catch((cause) => logger.warn('remove token', cause))
-      }
+      // Keep the tokens: a plugin (or a still-running MCP client) may hold a
+      // registration, and the next start reuses the same values.
     },
   }
 }

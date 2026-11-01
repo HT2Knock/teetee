@@ -1,11 +1,10 @@
 import { Plugin, Skill } from '@opencode/plugin'
 import { Schema } from 'effect'
 import { execFile } from 'node:child_process'
-import fs from 'node:fs'
-import os from 'node:os'
 import { promisify } from 'node:util'
 import path from 'node:path'
 
+import { readMcpState } from '../adapters/opencode/config-dir.ts'
 import { autostartBot } from '../autostart.ts'
 import { readBuiltinSkills } from '../builtin-skills.ts'
 import { fileEditTool, recordToolEdits } from '../file-edit-log.ts'
@@ -16,35 +15,6 @@ const exec = promisify(execFile)
 const decodeSkill = Schema.decodeUnknownSync(Skill.Info)
 
 const BRANCH_PREFIX = '[current git branch is '
-
-// Same rule as OpenCode's global config dir, where the bot writes
-// kimaki-mcp.json next to plugins/kimaki/.
-function configDir(): string {
-  const explicit = process.env['OPENCODE_CONFIG_DIR']
-  if (explicit) return path.resolve(explicit)
-  const xdg = process.env['XDG_CONFIG_HOME'] || path.join(os.homedir(), '.config')
-  return path.join(xdg, 'opencode')
-}
-
-// The bot writes its MCP endpoint before the plugin shim, so plugin setup can
-// register it once per location without a session and without reading the
-// database or waiting for a turn. A stale file points at a dead port; the next
-// bot start rewrites it.
-async function mcpState(): Promise<{ url: string; token: string } | null> {
-  const text = await fs.promises.readFile(path.join(configDir(), 'kimaki-mcp.json'), 'utf8').catch(() => null)
-  if (text === null) return null
-  const value: unknown = (() => {
-    try {
-      return JSON.parse(text)
-    } catch {
-      return null
-    }
-  })()
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-  const url = Reflect.get(value, 'url')
-  const token = Reflect.get(value, 'token')
-  return typeof url === 'string' && typeof token === 'string' ? { url, token } : null
-}
 
 export default Plugin.define({
   id: 'kimaki',
@@ -65,7 +35,7 @@ export default Plugin.define({
     // The MCP server of this bot, registered once per location at setup. A
     // transform reloads the location config and cancels a request in flight,
     // so it must not run from a prompt or context hook.
-    const state = await mcpState()
+    const state = await readMcpState()
     if (state) {
       await ctx.mcp
         .transform((editor) => {

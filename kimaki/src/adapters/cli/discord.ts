@@ -123,6 +123,8 @@ export function registerDiscordCommands(cli: Goke) {
     .option('--json', 'Output as JSON')
     .action(async (options) => {
       if (!options.guild) fail(new Error('Pass --guild <id>'))
+      // Direct REST keeps `user list` usable when the bot is stopped; the token
+      // comes from KIMAKI_BOT_TOKEN or the bot route.
       const { api } = await discordApi(options.dataDir)
       const members = options.query
         ? await api.guilds

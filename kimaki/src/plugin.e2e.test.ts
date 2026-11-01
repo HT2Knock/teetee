@@ -75,7 +75,7 @@ test('bot start writes the plugin shim, OpenCode loads it, a restart does not re
   const thread = await twin.discord.channel(twin.channelId).waitForThread({ timeout: 8_000 })
   await waitForFooter({ discord: twin.discord, threadId: thread.id })
   expect(await kimakiStatus()).toBe('active')
-  // The first marked prompt registers the bot's MCP server for this location.
+  // Plugin setup registers the bot's MCP server for this location.
   const mcpStatus = await waitFor({
     label: 'the teetee MCP server',
     check: async () => {

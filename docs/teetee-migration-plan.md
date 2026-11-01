@@ -340,7 +340,11 @@ Status: done. See the Phase 3 commits on `main`.
   MCP tools run the same lock routes as the CLI. `notify` reaches `send`,
   `upload`, `buttons` and `user_lookup`; `send` with `notify` must target an
   existing thread or session, so it cannot start one. Tokens live in
-  `lock-token` and `notify-token` in the data dir, both mode `0600`.
+  `lock-token` and `notify-token` in the data dir, both mode `0600`, and are
+  reused across restarts: an OpenCode plugin keeps the token it registered, so
+  a new value would leave that registration dead until the next plugin reload.
+  `/mcp` still listens on loopback only; exposing it to other machines is
+  future work (section 9).
 - `adapters/cli`: the subcommands are an RPC client. The former SQLite reads
   are control routes: `project.list`, `project.add`, `channel.directory`,
   `session.resolve`, `session.list`, `session.read`, `session.titles`,
@@ -352,7 +356,9 @@ Status: done. See the Phase 3 commits on `main`.
   by the bot before the plugin shim, not the session marker. A transform
   reloads the location config and cancels an in-flight request, so registering
   from a prompt or context hook made the model answer with a fallback whenever
-  the first prompt registered the server.
+  the first prompt registered the server. Registration is per location, so a
+  TUI session in the same folder also gets the tools; `AGENTS.md` names this as
+  the plugin's third allowed exception.
 
 Exit met: MCP contract and token-scope tests pass, and the CLI answers three
 commands while `kimaki.db` contains bytes that are not a database.
@@ -370,9 +376,10 @@ production code.
 
 ### Phase 5: agent surface
 
-- Add the MCP tools in section 2.3.
+- Move the agent's workflows onto the MCP tools that Phase 3 registered.
 - Shrink the system prompt to about 150 lines.
-- Add MCP tests that assert Discord messages, not internal state.
+- Add MCP workflow tests that assert Discord messages, not internal state, for
+  each workflow the prompt no longer documents.
 
 Exit: the agent completes the current workflows through MCP with no CLI
 manual in the prompt.

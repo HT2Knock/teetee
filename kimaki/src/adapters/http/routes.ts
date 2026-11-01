@@ -364,7 +364,7 @@ const loginField = z
   .optional()
 
 // `/btw` and `/queue` are `kimaki send` with the suffix that picks the mode.
-const sendMention = (suffix: 'btw' | 'queue') =>
+const sendWithSuffix = (suffix: 'btw' | 'queue') =>
   route({
     input: sessionText,
     run: async (bot, input) => {
@@ -754,8 +754,8 @@ const lockRoutes = {
       return { started: true }
     },
   }),
-  'session.btw': sendMention('btw'),
-  'queue.add': sendMention('queue'),
+  'session.btw': sendWithSuffix('btw'),
+  'queue.add': sendWithSuffix('queue'),
   'queue.list': route({
     input: sessionInput({}),
     run: async (bot, input) => {

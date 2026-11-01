@@ -121,19 +121,25 @@ test('MCP send posts a Discord message and waits for the turn', async () => {
   `)
 })
 
-test('the notify token cannot start a session or read a transcript', async () => {
+test('the notify token cannot start a session or call a control tool', async () => {
   const start = await mcp(bot.lock.tokens.notify, 'tools/call', {
     name: 'send',
     arguments: { channelId: twin.channelId, prompt: 'notify start' },
   })
-  const read = await mcp(bot.lock.tokens.notify, 'tools/call', {
-    name: 'session_read',
-    arguments: { id: 'ses_not_allowed' },
-  })
   const listed = await mcp(bot.lock.tokens.notify, 'tools/list')
+  const controlOnly = ['project_list', 'session_list', 'session_read', 'session_archive', 'sleep', 'routine_list']
+  const rejected: Record<string, boolean> = {}
+  for (const name of controlOnly) {
+    const call = await mcp(bot.lock.tokens.notify, 'tools/call', { name, arguments: {} })
+    rejected[name] = Boolean((call.body?.result as { isError?: boolean } | undefined)?.isError)
+  }
   expect({
     start: Boolean((start.body?.result as { isError?: boolean } | undefined)?.isError),
-    read: Boolean((read.body?.result as { isError?: boolean } | undefined)?.isError),
-    readListed: toolNames(listed.body).includes('session_read'),
-  }).toEqual({ start: true, read: true, readListed: false })
+    rejected,
+    listed: controlOnly.filter((name) => toolNames(listed.body).includes(name)),
+  }).toEqual({
+    start: true,
+    rejected: Object.fromEntries(controlOnly.map((name) => [name, true])),
+    listed: [],
+  })
 })

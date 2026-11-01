@@ -22,6 +22,9 @@ type McpTool = {
   // control tools reject a notify token.
   scope: McpScope
   inputSchema: { type: 'object'; properties: Record<string, unknown>; required?: string[] }
+  // A per-tool scope rule beyond `scope`, for example notify cannot start a
+  // session. Returns the reason to reject, or null.
+  guard?: (args: Record<string, unknown>) => string | null
   run: (bot: Bot, args: Record<string, unknown>, signal: AbortSignal) => Promise<ToolResult>
 }
 
@@ -33,12 +36,14 @@ function routeTool(
   scope: McpScope,
   route: string,
   inputSchema: McpTool['inputSchema'],
+  guard?: McpTool['guard'],
 ): McpTool {
   return {
     name,
     description,
     scope,
     inputSchema,
+    guard,
     run: (bot, args, signal) => runLockRoute(bot, { route, input: args, signal }),
   }
 }
@@ -86,6 +91,10 @@ const mcpTools: readonly McpTool[] = [
       },
       required: ['prompt'],
     },
+    (args) =>
+      args['channelId'] !== undefined || args['project'] !== undefined
+        ? 'The notify token cannot start a session. Pass threadId or sessionId.'
+        : null,
   ),
   routeTool('upload', 'Attach local files to a session thread or channel.', 'notify', 'upload', {
     type: 'object',
@@ -191,64 +200,37 @@ function argsOf(params: unknown): Record<string, unknown> {
   return args && typeof args === 'object' && !Array.isArray(args) ? Reflect.get(params, 'arguments') : {}
 }
 
+function toolResult(id: McpRequest['id'], result: unknown): McpResponse {
+  return jsonRpcResult(id, { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] })
+}
+
+function toolError(id: McpRequest['id'], text: string): McpResponse {
+  return jsonRpcResult(id, { isError: true, content: [{ type: 'text', text }] })
+}
+
 async function callTool({
   bot,
   scope,
+  id,
   name,
   params,
   signal,
 }: {
   bot: Bot
   scope: McpScope
+  id: McpRequest['id']
   name: unknown
   params: unknown
   signal: AbortSignal
 }): Promise<McpResponse> {
   const tool = typeof name === 'string' ? toolByName.get(name) : undefined
-  if (!tool) return jsonRpcError(null, -32602, `Unknown tool: ${String(name)}`)
-  if (tool.scope === 'control' && scope === 'notify') {
-    return {
-      status: 200,
-      body: {
-        jsonrpc: '2.0',
-        id: null,
-        result: { isError: true, content: [{ type: 'text', text: `The notify token cannot call ${tool.name}` }] },
-      },
-    }
-  }
+  if (!tool) return jsonRpcError(id, -32602, `Unknown tool: ${String(name)}`)
+  if (tool.scope === 'control' && scope === 'notify') return toolError(id, `The notify token cannot call ${tool.name}`)
   const args = argsOf(params)
-  if (
-    scope === 'notify' &&
-    tool.name === 'send' &&
-    (args['channelId'] !== undefined || args['project'] !== undefined)
-  ) {
-    return {
-      status: 200,
-      body: {
-        jsonrpc: '2.0',
-        id: null,
-        result: {
-          isError: true,
-          content: [{ type: 'text', text: 'The notify token cannot start a session. Pass threadId or sessionId.' }],
-        },
-      },
-    }
-  }
+  const rejected = scope === 'notify' ? tool.guard?.(args) : null
+  if (rejected) return toolError(id, rejected)
   const result = await tool.run(bot, args, signal)
-  if (result instanceof Error) {
-    return {
-      status: 200,
-      body: { jsonrpc: '2.0', id: null, result: { isError: true, content: [{ type: 'text', text: result.message }] } },
-    }
-  }
-  return {
-    status: 200,
-    body: {
-      jsonrpc: '2.0',
-      id: null,
-      result: { content: [{ type: 'text', text: JSON.stringify(result.data, null, 2) }] },
-    },
-  }
+  return result instanceof Error ? toolError(id, result.message) : toolResult(id, result.data)
 }
 
 // One MCP request. `id` is echoed on the result; a notification (no id) still
@@ -282,17 +264,14 @@ export async function handleMcp({
   }
   if (request.method === 'tools/call') {
     const params = request.params && typeof request.params === 'object' ? request.params : {}
-    const response = await callTool({
+    return callTool({
       bot,
       scope,
+      id: request.id,
       name: Reflect.get(params, 'name'),
       params,
       signal,
     })
-    if (response.body && typeof response.body === 'object' && 'result' in response.body) {
-      Reflect.set(response.body, 'id', request.id ?? null)
-    }
-    return response
   }
   return jsonRpcError(request.id, -32601, `Unknown method: ${request.method}`)
 }
