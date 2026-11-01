@@ -50,10 +50,6 @@ export type Bot = {
   dataDir: string
   // Port of this bot's lock server; written into session markers for the agent's `kimaki` calls.
   lockPort: number
-  // Control token of the local HTTP server: the RPC and every MCP tool.
-  controlToken: string
-  // Notify token: message, upload and button MCP tools only.
-  notifyToken: string
   // Discord REST base URL when it is not discord.com (tests use the twin).
   restUrl: string | null
   // Started by the `kimaki` supervisor: `kimaki restart` can respawn it.
@@ -174,12 +170,7 @@ export function readMarker(metadata: SessionMetadata | undefined): SessionMarker
 
 // The marker fields that point the agent's `kimaki` calls at this bot.
 export function cliContext(bot: Bot) {
-  return {
-    dataDir: bot.dataDir,
-    lockPort: bot.lockPort,
-    controlToken: bot.controlToken,
-    ...(bot.restUrl && { restUrl: bot.restUrl }),
-  }
+  return { dataDir: bot.dataDir, lockPort: bot.lockPort, ...(bot.restUrl && { restUrl: bot.restUrl }) }
 }
 
 // Default model of new sessions in channels without their own (/model "All channels").

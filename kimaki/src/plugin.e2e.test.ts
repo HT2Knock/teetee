@@ -16,6 +16,7 @@ import {
   startTwin,
   tempDataDir,
   TEST_USER_ID,
+  waitFor,
   waitForFooter,
   warmUp,
   type OpencodeTestServer,
@@ -74,6 +75,16 @@ test('bot start writes the plugin shim, OpenCode loads it, a restart does not re
   const thread = await twin.discord.channel(twin.channelId).waitForThread({ timeout: 8_000 })
   await waitForFooter({ discord: twin.discord, threadId: thread.id })
   expect(await kimakiStatus()).toBe('active')
+  // The first marked prompt registers the bot's MCP server for this location.
+  const mcpStatus = await waitFor({
+    label: 'the teetee MCP server',
+    check: async () => {
+      const servers = await client.mcp.list({ location: { directory: server.projectDirectory } })
+      const status = servers.data.find((entry) => entry.name === 'teetee')?.status.status
+      return status === 'connected' ? status : null
+    },
+  })
+  expect(mcpStatus).toBe('connected')
   expect(await pluginStatus('kimaki-session-id')).toBe('missing')
   expect(await twin.discord.thread(thread.id).text()).toMatchInlineSnapshot(`
     "--- from: user (tommy)

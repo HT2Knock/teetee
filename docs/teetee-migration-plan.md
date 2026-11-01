@@ -67,8 +67,12 @@ src/main.ts          Layer composition only
 ### 2.3 MCP surface and tokens
 
 One MCP endpoint at `/mcp` on the bot's HTTP server, next to the local RPC.
-The plugin registers it for every location through `ctx.mcp.transform`, using
-the `control` token from the session marker.
+The plugin registers it for every location through `ctx.mcp.transform` at
+setup, reading the control token from `<opencode config dir>/kimaki-mcp.json`.
+The bot writes that file before the plugin shim. It is not the session marker:
+a transform reloads the location and cancels a request in flight, so
+registration must happen before a turn starts, and the marker only exists in
+sessions created after the bot writes it.
 
 ```
 bot HTTP server
@@ -322,13 +326,37 @@ behavior change. Suite: 163 tests across 43 files.
 
 ### Phase 3: adapters
 
-- `adapters/discord`: all `discord.js`.
-- `adapters/opencode`: discovery, client, event stream.
-- `adapters/http`: local RPC (`control` token) and MCP (`control` and `notify`).
-- `adapters/cli`: pure RPC client, no direct SQLite.
-- Plugin registers the MCP server and keeps context injection.
+Status: done. See the Phase 3 commits on `main`.
 
-Exit: MCP contract tests pass; the CLI reads no database file.
+- `adapters/discord`: the only module that imports `discord.js`. It owns the
+  client factory, login, the REST token guard and the shim lifecycle. An
+  `oxlint` rule and `boundary.test.ts` reject a `discord.js` import anywhere
+  else under `kimaki/src`.
+- `adapters/opencode`: discovery, the client and the single event stream. A
+  package-root walker replaces the fixed `dirname` count, so the plugin shim
+  path is right from `src`, `tsc` output and a bundled chunk.
+- `adapters/http`: the local RPC on `/rpc/*` with the control token (the older
+  `/kimaki/*` path still works), and `/mcp` with the control or notify token.
+  MCP tools run the same lock routes as the CLI. `notify` reaches `send`,
+  `upload`, `buttons` and `user_lookup`; `send` with `notify` must target an
+  existing thread or session, so it cannot start one. Tokens live in
+  `lock-token` and `notify-token` in the data dir, both mode `0600`.
+- `adapters/cli`: the subcommands are an RPC client. The former SQLite reads
+  are control routes: `project.list`, `project.add`, `channel.directory`,
+  `session.resolve`, `session.list`, `session.read`, `session.titles`,
+  `routine.list`, `bot.credentials`, `user.list`. `start.ts` is the only CLI
+  module that opens `kimaki.db`, because it is the bot host that migrates and
+  onboards.
+- Plugin: registers the MCP server once per location and keeps the existing
+  context injection. It reads `<opencode config dir>/kimaki-mcp.json`, written
+  by the bot before the plugin shim, not the session marker. A transform
+  reloads the location config and cancels an in-flight request, so registering
+  from a prompt or context hook made the model answer with a fallback whenever
+  the first prompt registered the server.
+
+Exit met: MCP contract and token-scope tests pass, and the CLI answers three
+commands while `kimaki.db` contains bytes that are not a database.
+Suite: 169 tests across 46 files.
 
 ### Phase 4: control flow
 
