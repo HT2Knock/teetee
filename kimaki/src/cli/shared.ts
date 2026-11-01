@@ -112,12 +112,12 @@ export async function waitAndPrintSession({
 
 // Discord REST with the bot token: KIMAKI_BOT_TOKEN (no kimaki.db needed, e.g. CI), else saved credentials.
 export async function discordApi(dataDir: string | undefined) {
-  const [{ envCredentials, gatewayUrlsFromEnv, readSavedCredentials, restApiUrl }, { createApi }] = await Promise.all([
+  const [{ envCredentials, readSavedCredentials }, { createApi }] = await Promise.all([
     import('../credentials.ts'),
     import('../project.ts'),
   ])
   const credentials = await (async () => {
-    const fromEnv = envCredentials({ urls: gatewayUrlsFromEnv() })
+    const fromEnv = envCredentials()
     if (fromEnv) return fromEnv
     const opened = await openCliDb(dataDir)
     const saved = await readSavedCredentials({ db: opened.db })
@@ -130,7 +130,7 @@ export async function discordApi(dataDir: string | undefined) {
     credentials,
     api: createApi({
       token: credentials.token,
-      restUrl: process.env['KIMAKI_DISCORD_REST_URL'] ?? restApiUrl(credentials),
+      restUrl: process.env['KIMAKI_DISCORD_REST_URL'] ?? null,
     }),
   }
 }

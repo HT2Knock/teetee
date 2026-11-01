@@ -24,7 +24,7 @@ import { createSleepLock } from './sleeps.ts'
 import { createBotStore } from './store.ts'
 
 const logger = createLogger('MAIN')
-// The close handshake takes ~120ms to Discord and to gateway-proxy.
+// The close handshake takes ~120ms to Discord.
 const DISCORD_CLOSE_WAIT_MS = 500
 
 export type StartBotOptions = {
@@ -34,8 +34,8 @@ export type StartBotOptions = {
   appId: string
   // Bound by the caller before migration and onboarding; startBot owns it from here.
   lock: LockServer
-  // discord.js REST `api` URL: gateway-proxy in gateway mode, the digital twin
-  // in tests. The WebSocket URL comes from GET /gateway/bot on that host.
+  // discord.js REST `api` URL: the digital twin in tests, null for discord.com.
+  // The WebSocket URL comes from GET /gateway/bot on that host.
   discordRestUrl?: string | null
   // Registration file of the OpenCode service. Defaults to the XDG state dir.
   opencodeServiceFile?: string
@@ -177,6 +177,7 @@ export async function startBot(options: StartBotOptions): Promise<Error | BotHan
     clock: options.clock ?? systemClock,
     dataDir: options.dataDir,
     lockPort: lock.port,
+    restUrl: options.discordRestUrl ?? null,
     supervised: lock.supervised,
     token: options.token,
     appId: options.appId,

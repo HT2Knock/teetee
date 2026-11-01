@@ -4,7 +4,7 @@
 // user which projects they want, searches for them, and adds channels with
 // `kimaki project add` (see project.ts).
 //
-//   credentials (credentials.ts) ─▶ bot ready ─▶ pick guild (gateway: the
+//   credentials (credentials.ts) ─▶ bot ready ─▶ pick guild (the
 //     installed one) ─▶ "Kimaki <machine>" category + #kimaki channel ─▶ welcome message
 //     ─▶ "Kimaki onboarding" thread + session with ONBOARDING prompt
 //
@@ -49,25 +49,17 @@ const execFileAsync = promisify(execFile)
 const DEFAULT_CHANNEL_TOPIC =
   'General channel for misc tasks with Kimaki. Not connected to a specific project or repository.'
 
-// Waits until a self-hosted bot is in at least one server. A gateway client
-// in no server cannot be fixed by waiting: the install URL must be opened
-// again (V1 behavior), so that is an error with the URL.
+// Waits until the bot is in at least one server. The install URL opens again,
+// so the user can add it.
 async function waitForGuild({
   discord,
   installUrl,
-  gateway,
 }: {
   discord: Client
   installUrl: string
-  gateway: boolean
 }): Promise<ConfigError | Guild> {
   const first = discord.guilds.cache.first()
   if (first) return first
-  if (gateway) {
-    return new ConfigError({
-      reason: `The Kimaki bot is in no Discord server. Open this URL to add it (do not share it, it contains your credentials), then run kimaki again: ${installUrl}`,
-    })
-  }
   logger.log(`bot is in no server yet, install it: ${installUrl}`)
   process.stderr.write(`\nAdd the bot to your Discord server:\n${installUrl}\n\nWaiting...\n`)
   return new Promise((resolve) => discord.once(Events.GuildCreate, resolve))
@@ -78,19 +70,17 @@ async function chooseGuild({
   discord,
   guildId,
   installUrl,
-  gateway,
 }: {
   discord: Client
   guildId?: string
   installUrl: string
-  gateway: boolean
 }): Promise<ConfigError | Guild> {
   if (guildId) {
     const guild = discord.guilds.cache.get(guildId)
     return guild ?? new ConfigError({ reason: `The bot is not in server ${guildId}` })
   }
   const guilds = [...discord.guilds.cache.values()]
-  if (guilds.length <= 1) return waitForGuild({ discord, installUrl, gateway })
+  if (guilds.length <= 1) return waitForGuild({ discord, installUrl })
   if (!process.stdin.isTTY) {
     const choices = guilds.map((guild) => `${guild.id} (${guild.name})`).join(', ')
     return new ConfigError({ reason: `The bot is in several servers: ${choices}. Pass --guild <id>.` })
@@ -226,8 +216,6 @@ export async function runOnboarding({
   guildId,
   installUrl,
   kimaki,
-  gateway,
-  installerId,
   machine,
 }: {
   bot: Bot
@@ -237,11 +225,8 @@ export async function runOnboarding({
   installUrl?: string
   // Shell command for `kimaki`, from kimakiShellCommand().
   kimaki: string
-  gateway: boolean
   // --machine-name, else defaultMachineName().
   machine: string
-  // Gateway installs report who installed the bot; else the guild owner.
-  installerId?: string | null
 }): Promise<Error | OnboardingResult> {
   const { db } = bot
   const directory = defaultProjectDirectory({ dataDir })
@@ -271,7 +256,7 @@ export async function runOnboarding({
     const saved = mapped?.guild_id ? bot.discord.guilds.cache.get(mapped.guild_id) : null
     if (saved) return saved
     if (!installUrl) return new ConfigError({ reason: 'No server configured for onboarding. Run kimaki --guild <id>.' })
-    return chooseGuild({ discord: bot.discord, guildId, installUrl, gateway })
+    return chooseGuild({ discord: bot.discord, guildId, installUrl })
   })()
   if (selectedGuild instanceof Error) return selectedGuild
 
@@ -283,7 +268,7 @@ export async function runOnboarding({
     db,
     guildId: selectedGuild.id,
     directory,
-    name: defaultChannelName({ botName, gateway }),
+    name: defaultChannelName({ botName }),
     topic: DEFAULT_CHANNEL_TOPIC,
     machine,
   })
@@ -297,8 +282,8 @@ export async function runOnboarding({
     return new DiscordError({ operation: `default channel ${channel.channelId} is not a text channel` })
   }
   const owner = await selectedGuild.members
-    .fetch(installerId ?? selectedGuild.ownerId)
-    .catch((e) => new DiscordError({ operation: 'fetch installer', cause: e }))
+    .fetch(selectedGuild.ownerId)
+    .catch((e) => new DiscordError({ operation: 'fetch owner', cause: e }))
   if (owner instanceof Error) return owner
   const welcome = await textChannel
     .send({

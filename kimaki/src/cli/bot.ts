@@ -89,8 +89,6 @@ export function registerStartCommand(cli: Goke) {
     .command('', 'Start the bot. Runs onboarding on first start')
     .option('--data-dir <path>', DATA_DIR_HELP)
     .option('-g, --guild <guildId>', 'Server to onboard when the bot is in several')
-    .option('--gateway', 'Use the shared Kimaki bot, no Discord app needed')
-    .option('--gateway-callback-url <url>', 'Redirect here after the gateway install (appends ?guild_id=<id>)')
     .option('--install-url', 'Print the install URL and exit (non-interactive onboarding)')
     .option('--machine-name <name>', 'Name in this machine\'s category "Kimaki <name>" (default: hostname)')
     .option('--restart-onboarding', 'Choose credentials again')
@@ -116,12 +114,9 @@ export function registerStartCommand(cli: Goke) {
         { ensureOpencode, kimakiShellCommand, runOnboarding, startCaffeinate },
         {
           emitEvent,
-          gatewayCredentials,
-          gatewayUrlsFromEnv,
           installUrlFor,
           readSavedCredentials,
           resolveCredentials,
-          restApiUrl,
         },
         { openDb },
         { opencodeConfigDir },
@@ -142,7 +137,6 @@ export function registerStartCommand(cli: Goke) {
         fail(error)
       }
       const dataDir = dataDirOrDefault(options.dataDir)
-      const urls = gatewayUrlsFromEnv()
       const disabledSkills = parseDisabledSkills(options.disableSkills)
       if (disabledSkills instanceof Error) fail(disabledSkills)
       const machine = options.machineName ?? defaultMachineName()
@@ -150,17 +144,11 @@ export function registerStartCommand(cli: Goke) {
       if (options.installUrl) {
         const opened = await openDb({ dataDir, migrate: true })
         if (opened instanceof Error) fail(opened)
-        const credentials = options.gateway
-          ? await gatewayCredentials({ db: opened.db, urls })
-          : await readSavedCredentials({ db: opened.db })
+        const credentials = await readSavedCredentials({ db: opened.db })
         await opened.close()
         if (credentials instanceof Error) fail(credentials)
-        if (!credentials) fail(new Error('No bot configured yet. Run kimaki first, or pass --gateway.'))
-        process.stdout.write(
-          `${installUrlFor({ credentials, website: urls.website, callbackUrl: options.gatewayCallbackUrl })}\n`,
-        )
-        if (credentials.mode === 'gateway')
-          process.stderr.write('This URL contains your client credentials. Do not share it.\n')
+        if (!credentials) fail(new Error('No bot configured yet. Run kimaki first.'))
+        process.stdout.write(`${installUrlFor({ credentials })}\n`)
         return
       }
 
@@ -198,16 +186,13 @@ export function registerStartCommand(cli: Goke) {
       startCaffeinate()
       const resolved = await resolveCredentials({
         db: opened.db,
-        gateway: Boolean(options.gateway),
         restartOnboarding: Boolean(options.restartOnboarding),
-        urls,
-        callbackUrl: options.gatewayCallbackUrl,
       })
       // Saved in SQLite, so restarts, crashes and autostart keep it without the flag.
       await opened.close()
       if (resolved instanceof Error) failStartup(resolved)
-      const { credentials, install } = resolved
-      const installUrl = installUrlFor({ credentials, website: urls.website, callbackUrl: options.gatewayCallbackUrl })
+      const { credentials } = resolved
+      const installUrl = installUrlFor({ credentials })
       // The agent calls this same install. Prefer the built dist entry, so agent
       // commands work also when the bot runs from src.
       const distCli = distCliEntry()
@@ -222,7 +207,6 @@ export function registerStartCommand(cli: Goke) {
         dataDir,
         token: credentials.token,
         appId: credentials.appId,
-        discordRestUrl: restApiUrl(credentials),
         lock,
         opencodeServiceFile: process.env['KIMAKI_OPENCODE_SERVICE_FILE'],
         ensureOpencode: true,
@@ -241,15 +225,12 @@ export function registerStartCommand(cli: Goke) {
       // The supervisor died (SIGKILL, crash): nobody owns this bot anymore.
       process.once('disconnect', shutdown)
 
-      const gateway = credentials.mode === 'gateway'
       const onboarded = await runOnboarding({
         bot,
         dataDir,
-        guildId: options.guild ?? install?.guildId,
+        guildId: options.guild,
         installUrl,
         kimaki,
-        gateway,
-        installerId: install?.installerId,
         machine,
       })
       // The bot keeps running; the next start retries onboarding.
@@ -426,12 +407,9 @@ export function registerBotCommands(cli: Goke) {
   cli
     .command('bot install-url', 'Print the Discord bot install URL')
     .option('--data-dir <path>', DATA_DIR_HELP)
-    .option('--gateway-callback-url <url>', 'Gateway only: redirect here after the install')
     .action(async (options) => {
-      const { installUrlFor, gatewayUrlsFromEnv } = await import('../credentials.ts')
+      const { installUrlFor } = await import('../credentials.ts')
       const { credentials } = await discordApi(options.dataDir)
-      process.stdout.write(
-        `${installUrlFor({ credentials, website: gatewayUrlsFromEnv().website, callbackUrl: options.gatewayCallbackUrl })}\n`,
-      )
+      process.stdout.write(`${installUrlFor({ credentials })}\n`)
     })
 }

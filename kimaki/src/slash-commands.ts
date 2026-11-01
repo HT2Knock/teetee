@@ -1,5 +1,5 @@
 // Slash commands and component interactions (spec 14). Registered per guild
-// with one bulk overwrite (guild-scoped route: gateway-proxy rejects global
+// with one bulk overwrite (guild-scoped route: Discord rejects global
 // application command routes). Every interaction passes the same permission
 // gate as messages, then goes to its handler with one lookup:
 //
