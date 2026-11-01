@@ -9,7 +9,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { Context, Layer } from 'effect'
 
-import { openClient, type KimakiDb } from './db-client.ts'
+import { openClient, type DbQuery, type KimakiDb } from './db-client.ts'
 import { DbError, DbNotMigratedError, attempt } from './errors.ts'
 import { DB_FILE, migrateDb } from './migrations.ts'
 import { REQUIRED_TABLES, type V1Verbosity } from './rows.ts'
@@ -18,6 +18,7 @@ export type { KimakiDb } from './db-client.ts'
 
 export type OpenedDb = {
   db: KimakiDb
+  query: DbQuery
   close: () => Promise<void>
 }
 
@@ -70,7 +71,7 @@ export async function openDb({
     await opened.close()
     return new DbNotMigratedError({ missing: `table ${missing}` })
   }
-  return { db: opened.db, close: opened.close }
+  return { db: opened.db, query: opened.query, close: opened.close }
 }
 
 // V2 has two verbosity levels; the V1 enum stays on disk (spec section 17).

@@ -9,6 +9,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { Database } from 'bun:sqlite'
 import { afterEach, expect, test } from 'bun:test'
+import { Effect } from 'effect'
 
 import { openDb, verbosityFromV1, verbosityToV1, type KimakiDb } from './db.ts'
 import { LEGACY_DB_FILE } from './migrations.ts'
@@ -468,4 +469,31 @@ test('verbosity maps between the V1 enum on disk and the two V2 levels', () => {
       },
     }
   `)
+})
+
+test('the Effect query returns rows and tags a failed statement with DbError', async () => {
+  const dataDir = tempDataDir()
+  const opened = await openDb({ dataDir, migrate: true })
+  if (opened instanceof Error) throw opened
+  const rows = await Effect.runPromise(
+    opened.query(
+      'read sqlite_master',
+      (sql) => sql<{ name: string }>`SELECT name FROM sqlite_master WHERE type = 'table'`,
+    ),
+  )
+  const failed = await Effect.runPromise(
+    Effect.match(
+      opened.query('read a missing table', (sql) => sql`SELECT * FROM nope`),
+      {
+        onFailure: (error) => error,
+        onSuccess: () => null,
+      },
+    ),
+  )
+  await opened.close()
+  expect(rows.some((row) => row.name === 'thread_sessions')).toBe(true)
+  expect(failed && { tag: failed._tag, message: failed.message }).toEqual({
+    tag: 'DbError',
+    message: 'Database read a missing table failed',
+  })
 })

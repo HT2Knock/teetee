@@ -8,6 +8,7 @@ import inspector from 'node:inspector/promises'
 import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 import v8 from 'node:v8'
+import { Effect } from 'effect'
 import { z } from 'zod'
 
 import { parseButton } from '../../agent-ui.ts'
@@ -25,6 +26,7 @@ import {
   OpenCodeUnavailableError,
   attempt,
 } from '../../errors.ts'
+import { runResult } from '../../effect-bridge.ts'
 import { send } from '../../input.ts'
 import { addProjectChannel, createApi, defaultMachineName, listProjects, resolveGuildId } from '../../project.ts'
 import { abort, cancelQueuedPrompt, clearQueue, shell, upload } from '../../prompt.ts'
@@ -792,7 +794,7 @@ const lockRoutes = {
   'project.list': route({
     input: z.object({}),
     run: async (bot) => {
-      const rows = await listProjects({ db: bot.db })
+      const rows = await runResult(listProjects({ query: bot.query }))
       if (rows instanceof Error) return rows
       return rows.map((row) => ({
         channelId: row.channel_id,
@@ -816,19 +818,22 @@ const lockRoutes = {
       const credentials = fromEnv ?? (await readSavedCredentials({ db: bot.db }))
       if (credentials instanceof Error) return credentials
       if (!credentials) return new ConfigError({ reason: 'No saved bot credentials. Start kimaki once to onboard.' })
-      const guildId = await resolveGuildId({ db: bot.db, guildId: input.guild })
-      if (guildId instanceof Error) return guildId
       const api = createApi({
         token: credentials.token,
         restUrl: bot.restUrl ?? process.env['KIMAKI_DISCORD_REST_URL'] ?? null,
       })
-      return addProjectChannel({
-        api,
-        db: bot.db,
-        guildId,
-        directory: path.resolve(input.directory),
-        machine: input.machine ?? defaultMachineName(),
-      })
+      return runResult(
+        Effect.gen(function* () {
+          const guildId = yield* resolveGuildId({ query: bot.query, guildId: input.guild })
+          return yield* addProjectChannel({
+            api,
+            query: bot.query,
+            guildId,
+            directory: path.resolve(input.directory),
+            machine: input.machine ?? defaultMachineName(),
+          })
+        }),
+      )
     },
   }),
   'channel.directory': route({

@@ -12,7 +12,7 @@ import { ChannelType, type Client, type TextChannel, type ThreadChannel } from '
 
 import type { AgentUi } from './agent-ui.ts'
 import type { ClockShape } from './clock.ts'
-import type { KimakiDb } from './db.ts'
+import type { DbQuery, KimakiDb } from './db-client.ts'
 import type { EffectsRunner } from './effects.ts'
 import { ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
 import type { EventLoop } from './event-loop.ts'
@@ -41,6 +41,8 @@ export type BotFeatures = {
 export type Bot = {
   discord: Client
   db: KimakiDb
+  // Effect-native queries for modules that already return Effect.
+  query: DbQuery
   store: BotStore
   opencode: OpencodeConnection
   eventLoop: EventLoop
