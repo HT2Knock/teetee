@@ -1,10 +1,13 @@
-// The only shared mutable in-memory state of the bot (spec 27.4): one small
-// observable store. The event loop writes bindings and views; /verbosity writes
-// verbosity. State private to one module (held events, wizard picks, upload
-// waits) stays in that module's closure.
+// The only shared mutable in-memory state of the bot (plan section 2.6): one
+// small store held in an Effect `Ref`. The event loop writes bindings and
+// views; /verbosity writes verbosity. State private to one module (held events,
+// wizard picks, upload waits) stays in that module's closure.
 //
-// Phase 3 moves this behind an Effect `Ref` service. The shape stays the same,
-// so call sites do not change again.
+// The public shape stays `getState`/`setState`/`subscribe`, so the 40 call
+// sites read state synchronously. Phase 4 can move them to `Ref` effects one
+// slice at a time without a second rewrite.
+
+import { Context, Layer, Ref } from 'effect'
 
 import type { Verbosity } from './db.ts'
 import type { ThreadView } from './thread-reducer.ts'
@@ -28,16 +31,30 @@ export type BotStore = {
   subscribe: (listener: (state: BotState, previous: BotState) => void) => () => void
 }
 
+// The store as a service: main.ts provides one per bot, tests provide their own
+// with `Layer.succeed(ThreadRegistry, createBotStore())`.
+export class ThreadRegistry extends Context.Service<ThreadRegistry, BotStore>()('kimaki/ThreadRegistry') {
+  static readonly layer: Layer.Layer<ThreadRegistry> = Layer.sync(ThreadRegistry, () => createBotStore())
+}
+
+function initialState(): BotState {
+  return { roots: {}, sessionThreads: {}, threads: {}, verbosity: {} }
+}
+
 export function createBotStore(): BotStore {
-  let state: BotState = { roots: {}, sessionThreads: {}, threads: {}, verbosity: {} }
+  // A Ref is Effect's mutable cell; `getUnsafe` and a direct `.ref.current`
+  // write keep the synchronous shape the call sites need. Every write goes
+  // through `setState`, so listeners still see each transition.
+  const ref = Ref.makeUnsafe<BotState>(initialState())
   const listeners = new Set<(state: BotState, previous: BotState) => void>()
   return {
-    getState: () => state,
+    getState: () => Ref.getUnsafe(ref),
     setState: (update) => {
-      const previous = state
+      const previous = Ref.getUnsafe(ref)
       const patch = typeof update === 'function' ? update(previous) : update
-      state = { ...previous, ...patch }
-      for (const listener of listeners) listener(state, previous)
+      const next = { ...previous, ...patch }
+      ref.ref.current = next
+      for (const listener of listeners) listener(next, previous)
     },
     subscribe: (listener) => {
       listeners.add(listener)

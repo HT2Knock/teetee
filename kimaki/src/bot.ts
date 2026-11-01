@@ -11,6 +11,7 @@ import type { JsonValue, SessionMetadata } from '@opencode/client'
 import { ChannelType, type Client, type TextChannel, type ThreadChannel } from 'discord.js'
 
 import type { AgentUi } from './agent-ui.ts'
+import type { ClockShape } from './clock.ts'
 import type { KimakiDb } from './db.ts'
 import type { EffectsRunner } from './effects.ts'
 import { ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
@@ -18,7 +19,6 @@ import type { EventLoop } from './event-loop.ts'
 import type { OpenCodeClient, OpencodeConnection } from './opencode-server.ts'
 import type { Route } from './routes.ts'
 import { parseFirst, type ChannelDirectoryRow, type GlobalModelRow } from './rows.ts'
-import type { Clock } from './scheduler.ts'
 import type { PluginWait } from './session-context.ts'
 import type { SleepLock } from './sleeps.ts'
 import type { BotStore } from './store.ts'
@@ -46,7 +46,7 @@ export type Bot = {
   eventLoop: EventLoop
   effects: EffectsRunner
   // The scheduler's only source of "now"; tests pass a manual clock.
-  clock: Clock
+  clock: ClockShape
   dataDir: string
   // Port of this bot's lock server; written into session markers for the agent's `kimaki` calls.
   lockPort: number

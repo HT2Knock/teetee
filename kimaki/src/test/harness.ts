@@ -20,13 +20,14 @@ import { DigitalDiscord } from 'discord-digital-twin/src'
 import { buildDeterministicOpencode2Config, type DeterministicMatcher } from 'opencode-deterministic-provider'
 
 import { saveCredentials, type Credentials } from '../credentials.ts'
+import type { ClockShape } from '../clock.ts'
 import { openDb, verbosityToV1, type Verbosity } from '../db.ts'
 import type { ToolInput } from '../format-parts.ts'
 import { startLockServer } from '../lock-server.ts'
 import { startBot, type BotHandle } from '../main.ts'
 import type { LockRouteInput, LockRouteName } from '../lock-routes.ts'
 import { entryArgv } from '../runtime.ts'
-import { listTasks, type Clock } from '../scheduler.ts'
+import { listTasks } from '../scheduler.ts'
 
 const TEST_MODEL = 'deterministic-v2'
 
@@ -303,7 +304,7 @@ export async function startTestBot({
   // false: the data dir is used as is (a V1 database the bot start must import).
   saveTwinCredentials?: boolean
   // Scheduling tests pass manualClock() and null, then call bot.scheduler.runDueTasks().
-  clock?: Clock
+  clock?: ClockShape
   schedulerIntervalMs?: number | null
 }): Promise<BotHandle> {
   // What credential resolution saves in production; `kimaki project add` reads it.
@@ -341,7 +342,7 @@ export async function startTestBot({
 
 // Time as a test input (spec 30, Phase 8): never vi.useFakeTimers(), it would
 // also freeze discord.js, the twin and HTTP timeouts in this process.
-export function manualClock(start: number): Clock & { set: (ms: number) => void; advance: (ms: number) => void } {
+export function manualClock(start: number): ClockShape & { set: (ms: number) => void; advance: (ms: number) => void } {
   const state = { now: start }
   return {
     now: () => state.now,

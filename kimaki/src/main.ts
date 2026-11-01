@@ -1,13 +1,16 @@
 // Bot wiring. Order: lock port (bound by the caller) -> SQLite (migrate) -> OpenCode service and
-// Discord login in parallel. Returns a handle so tests can drive the bot
-// in-process and stop it cleanly.
+// Discord login in parallel. The body is one Effect program over the app Layer
+// (settings, clock, thread registry). Returns a handle so tests can drive the
+// bot in-process and stop it cleanly.
 
 import { setTimeout as sleep } from 'node:timers/promises'
 import { Client, Events, GatewayIntentBits, Partials } from 'discord.js'
+import { Effect, Layer } from 'effect'
 
 import { createAgentUi } from './agent-ui.ts'
 import { oc, type Bot } from './bot.ts'
-import { openDb } from './db.ts'
+import { Clock, type ClockShape } from './clock.ts'
+import { Database, openDb } from './db.ts'
 import { createEffectsRunner } from './effects.ts'
 import { DiscordError } from './errors.ts'
 import { createEventLoop } from './event-loop.ts'
@@ -16,12 +19,13 @@ import { runLockRoute } from './lock-routes.ts'
 import { installShim, type LockServer } from './lock-server.ts'
 import { createLogger } from './logger.ts'
 import { installPluginShim, watchOpencode, type OpencodeEndpoint } from './opencode-server.ts'
-import { createScheduler, systemClock, type Clock } from './scheduler.ts'
+import { createScheduler } from './scheduler.ts'
 import { createEventRecorder, syncSessionTranscript } from './session-events.ts'
 import { createPluginWait, refreshCliContext } from './session-context.ts'
+import { Settings, type BotSettings } from './settings.ts'
 import { createInteractionRegistry, registerSlashCommands } from './slash-commands.ts'
 import { createSleepLock } from './sleeps.ts'
-import { createBotStore } from './store.ts'
+import { ThreadRegistry, type BotStore } from './store.ts'
 
 const logger = createLogger('MAIN')
 // The close handshake takes ~120ms to Discord.
@@ -41,12 +45,12 @@ export type StartBotOptions = {
   opencodeServiceFile?: string
   // Start the service with Service.ensure() when none is running.
   ensureOpencode: boolean
-  // Global OpenCode config dir that gets plugins/teetee/ (opencodeConfigDir()).
+  // Global OpenCode config dir that gets plugins/kimaki/ (opencodeConfigDir()).
   opencodeConfigDir: string
   // Shell command that runs this install (given to agents), from kimakiShellCommand().
   kimakiCommand: string
   // The scheduler's only source of time. Tests pass a manual clock.
-  clock?: Clock
+  clock?: ClockShape
   // How often due tasks and wakes run; null: never (tests call scheduler.runDueTasks).
   schedulerIntervalMs?: number | null
   autoWorktrees?: boolean
@@ -62,6 +66,56 @@ export type BotHandle = Bot & {
   stop: () => Promise<void>
 }
 
+// Reverse-order async cleanup, like an AsyncDisposableStack. An Effect
+// generator cannot use `await using`, so main.ts keeps its own stack.
+class Cleanup {
+  private readonly steps: Array<() => unknown> = []
+
+  defer(step: () => unknown): void {
+    this.steps.push(step)
+  }
+
+  // Idempotent: a failure path and `stop()` cannot run a step twice.
+  async dispose(): Promise<void> {
+    let first: unknown
+    for (const step of this.steps.splice(0).reverse()) {
+      try {
+        await step()
+      } catch (cause) {
+        first ??= cause
+      }
+    }
+    if (first !== undefined) throw first
+  }
+}
+
+// What the CLI options configure, as the Settings service of the app Layer.
+function settingsOf(options: StartBotOptions): BotSettings {
+  return {
+    dataDir: options.dataDir,
+    lockPort: options.lock.port,
+    restUrl: options.discordRestUrl ?? null,
+    appId: options.appId,
+    supervised: options.lock.supervised,
+    autoWorktrees: options.autoWorktrees ?? false,
+    allowAllUsers: options.allowAllUsers ?? false,
+    disabledSkills: options.disabledSkills ?? [],
+    kimakiCommand: options.kimakiCommand,
+    opencodeConfigDir: options.opencodeConfigDir,
+  }
+}
+
+// Every service a bot start needs, composed here and nowhere else. The
+// database is not in this layer: its file must open first, and the bot owns the
+// connection until stop(), so it is provided per start (buildBot).
+function appLayer(options: StartBotOptions) {
+  return Layer.mergeAll(
+    Settings.layer(settingsOf(options)),
+    options.clock ? Layer.succeed(Clock, options.clock) : Clock.layer,
+    ThreadRegistry.layer,
+  )
+}
+
 async function loginDiscord({ discord, token }: { discord: Client; token: string }): Promise<DiscordError | void> {
   const ready = new Promise<void>((resolve) => discord.once(Events.ClientReady, () => resolve()))
   const login = await discord.login(token).catch((e) => new DiscordError({ operation: 'login', cause: e }))
@@ -69,165 +123,200 @@ async function loginDiscord({ discord, token }: { discord: Client; token: string
   await ready
 }
 
-export async function startBot(options: StartBotOptions): Promise<Error | BotHandle> {
-  // Each resource registers its cleanup when acquired; disposal runs in reverse
-  // (commands and scheduler first, the db and the lock port last). A startup
-  // failure disposes it on return; a started bot moves it into stop().
-  await using cleanup = new AsyncDisposableStack()
-  const lock = options.lock
-  cleanup.defer(() => lock.close())
+type BuildInput = {
+  options: StartBotOptions
+  settings: BotSettings
+  clock: ClockShape
+  store: BotStore
+  cleanup: Cleanup
+}
 
-  const opened = await openDb({ dataDir: options.dataDir, migrate: true })
-  if (opened instanceof Error) return opened
-  cleanup.defer(() => opened.close())
-  const db = opened.db
+// Everything after the Layer is in place. Errors stay values: the program
+// returns them, and startBot disposes the acquired resources before handing
+// the error back.
+const buildBot = (input: BuildInput) =>
+  Effect.gen(function* () {
+    const opened = yield* Effect.promise(() => openDb({ dataDir: input.settings.dataDir, migrate: true }))
+    if (opened instanceof Error) return opened
+    return yield* runBot(input).pipe(Effect.provide(Database.layer(opened)))
+  })
 
-  const discord = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
-    partials: [Partials.Channel, Partials.Message, Partials.User, Partials.ThreadMember],
-    ...(options.discordRestUrl && { rest: { api: options.discordRestUrl, version: '10' } }),
-  })
-  // TODO: drop this once @discordjs/rest can keep its token on 401. handleErrors()
-  // calls setToken(null) on any 401, and every later request fails with "Expected
-  // token to be set" until a restart. One transient 401 (gateway-proxy restarting
-  // with an empty client registry) must not kill the bot. Only Client.destroy()
-  // may clear it: it sets client.token to null first.
-  // https://github.com/discordjs/discord.js/blob/main/packages/rest/src/lib/handlers/Shared.ts
-  const setToken = discord.rest.setToken.bind(discord.rest)
-  discord.rest.setToken = (token) => {
-    // Typed string, but handleErrors() and destroy() pass null.
-    if (!token && discord.token !== null) {
-      logger.warn('Discord REST answered 401; keeping the bot token for the next request')
-      return discord.rest
-    }
-    return setToken(token)
-  }
-  // Gateway lifecycle, to debug reconnects that break event delivery.
-  discord.on(Events.ShardDisconnect, (event, id) =>
-    logger.warn(`gateway shard ${id} disconnected with code ${event.code}`),
-  )
-  discord.on(Events.ShardReconnecting, (id) => logger.warn(`gateway shard ${id} reconnecting`))
-  discord.on(Events.ShardResume, (id, replayed) =>
-    logger.info(`gateway shard ${id} resumed, ${replayed} events replayed`),
-  )
-  discord.on(Events.ShardReady, (id) => logger.info(`gateway shard ${id} ready`))
-  discord.on(Events.ShardError, (error, id) => logger.warn(`gateway shard ${id} error`, error))
-  // TODO: await destroy() fully once gateway-proxy uses Fly's `tls` handler. Fly's `http`
-  // handler closes a WebSocket's client TCP ~5s after the proxy closed it, and destroy()
-  // waits for that TCP close, so Ctrl+C took 5s. The close frames are exchanged by then.
-  cleanup.defer(() => Promise.race([discord.destroy(), sleep(DISCORD_CLOSE_WAIT_MS, undefined, { ref: false })]))
-  const store = createBotStore()
-  const recorder = createEventRecorder({ dataDir: options.dataDir })
-  cleanup.defer(() => recorder.close())
-  const effects = createEffectsRunner({
-    discord,
-    // Viewed effects come from OpenCode events, so `opencode` below is always set by then.
-    markViewed: async ({ sessionId, idle }) => {
-      const result = await oc({ opencode }, 'mark session viewed', (client) =>
-        client.session.view({ sessionID: sessionId, idle }),
-      )
-      if (result instanceof Error) return result
-    },
-  })
-  cleanup.defer(() => effects.stop())
-  const onTranscriptDue = (sessionId: string) => {
-    void oc({ opencode }, 'sync transcript', (client) =>
-      syncSessionTranscript({ client, dataDir: options.dataDir, sessionId }),
-    ).then((result) => {
-      if (result instanceof Error) logger.warn(`transcript of ${sessionId} not synced`, result)
+const runBot = ({ options, settings, clock, store, cleanup }: BuildInput) =>
+  Effect.gen(function* () {
+    const lock = options.lock
+    const database = yield* Database
+    cleanup.defer(() => database.close())
+    const db = database.db
+
+    const discord = new Client({
+      intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
+      partials: [Partials.Channel, Partials.Message, Partials.User, Partials.ThreadMember],
+      ...(options.discordRestUrl && { rest: { api: options.discordRestUrl, version: '10' } }),
     })
-  }
-  const eventLoop = createEventLoop({
-    store,
-    db,
-    discord,
-    effects,
-    recorder,
-    onTranscriptDue,
-  })
-  const loaded = await eventLoop.load()
-  if (loaded instanceof Error) return loaded
-  // Before the service is used, so a service started by ensure() loads it at once.
-  const plugin = await installPluginShim({ configDir: options.opencodeConfigDir })
-  if (plugin instanceof Error) return plugin
-  const opencode = watchOpencode({
-    serviceFile: options.opencodeServiceFile,
-    ensure: options.ensureOpencode,
-    onConnect: eventLoop.onConnect,
-    onEvent: eventLoop.onEvent,
-    onDisconnect: eventLoop.onDisconnect,
-  })
-  cleanup.defer(() => opencode.stop())
-  const shim = await installShim({ dataDir: options.dataDir, command: options.kimakiCommand })
-  if (shim instanceof Error) return shim
-  // The features that non-interaction code reaches through bot.features.
-  const agentUi = createAgentUi({ store, eventLoop, opencode })
-  cleanup.defer(() => agentUi.stop())
-  const bot: Bot = {
-    discord,
-    db,
-    store,
-    opencode,
-    eventLoop,
-    effects,
-    clock: options.clock ?? systemClock,
-    dataDir: options.dataDir,
-    lockPort: lock.port,
-    restUrl: options.discordRestUrl ?? null,
-    supervised: lock.supervised,
-    token: options.token,
-    appId: options.appId,
-    autoWorktrees: options.autoWorktrees ?? false,
-    allowAllUsers: options.allowAllUsers ?? false,
-    disabledSkills: options.disabledSkills ?? [],
-    features: { withSleepLock: createSleepLock(), waitForPlugin: createPluginWait({ opencode }), agentUi },
-  }
-  const scheduler = createScheduler({
-    bot,
-    intervalMs: options.schedulerIntervalMs === undefined ? 5_000 : options.schedulerIntervalMs,
-  })
-  cleanup.defer(() => scheduler.stop())
-  // The lock server only passes /kimaki/* paths.
-  lock.handle((route, input, signal) => runLockRoute(bot, { route: route.slice('/kimaki/'.length), input, signal }))
-  // Before login: gateway-proxy replays missed messages right after READY.
-  registerIngress(bot)
-
-  // Resolves with the first fatal error, or null when both sides are ready.
-  // Not Promise.all: a failed side must not wait for the other (Discord login
-  // or OpenCode retries can take long), and the other side's "stopped" error
-  // would hide the real cause.
-  const failure = await new Promise<Error | null>((resolve) => {
-    const pending = { count: 2 }
-    const settle = (result: Error | OpencodeEndpoint | void) => {
-      if (result instanceof Error) {
-        resolve(result)
-        return
+    // TODO: drop this once @discordjs/rest can keep its token on 401. handleErrors()
+    // calls setToken(null) on any 401, and every later request fails with "Expected
+    // token to be set" until a restart. One transient 401 (gateway-proxy restarting
+    // with an empty client registry) must not kill the bot. Only Client.destroy()
+    // may clear it: it sets client.token to null first.
+    // https://github.com/discordjs/discord.js/blob/main/packages/rest/src/lib/handlers/Shared.ts
+    const setToken = discord.rest.setToken.bind(discord.rest)
+    discord.rest.setToken = (token) => {
+      // Typed string, but handleErrors() and destroy() pass null.
+      if (!token && discord.token !== null) {
+        logger.warn('Discord REST answered 401; keeping the bot token for the next request')
+        return discord.rest
       }
-      pending.count--
-      if (pending.count === 0) resolve(null)
+      return setToken(token)
     }
-    void opencode.ready.then(settle)
-    void loginDiscord({ discord, token: options.token }).then(settle)
+    // Gateway lifecycle, to debug reconnects that break event delivery.
+    discord.on(Events.ShardDisconnect, (event, id) =>
+      logger.warn(`gateway shard ${id} disconnected with code ${event.code}`),
+    )
+    discord.on(Events.ShardReconnecting, (id) => logger.warn(`gateway shard ${id} reconnecting`))
+    discord.on(Events.ShardResume, (id, replayed) =>
+      logger.info(`gateway shard ${id} resumed, ${replayed} events replayed`),
+    )
+    discord.on(Events.ShardReady, (id) => logger.info(`gateway shard ${id} ready`))
+    discord.on(Events.ShardError, (error, id) => logger.warn(`gateway shard ${id} error`, error))
+    // TODO: await destroy() fully once gateway-proxy uses Fly's `tls` handler. Fly's `http`
+    // handler closes a WebSocket's client TCP ~5s after the proxy closed it, and destroy()
+    // waits for that TCP close, so Ctrl+C took 5s. The close frames are exchanged by then.
+    cleanup.defer(() => Promise.race([discord.destroy(), sleep(DISCORD_CLOSE_WAIT_MS, undefined, { ref: false })]))
+    const recorder = createEventRecorder({ dataDir: settings.dataDir })
+    cleanup.defer(() => recorder.close())
+    const effects = createEffectsRunner({
+      discord,
+      // Viewed effects come from OpenCode events, so `opencode` below is always set by then.
+      markViewed: async ({ sessionId, idle }) => {
+        const result = await oc({ opencode }, 'mark session viewed', (client) =>
+          client.session.view({ sessionID: sessionId, idle }),
+        )
+        if (result instanceof Error) return result
+      },
+    })
+    cleanup.defer(() => effects.stop())
+    const onTranscriptDue = (sessionId: string) => {
+      void oc({ opencode }, 'sync transcript', (client) =>
+        syncSessionTranscript({ client, dataDir: settings.dataDir, sessionId }),
+      ).then((result) => {
+        if (result instanceof Error) logger.warn(`transcript of ${sessionId} not synced`, result)
+      })
+    }
+    const eventLoop = createEventLoop({
+      store,
+      db,
+      discord,
+      effects,
+      recorder,
+      onTranscriptDue,
+    })
+    const loaded = yield* Effect.promise(() => eventLoop.load())
+    if (loaded instanceof Error) return loaded
+    // Before the service is used, so a service started by ensure() loads it at once.
+    const plugin = yield* Effect.promise(() => installPluginShim({ configDir: settings.opencodeConfigDir }))
+    if (plugin instanceof Error) return plugin
+    const opencode = watchOpencode({
+      serviceFile: options.opencodeServiceFile,
+      ensure: options.ensureOpencode,
+      onConnect: eventLoop.onConnect,
+      onEvent: eventLoop.onEvent,
+      onDisconnect: eventLoop.onDisconnect,
+    })
+    cleanup.defer(() => opencode.stop())
+    const shim = yield* Effect.promise(() =>
+      installShim({ dataDir: settings.dataDir, command: settings.kimakiCommand }),
+    )
+    if (shim instanceof Error) return shim
+    // The features that non-interaction code reaches through bot.features.
+    const agentUi = createAgentUi({ store, eventLoop, opencode })
+    cleanup.defer(() => agentUi.stop())
+    const bot: Bot = {
+      discord,
+      db,
+      store,
+      opencode,
+      eventLoop,
+      effects,
+      clock,
+      dataDir: settings.dataDir,
+      lockPort: settings.lockPort,
+      restUrl: settings.restUrl,
+      supervised: settings.supervised,
+      token: options.token,
+      appId: settings.appId,
+      autoWorktrees: settings.autoWorktrees,
+      allowAllUsers: settings.allowAllUsers,
+      disabledSkills: settings.disabledSkills,
+      features: { withSleepLock: createSleepLock(), waitForPlugin: createPluginWait({ opencode }), agentUi },
+    }
+    const scheduler = createScheduler({
+      bot,
+      intervalMs: options.schedulerIntervalMs === undefined ? 5_000 : options.schedulerIntervalMs,
+    })
+    cleanup.defer(() => scheduler.stop())
+    // The lock server only passes /kimaki/* paths.
+    lock.handle((route, input, signal) => runLockRoute(bot, { route: route.slice('/kimaki/'.length), input, signal }))
+    // Before login: gateway-proxy replays missed messages right after READY.
+    registerIngress(bot)
+
+    // Resolves with the first fatal error, or null when both sides are ready.
+    // Not Promise.all: a failed side must not wait for the other (Discord login
+    // or OpenCode retries can take long), and the other side's "stopped" error
+    // would hide the real cause.
+    const failure = yield* Effect.promise(
+      () =>
+        new Promise<Error | null>((resolve) => {
+          const pending = { count: 2 }
+          const settle = (result: Error | OpencodeEndpoint | void) => {
+            if (result instanceof Error) {
+              resolve(result)
+              return
+            }
+            pending.count--
+            if (pending.count === 0) resolve(null)
+          }
+          void opencode.ready.then(settle)
+          void loginDiscord({ discord, token: options.token }).then(settle)
+        }),
+    )
+    if (failure) return failure
+    const refreshed = yield* Effect.promise(() => refreshCliContext(bot))
+    if (refreshed instanceof Error) return refreshed
+    const commands = registerSlashCommands(bot, createInteractionRegistry(), {
+      globalDirectory: settings.opencodeConfigDir,
+    })
+    cleanup.defer(() => commands.stop())
+    // Awaited so the handle is only returned once every guild has its commands.
+    yield* Effect.promise(() => commands.registerAll())
+    // After Discord and OpenCode are ready: a due task needs both.
+    const scheduling = yield* Effect.promise(() => scheduler.start())
+    if (scheduling instanceof Error) return scheduling
+    logger.info(`bot ready as ${discord.user?.tag} in ${discord.guilds.cache.size} server(s)`)
+    let stopping: Promise<void> | undefined
+    return {
+      ...bot,
+      lock,
+      scheduler: { runDueTasks: scheduler.runDueTasks },
+      stop: () => (stopping ??= cleanup.dispose()),
+    }
   })
-  if (failure) return failure
-  const refreshed = await refreshCliContext(bot)
-  if (refreshed instanceof Error) return refreshed
-  const commands = registerSlashCommands(bot, createInteractionRegistry(), {
-    globalDirectory: options.opencodeConfigDir,
-  })
-  cleanup.defer(() => commands.stop())
-  // Awaited so the handle is only returned once every guild has its commands.
-  await commands.registerAll()
-  // After Discord and OpenCode are ready: a due task needs both.
-  const scheduling = await scheduler.start()
-  if (scheduling instanceof Error) return scheduling
-  logger.info(`bot ready as ${discord.user?.tag} in ${discord.guilds.cache.size} server(s)`)
-  const resources = cleanup.move()
-  let stopping: Promise<void> | undefined
-  return {
-    ...bot,
-    lock,
-    scheduler: { runDueTasks: scheduler.runDueTasks },
-    stop: () => (stopping ??= resources.disposeAsync()),
-  }
+
+export async function startBot(options: StartBotOptions): Promise<Error | BotHandle> {
+  // Each resource registers its cleanup when acquired; dispose runs in reverse
+  // (commands and scheduler first, the db and the lock port last). A startup
+  // failure disposes it before returning; a started bot moves it into stop().
+  const cleanup = new Cleanup()
+  cleanup.defer(() => options.lock.close())
+  const program = Effect.gen(function* () {
+    const settings = yield* Settings
+    const clock = yield* Clock
+    const store = yield* ThreadRegistry
+    return yield* buildBot({ options, settings, clock, store, cleanup })
+  }).pipe(
+    // A thrown error is a defect and skips the value check below.
+    Effect.onError(() => Effect.promise(() => cleanup.dispose())),
+  )
+  const result = await Effect.runPromise(Effect.provide(program, appLayer(options)))
+  if (result instanceof Error) await cleanup.dispose()
+  return result
 }
