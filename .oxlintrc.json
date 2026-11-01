@@ -1,0 +1,40 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "import", "promise", "node"],
+  "categories": {
+    "correctness": "error"
+  },
+  "env": {
+    "builtin": true
+  },
+  "rules": {
+    "eqeqeq": ["error", "always", { "null": "ignore" }],
+    "eslint/no-console": "error",
+    "eslint/no-shadow": "error",
+    "eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "eslint/no-unsafe-finally": "error",
+    "eslint/no-unsafe-optional-chaining": "error",
+    "eslint/no-useless-escape": "error",
+    "import/no-duplicates": "error",
+    "typescript/no-explicit-any": "error",
+    "unicorn/no-invalid-fetch-options": "error",
+    "unicorn/no-useless-spread": "error",
+    "unicorn/no-thenable": "off"
+  },
+  "overrides": [
+    {
+      "files": ["kimaki/scripts/**", "docs/**"],
+      "rules": {
+        "eslint/no-console": "off"
+      }
+    },
+    {
+      "files": ["**/*.test.ts", "**/test/**"],
+      "rules": {
+        "eslint/no-shadow": "off",
+        "eslint/no-useless-escape": "off"
+      }
+    }
+  ],
+  "ignorePatterns": ["node_modules", "dist", "tmp", "coverage", "opensrc", "**/generated/**"]
+}

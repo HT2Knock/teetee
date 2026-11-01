@@ -5,6 +5,16 @@
   "tabWidth": 2,
   "semi": false,
   "singleQuote": true,
-  "ignorePatterns": ["pnpm-lock.yaml"],
+  "printWidth": 120,
+  "ignorePatterns": [
+    "bun.lock",
+    "dist/**",
+    "coverage/**",
+    "**/generated/**",
+    "**/*.md",
+    "**/*.yml",
+    "**/*.yaml",
+    "docs/opencode-v2-events/*.jsonl",
+  ],
   "trailingComma": "all",
 }
