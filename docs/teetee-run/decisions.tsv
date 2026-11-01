@@ -1,1 +1,9 @@
 time	phase	decision	reason	evidence	result
+2026-11-01T14:00	1	keep bun test	the user chose bun over vitest; all 51 files already run on bun	`bun run test` green on main	kept
+2026-11-01T14:10	1	remove voice	2,086 production lines and 5 dependencies only for voice; not covered by OpenCode	`bun x check`, suite green	landed
+2026-11-01T14:25	1	remove Strada	the fork does not report to Strada; 245 lines and the SDK	dead-code gate	landed
+2026-11-01T14:45	1	self-host only	the running bot used the shared gateway app; the user wants their own app	gateway flags gone, credentials self-host only	landed
+2026-11-01T15:00	1	remove Anthropic plugin	OpenCode provides the Claude login	plugin e2e green	landed
+2026-11-01T15:15	1	duplicates at 4+	fixing 2-3 copy route shapes in the test twin is low value; production had 3 tiny pairs left	minOccurrences 4, 0 groups	landed
+2026-11-01T15:20	1	docs cleanup	240 KB spec and upstream release docs describe a flow this fork does not use	verify green	landed
+2026-11-01T15:25	1	close Phase 1	finish condition script passes and the full suite is green	160 tests, 42 files	done
