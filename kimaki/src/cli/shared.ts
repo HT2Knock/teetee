@@ -14,7 +14,7 @@ import { DbError } from '../errors.ts'
 import { canonicalPath } from '../file-edit-log.ts'
 import type { LockRouteInput, LockRouteName } from '../lock-routes.ts'
 import { callBot } from '../lock-server.ts'
-import { resolveOpencode } from '../opencode-server.ts'
+import { resolveOpencode } from '../adapters/opencode/index.ts'
 import { parseFirst, type ChannelDirectoryRow } from '../rows.ts'
 import { readSessionMarkdown, resolveSession, waitForSessionReady } from '../session-events.ts'
 

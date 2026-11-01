@@ -20,7 +20,7 @@ import {
 } from './bot.ts'
 import { ConfigError, DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
 import { createLogger } from './logger.ts'
-import type { OpencodeEndpoint } from './opencode-server.ts'
+import type { OpencodeEndpoint } from './adapters/opencode/index.ts'
 import { type ChannelDirectoryRow } from './rows.ts'
 import { baseInstructions, INSTRUCTION_KEY, type ScheduledRun } from './system-prompt.ts'
 import { resolveWorkingDirectory } from './worktrees.ts'
@@ -220,7 +220,7 @@ export async function putInstructions(
 
 export type PluginWait = (directory: string) => Promise<ConfigError | OpenCodeUnavailableError | OpenCodeError | void>
 
-// The bot writes plugins/kimaki/ on start (opencode-server.ts), but
+// The bot writes plugins/kimaki/ on start (adapters/opencode/index.ts), but
 // OpenCode's watcher picks it up a moment later: wait for it, bounded.
 // One per bot (bot.features.waitForPlugin).
 export function createPluginWait(bot: Pick<Bot, 'opencode'>): PluginWait {

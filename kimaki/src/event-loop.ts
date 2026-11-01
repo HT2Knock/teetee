@@ -21,7 +21,7 @@ import type { EffectsRunner } from './effects.ts'
 import { DbError, DiscordError, OpenCodeError } from './errors.ts'
 import { formatDuration } from './format-parts.ts'
 import { createLogger } from './logger.ts'
-import type { ConnectContext, OpenCodeClient, V2Event } from './opencode-server.ts'
+import type { ConnectContext, OpenCodeClient, V2Event } from './adapters/opencode/index.ts'
 import type { EventRecorder } from './session-events.ts'
 import { queuedItems } from './queue.ts'
 import {

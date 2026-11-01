@@ -37,7 +37,7 @@ import {
   findOpencodeBinary,
   installedOpencodeBinary,
   OPENCODE_INSTALL_COMMAND,
-} from './opencode-server.ts'
+} from './adapters/opencode/index.ts'
 import type { Bot } from './bot.ts'
 import { startSession } from './input.ts'
 import { addProjectChannel, defaultChannelName, defaultProjectDirectory } from './project.ts'
