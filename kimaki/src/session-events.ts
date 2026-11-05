@@ -19,6 +19,7 @@ import type { OpenCodeClient } from '@opencode/client'
 
 import type { KimakiDb } from './db.ts'
 import { ConfigError, DbError, OpenCodeError } from './errors.ts'
+import { isExecutionEnd } from './execution-end.ts'
 import { createLogger } from './logger.ts'
 import { parseFirst, type ThreadSessionRow } from './rows.ts'
 import type { ThreadEvent } from './thread-reducer.ts'
@@ -346,14 +347,7 @@ export async function waitForSessionReady({
         const event = next.value
         if (event.type === 'form.created' && event.data.form.sessionID === sessionId) return
         if (event.type === 'permission.asked' && event.data.sessionID === sessionId) return
-        if (
-          (event.type === 'session.execution.succeeded' ||
-            event.type === 'session.execution.failed' ||
-            event.type === 'session.execution.interrupted') &&
-          event.data.sessionID === sessionId
-        ) {
-          return
-        }
+        if (isExecutionEnd(event) && event.data.sessionID === sessionId) return
       }
       return new OpenCodeError({ operation: 'session wait cancelled' })
     })()

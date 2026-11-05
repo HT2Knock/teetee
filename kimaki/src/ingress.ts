@@ -24,7 +24,7 @@ import {
   type Guild,
   type Message,
 } from './adapters/discord/index.ts'
-import { parseInput, sendInput, type SendInput } from './adapters/http/routes.ts'
+import { parseInput } from './adapters/http/routes.ts'
 import { projectOf, type Bot, type PromptFile } from './bot.ts'
 import { runResult } from './effect-bridge.ts'
 import { attempt } from './errors.ts'
@@ -35,6 +35,7 @@ import { cancelQueuedPrompt, requeueEdited } from './prompt.ts'
 import { queuedItemFor } from './queue.ts'
 import { REMOTE_PROMPT_FILE, REMOTE_RESULT_PREFIX, REMOTE_SEND_PREFIX } from './remote-send.ts'
 import { parseTextMessage, type Route } from './routes.ts'
+import { sendInput, type SendInput } from './send-command.ts'
 
 const logger = createLogger('INGRESS')
 

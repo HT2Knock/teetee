@@ -1,6 +1,13 @@
-// Sessions and their threads: the only module that creates session threads
-// and binds sessions to them (spec 27.2). New sessions, /resume, /fork,
-// /fork-subagent, btw forks, the session marker and the instructions entry.
+// Sessions and their threads: the only module that creates session threads and
+// binds sessions to them (spec 27.2). Two paths share the primitives here:
+//
+//   new session   input.ts: session.create ─▶ createSessionThread + putInstructions
+//                        ─▶ bindThread (insert one row, then route)
+//   adopted       /resume and /fork: createSessionThread ─▶ prepareAdoption
+//                        (metadata, instructions, history, swap rows in one
+//                        transaction) ─▶ attachThread (route, replay, hydrate)
+//
+// Both end in attachThread, so the routing order cannot drift between them.
 
 import type { SessionMetadata } from '@opencode/client'
 import { Effect } from 'effect'
@@ -26,8 +33,9 @@ import { SILENT_MESSAGE_FLAGS } from './format-parts.ts'
 import { createLogger } from './logger.ts'
 import { prompt } from './prompt.ts'
 import { parseRows, type ChannelDirectoryRow } from './rows.ts'
-import { NO_QUESTION_TOOL, bindThread, putInstructions, switchAgent, threadProject } from './session-context.ts'
-import type { ScheduledRun } from './system-prompt.ts'
+import type { ScheduledRun } from './scheduled-run.ts'
+import { NO_QUESTION_TOOL, putInstructions, switchAgent, threadProject } from './session-context.ts'
+import type { KimakiEvent } from './thread-reducer.ts'
 import { createWorktree, resolveWorkingDirectory } from './worktrees.ts'
 
 const logger = createLogger('SESSIONS')
@@ -155,6 +163,104 @@ function discardThread({ thread, discard }: { thread: ThreadChannel; discard?: (
   })
 }
 
+// A Discord thread name: flattened and cut to Discord's limit. One rule for
+// every thread the bot creates (a new session, a resume, a fork, a btw fork).
+function discordThreadName(name: string): string {
+  return name.replace(/\s+/g, ' ').slice(0, 100)
+}
+
+// The thread of a session. `startMessageId` attaches it to an existing message
+// (the first input of a new session) instead of starting empty.
+export function createSessionThread(
+  channel: TextChannel,
+  { name, startMessageId }: { name: string; startMessageId?: string | null },
+): Effect.Effect<ThreadChannel, DiscordError> {
+  return discord<ThreadChannel>('create thread', () =>
+    channel.threads.create({
+      name: discordThreadName(name),
+      autoArchiveDuration: 1440,
+      ...(startMessageId && { startMessage: startMessageId }),
+    }),
+  )
+}
+
+// Routing a session to a thread, in the one order that works:
+//
+//   old bindings out ─▶ routing + replay (same tick) ─▶ members ─▶ hydrate
+//
+// The view must exist before any live event, and the replay must fold before
+// the routing changes, otherwise live output races the history. Persistence is
+// the caller's: a new session inserts one row, a resume swaps rows in a
+// transaction (prepareAdoption).
+function attachThread(
+  bot: Bot,
+  {
+    thread,
+    sessionId,
+    channelId,
+    directory,
+    isNew,
+    previous = [],
+    first = [],
+    authorId = null,
+    sync = false,
+  }: {
+    thread: ThreadChannel
+    sessionId: string
+    channelId: string
+    directory: string
+    isNew: boolean
+    // Threads that stop following this session (a resume moves it).
+    previous?: readonly string[]
+    // Internal events folded before any live event (history replay).
+    first?: readonly KimakiEvent[]
+    authorId?: string | null
+    // Read what the session runs and waits on now.
+    sync?: boolean
+  },
+): Effect.Effect<void, DiscordError> {
+  return Effect.gen(function* () {
+    for (const previousThread of previous) bot.eventLoop.unbind(previousThread)
+    yield* Effect.promise(() =>
+      bot.eventLoop.bind({ threadId: thread.id, sessionId, channelId, directory, isNew, first: [...first] }),
+    )
+    logger.log(`session ${sessionId} bound to thread ${thread.id}`)
+    if (authorId) {
+      yield* Effect.promise(() => thread.members.add(authorId).catch((e: Error) => logger.warn(`add member`, e)))
+    }
+    if (sync) {
+      yield* fromResult(() => bot.eventLoop.syncThread(thread.id)).pipe(
+        Effect.match({
+          onFailure: (error) => logger.warn(`hydrate ${thread.id}`, error),
+          onSuccess: () => null,
+        }),
+      )
+    }
+  })
+}
+
+// Binds a session to a thread for the first time: the row that survives a
+// restart, then the routing. A resume swaps rows in prepareAdoption instead.
+export function bindThread(
+  bot: Bot,
+  {
+    thread,
+    sessionId,
+    channelId,
+    directory,
+    isNew,
+  }: { thread: ThreadChannel; sessionId: string; channelId: string; directory: string; isNew: boolean },
+): Effect.Effect<void, DbError | DiscordError> {
+  return Effect.gen(function* () {
+    yield* bot.query(
+      'insert thread_sessions',
+      (sql) =>
+        sql`INSERT INTO thread_sessions (thread_id, session_id, source) VALUES (${thread.id}, ${sessionId}, ${'kimaki'})`,
+    )
+    yield* attachThread(bot, { thread, sessionId, channelId, directory, isNew })
+  })
+}
+
 // Binds an existing session to a new thread. Order matters:
 //
 //   thread + intro ─▶ metadata + instructions (new IDs) ─▶ history
@@ -196,9 +302,7 @@ function adoptSession(
 > {
   return Effect.gen(function* () {
     const sessionId = session.id
-    const thread = yield* discord<ThreadChannel>('create thread', () =>
-      channel.threads.create({ name: threadName.replace(/\s+/g, ' ').slice(0, 100), autoArchiveDuration: 1440 }),
-    )
+    const thread = yield* createSessionThread(channel, { name: threadName })
     const prepared = yield* prepareAdoption({
       bot,
       thread,
@@ -210,25 +314,17 @@ function adoptSession(
       scheduledTask,
     }).pipe(Effect.tapError(() => discardThread({ thread, discard })))
 
-    for (const previousThread of prepared.previous) bot.eventLoop.unbind(previousThread)
-    yield* Effect.promise(() =>
-      bot.eventLoop.bind({
-        threadId: thread.id,
-        sessionId,
-        channelId: channel.id,
-        directory: session.location.directory,
-        isNew: false,
-        first: [{ type: 'kimaki.replay', messages: prepared.history, note }],
-      }),
-    )
-    logger.log(`session ${sessionId} bound to thread ${thread.id}`)
-    yield* Effect.promise(() => thread.members.add(author.id).catch((e: Error) => logger.warn(`add member`, e)))
-    yield* fromResult(() => bot.eventLoop.syncThread(thread.id)).pipe(
-      Effect.match({
-        onFailure: (error) => logger.warn(`hydrate ${thread.id}`, error),
-        onSuccess: () => null,
-      }),
-    )
+    yield* attachThread(bot, {
+      thread,
+      sessionId,
+      channelId: channel.id,
+      directory: session.location.directory,
+      isNew: false,
+      previous: prepared.previous,
+      first: [{ type: 'kimaki.replay', messages: prepared.history, note }],
+      authorId: author.id,
+      sync: true,
+    })
     return { threadId: thread.id, sessionId }
   })
 }
@@ -435,12 +531,9 @@ export function forkBtw(
         ocEffect(bot, 'session.fork', (client) => client.session.fork({ sessionID: parentSessionId })).pipe(
           Effect.match({ onFailure: (error) => ({ error }), onSuccess: (forked) => ({ forked }) }),
         ),
-        discord<ThreadChannel>('create btw thread', () =>
-          channel.threads.create({
-            name: `btw: ${text.replace(/\s+/g, ' ')}`.slice(0, 100),
-            autoArchiveDuration: 1440,
-          }),
-        ).pipe(Effect.match({ onFailure: (error) => ({ error }), onSuccess: (thread) => ({ thread }) })),
+        createSessionThread(channel, { name: `btw: ${text}` }).pipe(
+          Effect.match({ onFailure: (error) => ({ error }), onSuccess: (thread) => ({ thread }) }),
+        ),
       ],
       { concurrency: 'unbounded' },
     )
@@ -467,7 +560,7 @@ export function forkBtw(
       client.session.update({ sessionID: forked.id, metadata: { kimaki } }),
     )
     yield* bindThread(bot, {
-      threadId: thread.id,
+      thread,
       sessionId: forked.id,
       channelId: project.channelId,
       directory: project.directory,

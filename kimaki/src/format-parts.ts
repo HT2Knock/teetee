@@ -8,13 +8,11 @@ import path from 'node:path'
 import type { JsonValue } from '@opencode/client'
 import { z } from 'zod'
 
-import {
-  ButtonStyle,
-  ComponentType,
-  MessageFlags,
-  type APIActionRowComponent,
-  type APIButtonComponentWithCustomId,
-  type APIComponentInMessageActionRow,
+import { ButtonStyle, ComponentType, MessageFlags } from './adapters/discord/enums.ts'
+import type {
+  APIActionRowComponent,
+  APIButtonComponentWithCustomId,
+  APIComponentInMessageActionRow,
 } from './adapters/discord/index.ts'
 import type { Verbosity } from './db.ts'
 

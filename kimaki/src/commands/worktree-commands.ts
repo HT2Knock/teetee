@@ -25,6 +25,7 @@ import { authorOf, replyError, resolveTarget, type InteractionRoutes } from '../
 import { parseFirst, toDbDate, type ChannelDirectoryRow, type ChannelWorktreeRow } from '../rows.ts'
 import { sessionCwd } from '../session-context.ts'
 import { fork } from '../sessions.ts'
+import { worktreeName } from '../worktree-name.ts'
 import {
   deleteWorktree,
   git,
@@ -32,7 +33,6 @@ import {
   listWorktrees,
   mergeWorktree,
   resolveWorkingDirectory,
-  worktreeName,
   type GitWorktree,
 } from '../worktrees.ts'
 

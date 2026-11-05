@@ -18,13 +18,14 @@ import {
   sessionDirectory,
   textChannel,
   type Bot,
-  type ModelChoice,
 } from './bot.ts'
 import { fromResult } from './effect-bridge.ts'
-import { ConfigError, type DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
+import { ConfigError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
 import { createLogger } from './logger.ts'
+import type { ModelChoice } from './model-choice.ts'
 import type { ChannelDirectoryRow } from './rows.ts'
-import { baseInstructions, INSTRUCTION_KEY, type ScheduledRun } from './system-prompt.ts'
+import type { ScheduledRun } from './scheduled-run.ts'
+import { baseInstructions, INSTRUCTION_KEY } from './system-prompt.ts'
 import { resolveWorkingDirectory } from './worktrees.ts'
 
 const logger = createLogger('SESSIONS')
@@ -93,27 +94,6 @@ export function sessionCwd(bot: Bot, { thread, directory }: { thread: ThreadChan
       client.session.move({ sessionID: sessionId, directory: destination, delivery: 'steer' }),
     )
     return { requestedDirectory: destination }
-  })
-}
-
-export function bindThread(
-  bot: Bot,
-  {
-    threadId,
-    sessionId,
-    channelId,
-    directory,
-    isNew,
-  }: { threadId: string; sessionId: string; channelId: string; directory: string; isNew: boolean },
-): Effect.Effect<void, DbError> {
-  return Effect.gen(function* () {
-    yield* bot.query(
-      'insert thread_sessions',
-      (sql) =>
-        sql`INSERT INTO thread_sessions (thread_id, session_id, source) VALUES (${threadId}, ${sessionId}, ${'kimaki'})`,
-    )
-    yield* Effect.promise(() => bot.eventLoop.bind({ threadId, sessionId, channelId, directory, isNew }))
-    logger.log(`session ${sessionId} bound to thread ${threadId}`)
   })
 }
 

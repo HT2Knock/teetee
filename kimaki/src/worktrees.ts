@@ -10,6 +10,7 @@ import { Data } from 'effect'
 import { ConfigError } from './errors.ts'
 import { canonicalPath } from './file-edit-log.ts'
 import { createLogger } from './logger.ts'
+import { worktreeName } from './worktree-name.ts'
 
 const logger = createLogger('WORKTREE')
 const execAsync = promisify(execFile)
@@ -128,13 +129,6 @@ export async function resolveWorkingDirectory({
   return new ConfigError({
     reason: `Choose a directory inside ${project} or a linked worktree of the same clone. Use kimaki project add for another clone.`,
   })
-}
-
-export function worktreeName(name: string) {
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) || name.length > 64) {
-    return new ConfigError({ reason: 'Use a worktree name of at most 64 lowercase letters, digits and hyphens.' })
-  }
-  return name
 }
 
 export async function createWorktree({

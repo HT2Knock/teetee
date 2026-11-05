@@ -19,6 +19,7 @@ import type { ConnectContext, OpenCodeClient, V2Event } from './adapters/opencod
 import { verbosityFromV1, type KimakiDb } from './db.ts'
 import type { EffectsRunner } from './effects.ts'
 import { DbError, DiscordError, OpenCodeError } from './errors.ts'
+import { isExecutionEnd } from './execution-end.ts'
 import { formatDuration } from './format-parts.ts'
 import { createLogger } from './logger.ts'
 import { queuedItems } from './queue.ts'
@@ -154,33 +155,25 @@ export function createEventLoop({
       turn
         ? ` after ${formatDuration(at - turn.startedAt)}${turn.model ? `, ${turn.model.providerID}/${turn.model.id}` : ''}, ${turn.tokens} tokens`
         : ''
-    switch (event.type) {
-      case 'session.execution.started':
-        return logger.log(`run started in ${where}`)
-      case 'session.execution.succeeded':
-        return logger.log(`run finished in ${where}${summary(event.created)}`)
-      case 'session.execution.interrupted':
-        return logger.log(`run interrupted in ${where}${summary(event.created)}`)
-      case 'session.execution.failed':
+    if (event.type === 'session.execution.started') return logger.log(`run started in ${where}`)
+    if (isExecutionEnd(event)) {
+      if (event.type === 'session.execution.failed') {
         return logger.warn(`run failed in ${where}${summary(event.created)}: ${event.data.error.message}`)
-      case 'session.retry.scheduled':
-        return logger.warn(`retry ${event.data.attempt} in ${where}: ${event.data.error.message}`)
-      // Every other event has nothing to log.
-      default:
-        return
+      }
+      const ended = event.type === 'session.execution.succeeded' ? 'finished' : 'interrupted'
+      return logger.log(`run ${ended} in ${where}${summary(event.created)}`)
     }
+    if (event.type === 'session.retry.scheduled') {
+      return logger.warn(`retry ${event.data.attempt} in ${where}: ${event.data.error.message}`)
+    }
+    // Every other event has nothing to log.
   }
 
   // Every event of a thread enters here exactly once.
   function deliver(threadId: string, event: ThreadEvent) {
     logRun(threadId, event)
     recorder.record(threadId, event)
-    if (
-      (event.type === 'session.execution.succeeded' ||
-        event.type === 'session.execution.failed' ||
-        event.type === 'session.execution.interrupted') &&
-      store.getState().roots[threadId] === event.data.sessionID
-    ) {
+    if (isExecutionEnd(event) && store.getState().roots[threadId] === event.data.sessionID) {
       onTranscriptDue(event.data.sessionID)
     }
     if (store.getState().threads[threadId] && !coldThreads.has(threadId)) return fold(threadId, event)

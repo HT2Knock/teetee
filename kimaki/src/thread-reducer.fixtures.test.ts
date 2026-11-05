@@ -364,7 +364,7 @@ test('shell-background: background shell line even without side effects, finishe
       "-# *project ⋅ main ⋅ 2s ⋅ claude-opus-5-5 ⋅ opus*",
     ]
   `)
-  expect(end.shells).toMatchInlineSnapshot(`{}`)
+  expect(end.transient.shells).toMatchInlineSnapshot(`{}`)
 })
 
 test('shell: user !cmd output while idle and while busy, synthetic items render nothing', () => {

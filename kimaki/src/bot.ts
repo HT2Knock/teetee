@@ -18,18 +18,17 @@ import type { DbQuery, KimakiDb } from './db-client.ts'
 import type { EffectsRunner } from './effects.ts'
 import { ConfigError, type DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
 import type { EventLoop } from './event-loop.ts'
+import { parseModel, type ModelChoice } from './model-choice.ts'
 import type { Route } from './routes.ts'
 import { parseFirst, type ChannelDirectoryRow, type GlobalModelRow } from './rows.ts'
+import type { ScheduledRun } from './scheduled-run.ts'
 import type { PluginWait } from './session-context.ts'
 import type { SleepLock } from './sleeps.ts'
 import type { BotStore } from './store.ts'
-import type { ScheduledRun } from './system-prompt.ts'
 
 export type Author = { id: string; username: string }
 
 export type PromptFile = { uri: string; name: string }
-
-export type ModelChoice = { providerID: string; id: string; variant: string | null }
 
 // Operations of feature-owned state that non-interaction code needs. Wizard
 // and form state is only reachable from the slash registry (slash-commands.ts).
@@ -210,17 +209,6 @@ export function globalModel(bot: Bot): Effect.Effect<ModelChoice | null, DbError
         return model ? { ...model, variant: row?.variant ?? null } : null
       }),
     )
-}
-
-export function parseModel(value: string | null | undefined, variant: string | null | undefined) {
-  if (!value) return null
-  const slash = value.indexOf('/')
-  if (slash <= 0) return null
-  return {
-    providerID: value.slice(0, slash),
-    id: value.slice(slash + 1),
-    ...(variant && { variant }),
-  }
 }
 
 // What a thread name and an echo show for an input.

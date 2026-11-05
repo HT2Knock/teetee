@@ -28,8 +28,9 @@ import type {
 } from '@opencode/client'
 import { produce, type Draft } from 'immer'
 
-import { ButtonStyle } from './adapters/discord/index.ts'
+import { ButtonStyle } from './adapters/discord/enums.ts'
 import type { Verbosity } from './db.ts'
+import { executionErrorMessage, executionOutcome, isExecutionEnd } from './execution-end.ts'
 import {
   asSubtext,
   button,
@@ -52,8 +53,14 @@ import {
   type ToolInput,
   type UiMessage,
 } from './format-parts.ts'
-import { closePermission, hydratePermissions, showPermission, STATUS, type PendingPermission } from './permissions.ts'
-import { closeForm, formatAnswer, hydrateForms, showForm, withAnswer, type PendingForm } from './questions.ts'
+import {
+  closePermission,
+  hydratePermissions,
+  showPermission,
+  STATUS,
+  type PendingPermission,
+} from './permissions-slice.ts'
+import { closeForm, formatAnswer, hydrateForms, showForm, withAnswer, type PendingForm } from './questions-slice.ts'
 import {
   cancelQueued,
   deliverQueued,
@@ -100,6 +107,24 @@ export type RunningToolCall = {
   backgroundShell: string | null
 }
 
+// View facts that a snapshot cannot restore. They live in one object so a
+// snapshot clears them wholesale with emptyTransient(): a field added here is
+// reset with no extra code, and no stale value can outlive a reconnect.
+//
+// `agentUi` is not one of them: a button prompt outlives a reconnect on purpose,
+// because its message and its waiting upload call still exist.
+export type TransientView = {
+  // Background shells started by tool calls: shell ID -> label, until their job ends.
+  shells: Readonly<Record<string, string>>
+  // Kimaki runs an OpenCode command (kimaki.command): the next root user item
+  // without Discord metadata is its expanded prompt, shown as the typed command.
+  commandPending: { text: string; username: string } | null
+}
+
+function emptyTransient(): TransientView {
+  return { shells: {}, commandPending: null }
+}
+
 export type ThreadView = {
   sessionId: string
   // Project channel of the thread: its verbosity applies.
@@ -112,10 +137,10 @@ export type ThreadView = {
   turn: Turn | null
   // Running tool calls of root and children by "assistantMessageID:toolID".
   tools: Readonly<Record<string, RunningToolCall>>
+  // Agent prompts from `kimaki buttons` and `kimaki upload-request` still shown.
   agentUi: readonly AgentPrompt[]
+  transient: TransientView
   children: Readonly<Record<string, Child>>
-  // Background shells started by tool calls: shell ID -> label, until their job ends.
-  shells: Readonly<Record<string, string>>
   // Blank line between text and tool blocks.
   lastKind: 'text' | 'tool' | null
   lastRetryAt: number | null
@@ -123,9 +148,6 @@ export type ThreadView = {
   cached: { tokens: number; at: number } | null
   // Root inbox: user items not delivered yet, in order (queuedItems() for the queue).
   inbox: readonly PendingInput[]
-  // Kimaki runs an OpenCode command (kimaki.command): the next root user item
-  // without Discord metadata is its expanded prompt, shown as the typed command.
-  commandPending: { text: string; username: string } | null
   // Questions and permission requests waiting for the user (root and children).
   forms: Readonly<Record<string, PendingForm>>
   permissions: Readonly<Record<string, PendingPermission>>
@@ -234,13 +256,12 @@ export function emptyView({
     turn: null,
     tools: {},
     agentUi: [],
+    transient: emptyTransient(),
     children: {},
-    shells: {},
     lastKind: null,
     lastRetryAt: null,
     cached: null,
     inbox: [],
-    commandPending: null,
     forms: {},
     permissions: {},
   }
@@ -341,7 +362,7 @@ function applyOpencode({ draft, event, prefs, emit }: Context & { event: V2Event
       running: false,
     }
     // A subagent command prompts its child, never the root.
-    if (parentID === draft.sessionId) draft.commandPending = null
+    if (parentID === draft.sessionId) draft.transient.commandPending = null
     return
   }
   // A new user message dismisses the agent's pending buttons and upload requests.
@@ -388,6 +409,29 @@ function applyOpencode({ draft, event, prefs, emit }: Context & { event: V2Event
 
 function applyRoot(context: Context & { event: V2Event }) {
   const { draft, event, prefs: _prefs, emit } = context
+  // Every way a run ends, in one place: the effects of an outcome stay ordered
+  // (footer or error first, then the read mark).
+  if (isExecutionEnd(event)) {
+    const outcome = executionOutcome(event)
+    const turn = draft.turn
+    draft.turn = null
+    draft.lastKind = null
+    if (outcome === 'succeeded') {
+      if (turn) emitFooter({ ...context, turn, at: event.created, notify: !turn.slept })
+      emit({ type: 'viewed', sessionId: draft.sessionId, idle: event.created })
+      return
+    }
+    if (outcome === 'failed') {
+      emit({ type: 'send', text: formatError(executionErrorMessage(event)), notify: true })
+      emit({ type: 'viewed', sessionId: draft.sessionId, idle: event.created })
+      return
+    }
+    // A shutdown does not make the session idle in OpenCode.
+    if (event.type === 'session.execution.interrupted' && event.data.reason !== 'shutdown') {
+      emit({ type: 'viewed', sessionId: draft.sessionId, idle: event.created })
+    }
+    return
+  }
   switch (event.type) {
     case 'session.moved':
       draft.directory = event.data.location.directory
@@ -464,26 +508,6 @@ function applyRoot(context: Context & { event: V2Event }) {
       return toolLine(context, asSubtext('⬦ context compacted'))
     case 'session.compaction.failed':
       return toolLine(context, formatError(`compaction failed: ${event.data.error.message}`))
-    case 'session.execution.succeeded': {
-      const turn = draft.turn
-      draft.turn = null
-      draft.lastKind = null
-      if (turn) emitFooter({ ...context, turn, at: event.created, notify: !turn.slept })
-      emit({ type: 'viewed', sessionId: draft.sessionId, idle: event.created })
-      return
-    }
-    case 'session.execution.failed':
-      draft.turn = null
-      draft.lastKind = null
-      emit({ type: 'send', text: formatError(event.data.error.message), notify: true })
-      emit({ type: 'viewed', sessionId: draft.sessionId, idle: event.created })
-      return
-    case 'session.execution.interrupted':
-      draft.turn = null
-      draft.lastKind = null
-      // A shutdown does not make the session idle in OpenCode.
-      if (event.data.reason !== 'shutdown') emit({ type: 'viewed', sessionId: draft.sessionId, idle: event.created })
-      return
     case 'session.inbox.enqueued':
       return enqueueInput({ draft, emit, data: event.data, busy: isBusy(draft) })
     case 'session.inbox.delivered': {
@@ -509,21 +533,17 @@ function applyRoot(context: Context & { event: V2Event }) {
 }
 
 function applyChild({ draft, prefs, emit, event, child }: Context & { event: V2Event; child: Draft<Child> }) {
-  switch (event.type) {
-    case 'session.execution.started':
-      child.running = true
-      return
-    case 'session.execution.succeeded':
-    case 'session.execution.failed':
-    case 'session.execution.interrupted':
-      child.running = false
-      if (child.background && event.type === 'session.execution.succeeded') {
-        toolLine({ draft, prefs, emit }, formatSubagentFinished({ agent: child.agent, description: child.description }))
-      }
-      return
-    // Every other event is a tool event.
-    default:
-      break
+  if (event.type === 'session.execution.started') {
+    child.running = true
+    return
+  }
+  // Every end of a child run clears it; a background child reports once, on success.
+  if (isExecutionEnd(event)) {
+    child.running = false
+    if (child.background && executionOutcome(event) === 'succeeded') {
+      toolLine({ draft, prefs, emit }, formatSubagentFinished({ agent: child.agent, description: child.description }))
+    }
+    return
   }
   // Background children post no tool lines: they would interleave with later turns.
   applyTool({ draft, prefs, emit, event, label: child.agent, render: !child.background })
@@ -577,7 +597,7 @@ function applyTool(context: Context & { event: V2Event; label: string | undefine
       if (tool?.name === 'execute') return showInnerCalls({ ...context, tool, metadata: event.data.metadata })
       const shellId = event.data.metadata['shellID']
       if (tool && tool.backgroundShell !== null && typeof shellId === 'string') {
-        draft.shells[shellId] = tool.backgroundShell
+        draft.transient.shells[shellId] = tool.backgroundShell
         return
       }
       const childId = event.data.metadata['sessionID']
@@ -640,8 +660,8 @@ function showShellFinished({
 }: Context & { metadata: Readonly<Record<string, unknown>>; label: string | null }) {
   const { shellID, jobID, state, exit } = metadata
   if (metadata['source'] !== 'shell' || typeof shellID !== 'string' || typeof jobID !== 'string') return
-  const description = context.draft.shells[shellID] ?? null
-  delete context.draft.shells[shellID]
+  const description = context.draft.transient.shells[shellID] ?? null
+  delete context.draft.transient.shells[shellID]
   if (context.prefs.verbosity === 'text') return
   toolLine(
     context,
@@ -696,10 +716,10 @@ function applyKimaki({ draft, event, prefs, emit }: Context & { event: KimakiEve
       if (draft.turn) draft.turn.slept = true
       return
     case 'kimaki.command':
-      draft.commandPending = { text: event.text, username: event.username }
+      draft.transient.commandPending = { text: event.text, username: event.username }
       return
     case 'kimaki.command-failed':
-      draft.commandPending = null
+      draft.transient.commandPending = null
       return
     case 'kimaki.replay':
       for (const effect of replayEffects({ messages: event.messages, prefs, note: event.note })) emit(effect)
@@ -718,6 +738,9 @@ function applyKimaki({ draft, event, prefs, emit }: Context & { event: KimakiEve
       else draft.turn ??= { startedAt: event.at, model: null, agent: null, tokens: 0, slept: false }
       // Nothing runs: tool calls whose end was missed while disconnected are over.
       if (!isBusy(draft)) draft.tools = {}
+      // A snapshot cannot carry these: a command that was in flight and a
+      // background shell whose end was missed must not survive it.
+      draft.transient = emptyTransient()
       for (const session of event.sessions) {
         const isRoot = session.sessionId === draft.sessionId
         const child = draft.children[session.sessionId]

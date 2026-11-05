@@ -427,3 +427,34 @@ test('execute: final metadata shows inner calls whose progress was missed, then 
     ]
   `)
 })
+
+test('a snapshot drops the command and background shells the old connection left behind', () => {
+  const view = {
+    ...emptyView({ sessionId: 'ses_root', channelId: 'chan', directory: '/project', isNew: false }),
+    transient: {
+      shells: { sh_1: 'pnpm dev' },
+      commandPending: { text: '/review', username: 'CLI' },
+    },
+  }
+  const { view: next, effects } = reduce({
+    view,
+    event: { type: 'kimaki.snapshot', at: 1_000, directory: null, activeSessionIds: [], sessions: [] },
+    prefs: DEFAULT_PREFS,
+  })
+  expect(next.transient).toEqual({ shells: {}, commandPending: null })
+  expect(effects).toEqual([])
+})
+
+test('a snapshot keeps a button prompt: its message and upload call still exist', () => {
+  const prompt = { id: 'abc', sessionId: 'ses_root', prompt: 'Pick one', maxFiles: 3 }
+  const view = {
+    ...emptyView({ sessionId: 'ses_root', channelId: 'chan', directory: '/project', isNew: false }),
+    agentUi: [prompt],
+  }
+  const { view: next } = reduce({
+    view,
+    event: { type: 'kimaki.snapshot', at: 1_000, directory: null, activeSessionIds: [], sessions: [] },
+    prefs: DEFAULT_PREFS,
+  })
+  expect(next.agentUi).toEqual([prompt])
+})

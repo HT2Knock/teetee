@@ -17,7 +17,7 @@ import type { Draft } from 'immer'
 
 import type { Bot } from './bot.ts'
 import { asSubtext, textOnly } from './format-parts.ts'
-import { stripTurnContext } from './system-prompt.ts'
+import { stripTurnContext } from './prompt-text.ts'
 import type { Emit, ThreadView } from './thread-reducer.ts'
 
 const ECHO_LIMIT = 1_900
@@ -99,8 +99,8 @@ export function enqueueInput(
   if (item.type !== 'user' || draft.inbox.some((candidate) => candidate.inboxID === inboxID)) return
   const { external, ...fields } = inputFields(item.payload)
   // The expanded prompt of a command Kimaki ran: the queue echo shows the typed command, never the template.
-  const command = external ? draft.commandPending : null
-  if (external) draft.commandPending = null
+  const command = external ? draft.transient.commandPending : null
+  if (external) draft.transient.commandPending = null
   const meta = command ? { ...fields, ...command, echo: null } : fields
   // Idle with nothing pending: OpenCode runs it at once, like a normal message.
   const acked = item.delivery === 'queue' && (busy || draft.inbox.length > 0)

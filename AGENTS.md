@@ -67,9 +67,10 @@ OpenCode events ──▶ adapters/opencode ──▶ event-loop.ts ──▶ th
 - `bot.ts`: the `Bot` context passed to every module. `store.ts`: the one zustand store.
 - `ingress.ts`: Discord messages and attachments. `slash-commands.ts` + `commands/*`: slash commands and components.
 - `input.ts`: the input layer. `dispatch` routes a Discord message and `send` runs `kimaki send`; `startSession` creates the thread and session. It imports prompt.ts and sessions.ts, never the other way round.
+- `send-command.ts`: the `SendInput` type, its zod schema and `validateSend`, the one rule list for the RPC gate and in-process callers. `send-policy.ts`: the pure model, thread-name, worktree and permission decisions (table-tested). `target.ts`: the project-channel lookup.
 - `session-context.ts`: project, thread and instruction facts of a session plus the agent/model switches. No input is sent from here, which is what keeps the graph acyclic.
 - `adapters/opencode/`: finds the OpenCode service, owns the event subscription, installs the plugin shim and writes the MCP state file.
-- `event-loop.ts`: routes events to threads, hydrates after a (re)connect. `thread-reducer.ts`: pure fold of events into a thread view plus effects.
+- `event-loop.ts`: routes events to threads, hydrates after a (re)connect. `thread-reducer.ts`: pure fold of events into a thread view plus effects. `execution-end.ts`: the one list of events that end a run.
 - `effects.ts`: the only Discord writer for session output. `format-parts.ts`, `markdown/`: formatting.
 - `adapters/http/rpc.ts`, `routes.ts`, `mcp.ts`: single-instance lock, the local RPC used by CLI subcommands, and `/mcp` for agents.
 - `cli.ts`, `adapters/cli/*.ts`: goke CLI. `plugin/`: code that runs inside the OpenCode process.
@@ -298,7 +299,7 @@ prefer event sourcing over mirrored mutable run state. always read the `event-so
 - easier testing: the reducer is pure and deterministic with fixture inputs.
 - fewer race bugs: state is derived from observed events, not guessed from local transitions.
 
-new rendering logic goes into the reducer (or a slice it calls, like `queue.ts`, `questions.ts`, `permissions.ts`) and gets a fixture test:
+new rendering logic goes into the reducer (or a slice it calls, like `queue.ts`, `questions-slice.ts`, `permissions-slice.ts`) and gets a fixture test. a slice is pure: the Discord handlers of the same feature live in `<feature>-routes.ts`, and `reducer-boundary.test.ts` fails if the reducer's import graph reaches discord.js, SQLite or node:fs.
 
 ```ts
 test('footer after a text-only turn', () => {
