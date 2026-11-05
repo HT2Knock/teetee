@@ -161,12 +161,13 @@ export function registerBotCommands(cli: Goke) {
         input: { durationMs },
         signal,
       })
-      if (result instanceof Error)
+      if (result instanceof Error) {
         fail(
           controller.signal.aborted
             ? new Error('Stopped early. The bot writes the profile to <data dir>/profiles/')
             : result,
         )
+      }
       process.stdout.write(`${result.data.path}\n`)
     })
 

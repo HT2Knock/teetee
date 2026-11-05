@@ -428,7 +428,7 @@ function matcherMatches({ matcher, options }: { matcher: NormalizedMatcher; opti
 }
 
 function getLastMessageRole({ prompt }: { prompt: LanguageModelV3Prompt }) {
-  const last = prompt[prompt.length - 1]
+  const last = prompt.at(-1)
   if (!last) {
     return undefined
   }
@@ -436,7 +436,7 @@ function getLastMessageRole({ prompt }: { prompt: LanguageModelV3Prompt }) {
 }
 
 function getLastMessageText({ prompt }: { prompt: LanguageModelV3Prompt }) {
-  const last = prompt[prompt.length - 1]
+  const last = prompt.at(-1)
   if (!last) {
     return ''
   }

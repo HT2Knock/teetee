@@ -235,11 +235,12 @@ function catalogRoutes(): InteractionRoutes {
         const list = await entries(bot, where.directory)
         if (list instanceof Error) return replyError(interaction, list)
         const name = interaction.options.getString('name', true).trim().replace(/^\//, '')
-        if (!list.some((entry) => entry.name === name))
+        if (!list.some((entry) => entry.name === name)) {
           return replyError(
             interaction,
             new ConfigError({ reason: `Unknown ${kind} \`${name}\`. Use /${kind} autocomplete to select one.` }),
           )
+        }
         const args = (interaction.options.getString('arguments') ?? '').trim()
         return sendInput(bot, {
           interaction,
@@ -486,6 +487,7 @@ export function registerSlashCommands(
     if (target) return handleDynamic(bot, { interaction, target })
     // A catalog command removed since the last registration: only told where commands work.
     await sessionTarget(bot, interaction)
+    return
   }
 
   async function autocomplete(interaction: AutocompleteInteraction) {
@@ -503,8 +505,9 @@ export function registerSlashCommands(
 
   // Provider logins and audio keys are secrets of the whole bot.
   function adminOnly(interaction: Interaction): boolean {
-    if (interaction.isChatInputCommand() || interaction.isAutocomplete())
+    if (interaction.isChatInputCommand() || interaction.isAutocomplete()) {
       return registry.commands.get(interaction.commandName)?.admin === true
+    }
     if (interaction.isButton()) return byPrefix(registry.buttons, interaction.customId)?.admin === true
     if (interaction.isStringSelectMenu()) return byPrefix(registry.selects, interaction.customId)?.admin === true
     if (interaction.isModalSubmit()) return byPrefix(registry.modals, interaction.customId)?.admin === true
@@ -528,14 +531,16 @@ export function registerSlashCommands(
       }
       return
     }
+    // Every path below returns its result.
     if (adminOnly(interaction) && guild.ownerId !== interaction.user.id) {
       const member = await guild.members.fetch(interaction.user.id).catch(() => null)
       if (!member?.permissions.has(PermissionFlagsBits.Administrator)) {
-        if (interaction.isRepliable())
+        if (interaction.isRepliable()) {
           await interaction.reply({
             content: 'Provider login requires the server owner or an administrator',
             flags: MessageFlags.Ephemeral,
           })
+        }
         return
       }
     }
@@ -544,6 +549,7 @@ export function registerSlashCommands(
     if (interaction.isButton()) return byPrefix(registry.buttons, interaction.customId)?.run(bot, interaction)
     if (interaction.isStringSelectMenu()) return byPrefix(registry.selects, interaction.customId)?.run(bot, interaction)
     if (interaction.isModalSubmit()) return byPrefix(registry.modals, interaction.customId)?.run(bot, interaction)
+    return
   }
 
   discord.on(Events.InteractionCreate, (interaction) => {

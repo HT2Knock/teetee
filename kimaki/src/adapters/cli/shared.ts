@@ -42,7 +42,7 @@ export type SessionTarget = { sessionId: string; threadId?: undefined } | { thre
 export function parseTarget(value: string): SessionTarget | Error {
   const trimmed = value.trim()
   const url = trimmed.match(/^https?:\/\/(?:\w+\.)?discord(?:app)?\.com\/channels\/\d+\/(\d+)(?:\/\d+)?\/?$/)
-  if (url) return { threadId: url[1]! }
+  if (url) return { threadId: url[1] ?? '' }
   if (/^\d{17,20}$/.test(trimmed)) return { threadId: trimmed }
   if (trimmed.startsWith('ses_')) return { sessionId: trimmed }
   return new Error(`Not a session ID, Discord thread ID or thread URL: ${value}`)

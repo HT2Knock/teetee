@@ -101,7 +101,8 @@ test('the control token lists every MCP tool and the notify token a subset', asy
 
 test('MCP send posts a Discord message and waits for the turn', async () => {
   const started = await send(bot, { channelId: twin.channelId, prompt: 'MCP first turn mcp-marker' })
-  if (started instanceof Error || !started.threadId) throw started
+  if (started instanceof Error) throw started
+  if (!started.threadId) throw new Error('thread was not created')
   await waitForFooter({ discord: twin.discord, threadId: started.threadId })
 
   const called = await mcp(bot.lock.tokens.notify, 'tools/call', {

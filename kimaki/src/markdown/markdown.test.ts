@@ -314,7 +314,7 @@ test('3000-char code block splits into valid fences under 2000 chars', () => {
       return {
         length: segment.markdown.length,
         first: lines[0],
-        last: lines[lines.length - 1],
+        last: lines.at(-1),
         fences: (segment.markdown.match(/^```/gm) ?? []).length,
       }
     }),
@@ -395,7 +395,7 @@ test('edge cases: 2500-char code line, fence info line inside a fence, oversized
     renderMarkdown(longLine).map((segment) => {
       if (segment.kind !== 'text') return segment.kind
       const lines = segment.markdown.split('\n')
-      return { length: segment.markdown.length, first: lines[0], last: lines[lines.length - 1] }
+      return { length: segment.markdown.length, first: lines[0], last: lines.at(-1) }
     }),
   ).toMatchInlineSnapshot(`
     [

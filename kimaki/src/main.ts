@@ -85,7 +85,7 @@ class Cleanup {
         first ??= cause
       }
     }
-    if (first !== undefined) throw first
+    if (first !== undefined) throw first instanceof Error ? first : new Error(JSON.stringify(first))
   }
 }
 
@@ -160,6 +160,7 @@ const runBot = ({ options, settings, clock, store, cleanup, onBot }: BuildInput)
           client.session.view({ sessionID: sessionId, idle }),
         )
         if (result instanceof Error) return result
+        return
       },
     })
     cleanup.defer(() => effects.stop())

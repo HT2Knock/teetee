@@ -22,6 +22,8 @@ import { VoiceEncryptionMode, VoiceOpcodes } from 'discord-api-types/voice/v8'
 import type { VoiceSendPayload } from 'discord-api-types/voice/v8'
 import { WebSocketServer, WebSocket } from 'ws'
 
+import { textFrame } from './ws-text.js'
+
 const execFileAsync = promisify(execFile)
 
 const AUTH_TAG_LENGTH = 16
@@ -123,8 +125,12 @@ export class DiscordVoiceServer {
     const httpsServer = this.https
     const udp = this.udp
     await Promise.all([
-      new Promise<void>((resolve) => httpsServer.listen(0, '127.0.0.1', resolve)),
-      new Promise<void>((resolve) => udp.bind(0, '127.0.0.1', resolve)),
+      new Promise<void>((resolve) => {
+        httpsServer.listen(0, '127.0.0.1', resolve)
+      }),
+      new Promise<void>((resolve) => {
+        udp.bind(0, '127.0.0.1', resolve)
+      }),
     ])
     const address = httpsServer.address()
     this.wsPort = address && typeof address === 'object' ? address.port : 0
@@ -140,7 +146,11 @@ export class DiscordVoiceServer {
     if (this.previousRejectUnauthorized === undefined) delete process.env['NODE_TLS_REJECT_UNAUTHORIZED']
     else process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = this.previousRejectUnauthorized
     const httpsServer = this.https
-    if (httpsServer) await new Promise<void>((resolve) => httpsServer.close(() => resolve()))
+    if (httpsServer) {
+      await new Promise<void>((resolve) => {
+        httpsServer.close(() => resolve())
+      })
+    }
   }
 
   // Lets this process connect to the self-signed voice WebSocket.
@@ -200,7 +210,7 @@ export class DiscordVoiceServer {
       // Binary frames are DAVE messages, never sent because DAVE is off.
       if (isBinary) return
       // JSON.parse returns unknown; VoiceSendPayload is what clients send.
-      this.handleMessage(connection, JSON.parse(raw.toString()) as VoiceSendPayload)
+      this.handleMessage(connection, JSON.parse(textFrame(raw)) as VoiceSendPayload)
     })
     ws.on('close', () => {
       this.connections.delete(connection)
@@ -254,6 +264,9 @@ export class DiscordVoiceServer {
         if (stream) stream.speaking = Number(payload.d.speaking) !== 0
         return
       }
+      // Discord sends opcodes this fake server does not model.
+      default:
+        break
     }
   }
 
@@ -326,7 +339,11 @@ export class DiscordVoiceServer {
         })
         this.udp?.send(packet, udp.port, udp.address)
       }
-      if (intervalMs > 0) await new Promise((resolve) => setTimeout(resolve, intervalMs))
+      if (intervalMs > 0) {
+        await new Promise((resolve) => {
+          setTimeout(resolve, intervalMs)
+        })
+      }
     }
   }
 

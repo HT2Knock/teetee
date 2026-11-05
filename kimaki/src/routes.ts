@@ -43,6 +43,8 @@ export function parseTextMessage({ content }: { content: string }): Route | null
   const queued = stripQueueSuffix(text)
   if (!queued.text) return null
   const command = queued.text.match(COMMAND_RE)
-  if (command) return { kind: 'command', name: command[1]!, arguments: command[2]?.trim() ?? '', queue: queued.queue }
+  if (command) {
+    return { kind: 'command', name: command[1] ?? '', arguments: command[2]?.trim() ?? '', queue: queued.queue }
+  }
   return { kind: queued.queue ? 'queue' : 'steer', text: queued.text }
 }

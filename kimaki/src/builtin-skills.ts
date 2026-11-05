@@ -39,10 +39,11 @@ export async function readBuiltinSkills(): Promise<FilesystemError | BuiltinSkil
     if (text instanceof Error) return text
     const match = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(text)
     const description = match?.[1] ? frontmatterValue(match[1], 'description') : undefined
-    if (!match || !description)
+    if (!match || !description) {
       return new FilesystemError({ operation: `parse ${file}: missing frontmatter description` })
+    }
     // Virtual path: OpenCode has no file to scan for these (same as its /builtin skills).
-    skills.push({ id, name: id, description, path: `/kimaki/${id}.md`, content: match[2]!.trim() })
+    skills.push({ id, name: id, description, path: `/kimaki/${id}.md`, content: (match[2] ?? '').trim() })
   }
   return skills
 }
@@ -55,10 +56,11 @@ export function parseDisabledSkills(value: string | undefined): ConfigError | Bu
     .filter(Boolean)
   if (items.includes('all')) return [...BUILTIN_SKILL_IDS]
   const unknown = items.filter((item) => !isBuiltinSkill(item))
-  if (unknown.length > 0)
+  if (unknown.length > 0) {
     return new ConfigError({
       reason: `Unknown built-in skill ${unknown.join(', ')}. Choose from: all, ${BUILTIN_SKILL_IDS.join(', ')}`,
     })
+  }
   return items as BuiltinSkillId[]
 }
 

@@ -54,12 +54,14 @@ describe('interactions', () => {
   }, 15000)
 
   afterAll(async () => {
-    client?.destroy()
+    await client?.destroy()
     await discord?.stop()
   })
 
   test('modal file fields hydrate uploaded attachments in discord.js', async () => {
-    const received = new Promise<Interaction>((resolve) => client.once('interactionCreate', resolve))
+    const received = new Promise<Interaction>((resolve) => {
+      client.once('interactionCreate', resolve)
+    })
     await discord
       .channel(channelId)
       .user(testUserId)

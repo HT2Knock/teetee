@@ -18,6 +18,27 @@ kimaki runs on bun only. anything that spawns a kimaki entrypoint goes through `
 
 for checkout validation requests, prefer non-recursive checks unless the user asks otherwise.
 
+## lint, types and complexity
+
+run `bun run verify` before you say a change is done: `bun check` (tsc), `oxlint --type-aware --deny-warnings`, `oxfmt --check`, `fallow dead-code`, `fallow architecture`, the complexity gate, then the build.
+
+the linter runs with type information (`oxlint-tsgolint`), so promise and union mistakes surface without a test. the rules exist to stop the shortcuts that make generated code look correct:
+
+- no `!` non-null assertions in `src` (the rule is off in tests). handle the missing value instead.
+- no `as` casts to silence a type error, and no `@ts-ignore`. narrow with a guard or parse the value.
+- every switch on a union must handle every member or say why with a `default` case.
+- a function takes at most 4 parameters. pass an object when it needs more.
+- braces on every multi-line block.
+- `typescript/require-await` is off on purpose: interface callbacks are async by contract.
+
+when a rule is wrong for one place, write `// oxlint-disable-next-line <rule> -- <why the rule cannot see the truth>` and keep the reason specific. never disable a whole file.
+
+`bun run complexity` compares against `.fallow-health-baseline.json` (functions above cyclomatic 20 or cognitive 15). existing hotspots are frozen; a new or renamed function that is too complex fails. re-save the baseline only after splitting a function:
+
+```bash
+fallow health --save-baseline .fallow-health-baseline.json --baseline-mode identity
+```
+
 ## task-specific docs
 
 read the matching doc **before** starting these tasks. they hold the full procedures and are not repeated here.

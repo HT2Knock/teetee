@@ -134,7 +134,7 @@ test('abort: no error line for the aborted tool, no footer, next turn is normal'
 test('child found by the parentID walk after a restart still gets labelled tool lines', () => {
   const events = loadFixture('task-parallel.events.jsonl')
   const children = events.filter((event) => event.type === 'session.created' && event.data.parentID)
-  const child = children[children.length - 1]
+  const child = children.at(-1)
   if (child?.type !== 'session.created') throw new Error('fixture has no child session')
   // The bot restarted after the child was created: no session.created, no tool.progress link.
   const afterRestart = events.flatMap((event): ThreadEvent[] => {

@@ -105,8 +105,9 @@ async function createSessionThread(
     .create({ name: threadName, autoArchiveDuration: 1440, ...(startMessageId && { startMessage: startMessageId }) })
     .catch((cause) => new DiscordError({ operation: 'create thread', cause }))
   if (thread instanceof Error) return thread
-  if (author.id !== bot.discord.user?.id)
+  if (author.id !== bot.discord.user?.id) {
     await thread.members.add(author.id).catch((e: Error) => logger.warn(`add member`, e))
+  }
   return { channel, thread }
 }
 
@@ -570,6 +571,9 @@ async function runInSession(
       }
       return runResult(steer(bot, { ...base, text: route.text }))
     }
+    // Excluded from Route at the type level; kept for safety if a caller bypasses it.
+    default:
+      return new ConfigError({ reason: 'Unsupported route' })
   }
 }
 
@@ -701,10 +705,11 @@ export async function send(
 
   const project = await sendProject(bot, input)
   if (project instanceof Error) return project
-  if (!project)
+  if (!project) {
     return input.channelId && !localOnly
       ? remoteSend(bot, input)
       : new ConfigError({ reason: 'No local project channel for this target' })
+  }
 
   if (input.notifyOnly) return sendNotification(bot, project, input, context)
   return sendNewSession(bot, project, input, context)
@@ -717,7 +722,7 @@ function sendContext(
   { localOnly, task }: { localOnly: boolean; task?: ScheduledRun },
 ): ConfigError | { context: SendContext } {
   const userIds = (input.user ?? []).map((user) => user.replace(/[<@!>]/g, ''))
-  const author = { id: userIds[0] ?? bot.discord.user!.id, username: task ? `routine #${task.id}` : 'CLI' }
+  const author = { id: userIds[0] ?? bot.discord.user?.id ?? '', username: task ? `routine #${task.id}` : 'CLI' }
   const route = parseTextMessage({ content: input.prompt })
   if (!route) return new ConfigError({ reason: 'Prompt is empty' })
   if (input.agent && (route.kind === 'steer' || route.kind === 'btw')) route.agent = input.agent
@@ -727,6 +732,9 @@ function sendContext(
 // The channel_directories row of --channel or --project; undefined when this
 // machine has no channel for the target.
 async function sendProject(bot: Bot, input: SendInput) {
+  if (!input.channelId && !input.project) {
+    return new ConfigError({ reason: 'Pass --channel, --project or --thread' })
+  }
   const rows = input.channelId
     ? await bot.db<
         ChannelDirectoryRow[]
@@ -735,7 +743,7 @@ async function sendProject(bot: Bot, input: SendInput) {
       )
     : await bot.db<
         ChannelDirectoryRow[]
-      >`SELECT * FROM channel_directories WHERE directory = ${path.resolve(input.project!)} LIMIT 1`.catch(
+      >`SELECT * FROM channel_directories WHERE directory = ${path.resolve(input.project ?? '')} LIMIT 1`.catch(
         (cause) => new DbError({ operation: 'resolve send project', cause }),
       )
   if (rows instanceof Error) return rows
@@ -749,8 +757,9 @@ function invalidSend(input: SendInput): ConfigError | null {
   if (input.worktree !== undefined && (input.cwd || input.threadId || input.sessionId || input.notifyOnly)) {
     return new ConfigError({ reason: '--worktree requires a new session without --cwd or --notify-only.' })
   }
-  if (input.baseBranch && input.worktree === undefined)
+  if (input.baseBranch && input.worktree === undefined) {
     return new ConfigError({ reason: '--base-branch requires --worktree.' })
+  }
   if (input.permissions?.length && (input.threadId || input.sessionId || input.notifyOnly)) {
     return new ConfigError({
       reason:
@@ -777,8 +786,9 @@ function parsePermissions(rules: readonly string[] | undefined): ConfigError | P
 
 // Every --user joins the thread; startSession adds the author of a new session itself.
 async function addMembers(thread: ThreadChannel, ids: readonly string[]) {
-  for (const id of ids)
+  for (const id of ids) {
     await thread.members.add(id).catch((error: Error) => logger.warn(`add thread member ${id}`, error))
+  }
 }
 
 type SendContext = {
@@ -801,9 +811,10 @@ async function switchSendModel(bot: Bot, sessionId: string, requested: string | 
 // CRAP is estimated from exports because fallow cannot see e2e coverage.
 // fallow-ignore-next-line complexity
 async function sendToThread(bot: Bot, input: SendInput, context: SendContext) {
-  const threadId = input.threadId ?? threadOfSession(bot, input.sessionId!)
-  if (!threadId)
+  const threadId = input.threadId ?? (input.sessionId ? threadOfSession(bot, input.sessionId) : null)
+  if (!threadId) {
     return new ConfigError({ reason: 'No local thread for this session. Use --thread on its owning machine.' })
+  }
   const thread = await runResult(fetchThread(bot, threadId))
   if (thread instanceof Error) return thread
   const sessionId = bot.store.getState().roots[thread.id]
@@ -829,7 +840,7 @@ async function sendToThread(bot: Bot, input: SendInput, context: SendContext) {
     echo,
   })
   if (result instanceof Error) return result
-  return result ?? { threadId, sessionId: bot.store.getState().roots[threadId]! }
+  return result ?? { threadId, sessionId: bot.store.getState().roots[threadId] ?? null }
 }
 
 async function sendNotification(bot: Bot, project: ChannelDirectoryRow, input: SendInput, context: SendContext) {

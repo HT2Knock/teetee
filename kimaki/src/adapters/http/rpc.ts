@@ -177,7 +177,7 @@ export async function startLockServer({
     res.writeHead(status, { 'content-type': 'application/json' })
     res.end(JSON.stringify(value))
   }
-  async function readBody(req: http.IncomingMessage): Promise<Error | unknown> {
+  async function readBody(req: http.IncomingMessage): Promise<unknown> {
     const chunks: Buffer[] = []
     let size = 0
     for await (const chunk of req) {
@@ -191,8 +191,9 @@ export async function startLockServer({
     )
   }
   async function handle(req: http.IncomingMessage, res: http.ServerResponse) {
-    if (req.headers.authorization !== `Bearer ${tokens.control}`)
+    if (req.headers.authorization !== `Bearer ${tokens.control}`) {
       return json(res, 401, { error: 'Not authorized. Use the lock-token of this bot.' })
+    }
     if (req.method !== 'POST') return json(res, 405, { error: 'Use POST' })
     if (!state.handler) return json(res, 503, { error: 'Kimaki is starting. Try again.' })
     const input = await readBody(req)
@@ -272,7 +273,9 @@ export async function startLockServer({
     })
     .catch((cause) => new LockPortError({ port, reason: 'cannot write the bot tokens', cause }))
   if (written instanceof Error) {
-    await new Promise<void>((resolve) => server.close(() => resolve()))
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve())
+    })
     return written
   }
   return {
@@ -287,7 +290,9 @@ export async function startLockServer({
     },
     close: async () => {
       server.closeAllConnections()
-      await new Promise<void>((resolve) => server.close(() => resolve()))
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve())
+      })
       // Keep the tokens: a plugin (or a still-running MCP client) may hold a
       // registration, and the next start reuses the same values.
     },

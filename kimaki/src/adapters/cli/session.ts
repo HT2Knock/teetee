@@ -226,8 +226,9 @@ export function registerSessionActionCommands(cli: Goke) {
       .option('--json', 'Output as JSON')
       .action(async (value, options) => {
         const target = targetOrEnv(options.session)
-        if (name === 'add')
+        if (name === 'add') {
           return action({ route: 'queue.add', dataDir: options.dataDir, input: { ...target, text: value } })
+        }
         return action({ route: 'queue.remove', dataDir: options.dataDir, input: { ...target, inboxId: value } })
       })
   }

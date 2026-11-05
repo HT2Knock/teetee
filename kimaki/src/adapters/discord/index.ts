@@ -57,7 +57,9 @@ export function createDiscordClient(options: DiscordClientOptions = {}): Client 
 }
 
 export async function loginDiscord({ client, token }: { client: Client; token: string }): Promise<DiscordError | void> {
-  const ready = new Promise<void>((resolve) => client.once(Events.ClientReady, () => resolve()))
+  const ready = new Promise<void>((resolve) => {
+    client.once(Events.ClientReady, () => resolve())
+  })
   const login = await client.login(token).catch((cause) => new DiscordError({ operation: 'login', cause }))
   if (login instanceof Error) return login
   await ready

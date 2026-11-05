@@ -181,10 +181,12 @@ export function resolveRouteScope(pathname: string): RouteScope {
   if ((first === 'interactions' || first === 'webhooks') && route.length >= 3) {
     return SNOWFLAKE.test(second) && third ? { kind: 'allowed-without-auth' } : { kind: 'denied' }
   }
-  if (first === 'guilds' && route.length >= 2)
+  if (first === 'guilds' && route.length >= 2) {
     return SNOWFLAKE.test(second) ? { kind: 'guild', guildId: second } : { kind: 'denied' }
-  if (first === 'channels' && route.length >= 2)
+  }
+  if (first === 'channels' && route.length >= 2) {
     return SNOWFLAKE.test(second) ? { kind: 'channel', channelId: second } : { kind: 'denied' }
+  }
   if (first === 'applications' && third === 'guilds' && route.length >= 4) {
     return SNOWFLAKE.test(fourth) ? { kind: 'guild', guildId: fourth } : { kind: 'denied' }
   }
@@ -1694,8 +1696,9 @@ export function createServer({
         ? null
         : Response.json({ error: 'REST route is outside the authorized guild scope' }, { status: 403 })
     }
-    if (scope.kind === 'denied')
+    if (scope.kind === 'denied') {
       return Response.json({ error: 'REST route is outside the authorized guild scope' }, { status: 403 })
+    }
     if (scope.kind === 'guild') {
       return guilds.has(scope.guildId)
         ? null

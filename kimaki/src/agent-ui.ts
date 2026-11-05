@@ -24,10 +24,12 @@ export function parseButton(value: string): ConfigError | AgentButton {
   const match = value.match(/:(white|blue|green|red)$/)
   const color = match?.[1] ?? 'white'
   const label = match ? value.slice(0, -match[0].length) : value
-  if (!label.trim() || label.length > 80)
+  if (!label.trim() || label.length > 80) {
     return new ConfigError({ reason: 'Button labels must have 1 to 80 characters' })
-  if (color !== 'white' && color !== 'blue' && color !== 'green' && color !== 'red')
+  }
+  if (color !== 'white' && color !== 'blue' && color !== 'green' && color !== 'red') {
     return new ConfigError({ reason: 'Unknown button color' })
+  }
   return { label, color }
 }
 
@@ -123,8 +125,9 @@ export function createAgentUi(bot: Pick<Bot, 'store' | 'eventLoop' | 'opencode'>
     if (!threadId) return new ConfigError({ reason: 'This session has no local Discord thread' })
     const prompt: AgentPrompt = { id: crypto.randomBytes(8).toString('hex'), sessionId, ...content }
     if (fromShell) {
-      if (!toolCall)
+      if (!toolCall) {
         return new ConfigError({ reason: 'The Kimaki plugin must provide KIMAKI_TOOL_CALL for agent UI commands' })
+      }
       const waited = await waitForShellCall(bot, { toolCall, signal })
       if (waited instanceof Error) return waited
     }
@@ -159,8 +162,9 @@ export function createAgentUi(bot: Pick<Bot, 'store' | 'eventLoop' | 'opencode'>
     if (!active()) return interaction.editReply({ content: 'Upload cancelled' })
     if (directory instanceof Error) return interaction.editReply({ content: directory.message })
     const files = [...interaction.fields.getUploadedFiles('files', true).values()]
-    if (files.length < 1 || files.length > (prompt.maxFiles ?? 5))
+    if (files.length < 1 || files.length > (prompt.maxFiles ?? 5)) {
       return interaction.editReply({ content: 'Too many files' })
+    }
     const output = path.join(directory, 'uploads', id)
     const created = await fs.promises
       .mkdir(output, { recursive: true })
@@ -173,8 +177,9 @@ export function createAgentUi(bot: Pick<Bot, 'store' | 'eventLoop' | 'opencode'>
         (cause) => new DiscordError({ operation: 'download upload', cause }),
       )
       if (!active()) return interaction.editReply({ content: 'Upload cancelled' })
-      if (response instanceof Error || !response.ok)
+      if (response instanceof Error || !response.ok) {
         return interaction.editReply({ content: 'Upload download failed. Try again.' })
+      }
       const bytes = await response.arrayBuffer().catch((cause) => new DiscordError({ operation: 'read upload', cause }))
       if (!active()) return interaction.editReply({ content: 'Upload cancelled' })
       if (bytes instanceof Error) return interaction.editReply({ content: bytes.message })
@@ -236,6 +241,7 @@ async function clickAgentButton(bot: Bot, interaction: ButtonInteraction) {
     user: [interaction.user.id],
   })
   if (result instanceof Error) await interaction.followUp({ content: result.message, flags: MessageFlags.Ephemeral })
+  return
 }
 
 export const agentUiRoutes: InteractionRoutes = {

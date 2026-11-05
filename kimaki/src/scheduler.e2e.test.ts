@@ -22,6 +22,9 @@ import {
 } from './test/harness.ts'
 import { git } from './worktrees.ts'
 
+// An instruction entry holds a JSON value; the text entries are plain strings.
+const entryText = (value: unknown): string => (typeof value === 'string' ? value : JSON.stringify(value))
+
 const dataDir = tempDataDir()
 const clock = manualClock(Date.parse('2030-01-01T09:00:00Z'))
 let server: OpencodeTestServer
@@ -86,7 +89,7 @@ test('a one-shot routine starts a thread at its time, then is gone', async () =>
   expect(info.metadata?.['kimaki']).toMatchObject({ source: 'task', taskId: task.routineId })
   // The instruction entry tells the agent it runs for a task and must not sleep until the next run.
   const entries = await (await server.client()).session.instructions.entry.list({ sessionID: sessionId })
-  const text = entries.map((entry) => String(entry.value)).join('\n')
+  const text = entries.map((entry) => entryText(entry.value)).join('\n')
   expect(text.slice(text.indexOf('## routine session'), text.indexOf('## discord user mentions')))
     .toMatchInlineSnapshot(`
     "## routine session
@@ -101,7 +104,7 @@ test('a one-shot routine starts a thread at its time, then is gone', async () =>
   // /resume rebuilds the instruction entry: the task section and marker stay, though the row is gone.
   await request('session.resume', { sessionId, channelId: twin.channelId })
   const resumed = await (await server.client()).session.instructions.entry.list({ sessionID: sessionId })
-  expect(resumed.map((entry) => String(entry.value)).join('\n')).toContain(
+  expect(resumed.map((entry) => entryText(entry.value)).join('\n')).toContain(
     'started automatically by kimaki routine #1.',
   )
   expect((await (await server.client()).session.get({ sessionID: sessionId })).metadata?.['kimaki']).toMatchObject({

@@ -26,10 +26,17 @@ type McpTool = {
 function routeTool(
   name: string,
   description: string,
-  scope: McpScope,
-  route: string,
-  inputSchema: McpTool['inputSchema'],
-  guard?: McpTool['guard'],
+  {
+    scope,
+    route,
+    inputSchema,
+    guard,
+  }: {
+    scope: McpScope
+    route: string
+    inputSchema: McpTool['inputSchema']
+    guard?: McpTool['guard']
+  },
 ): McpTool {
   return {
     name,
@@ -57,115 +64,153 @@ const mcpTools: readonly McpTool[] = [
   routeTool(
     'send',
     'Post a message to a channel or thread, or start a thread. Add `queue` to the prompt to run after the current turn.',
-    'notify',
-    'send',
     {
+      scope: 'notify',
+      route: 'send',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          prompt: { type: 'string', description: 'Message text' },
+          ...optionalTarget,
+          name: { type: 'string', description: 'Thread name' },
+          agent: { type: 'string', description: 'Agent ID' },
+          model: { type: 'string', description: 'provider/model' },
+          user: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Discord user IDs to add to the thread',
+          },
+          notifyOnly: { type: 'boolean', description: 'Post without starting an AI session' },
+          files: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: { uri: { type: 'string' }, name: { type: 'string' } },
+              required: ['uri', 'name'],
+            },
+          },
+        },
+        required: ['prompt'],
+      },
+      guard: (args) =>
+        args['channelId'] !== undefined || args['project'] !== undefined
+          ? 'The notify token cannot start a session. Pass threadId or sessionId.'
+          : null,
+    },
+  ),
+  routeTool('upload', 'Attach local files to a session thread or channel.', {
+    scope: 'notify',
+    route: 'upload',
+    inputSchema: {
       type: 'object',
       properties: {
-        prompt: { type: 'string', description: 'Message text' },
-        ...optionalTarget,
-        name: { type: 'string', description: 'Thread name' },
-        agent: { type: 'string', description: 'Agent ID' },
-        model: { type: 'string', description: 'provider/model' },
-        user: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Discord user IDs to add to the thread',
-        },
-        notifyOnly: { type: 'boolean', description: 'Post without starting an AI session' },
+        id: { type: 'string', description: 'Session ID, thread ID or channel ID' },
         files: {
           type: 'array',
           items: {
             type: 'object',
-            properties: { uri: { type: 'string' }, name: { type: 'string' } },
-            required: ['uri', 'name'],
+            properties: { path: { type: 'string' }, name: { type: 'string' } },
+            required: ['path', 'name'],
           },
         },
       },
-      required: ['prompt'],
+      required: ['id', 'files'],
     },
-    (args) =>
-      args['channelId'] !== undefined || args['project'] !== undefined
-        ? 'The notify token cannot start a session. Pass threadId or sessionId.'
-        : null,
-  ),
-  routeTool('upload', 'Attach local files to a session thread or channel.', 'notify', 'upload', {
-    type: 'object',
-    properties: {
-      id: { type: 'string', description: 'Session ID, thread ID or channel ID' },
-      files: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: { path: { type: 'string' }, name: { type: 'string' } },
-          required: ['path', 'name'],
+  }),
+  routeTool('buttons', 'End a turn with 1-3 action buttons.', {
+    scope: 'notify',
+    route: 'buttons',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        buttons: {
+          type: 'array',
+          maxItems: 3,
+          items: { type: 'string', description: 'Label[:white|blue|green|red]' },
         },
+        ...sessionTarget,
+        fromShell: { type: 'boolean' },
+        toolCall: { type: 'string' },
+      },
+      required: ['buttons'],
+    },
+  }),
+  routeTool('user_lookup', 'Resolve Discord users of a guild for mentions.', {
+    scope: 'notify',
+    route: 'user.list',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        guild: { type: 'string', description: 'Guild ID' },
+        query: { type: 'string', description: 'Name filter' },
+      },
+      required: ['guild'],
+    },
+  }),
+  routeTool('project_list', 'List project channels and their directories.', {
+    scope: 'control',
+    route: 'project.list',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  }),
+  routeTool('session_list', 'List sessions with status and token counts.', {
+    scope: 'control',
+    route: 'session.list',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project: { type: 'string', description: 'Project directory (default: none)' },
+        all: { type: 'boolean', description: 'All projects' },
+        active: { type: 'boolean', description: 'Only busy sessions' },
+        exclude: { type: 'array', items: { type: 'string' } },
+        json: { type: 'boolean' },
       },
     },
-    required: ['id', 'files'],
   }),
-  routeTool('buttons', 'End a turn with 1-3 action buttons.', 'notify', 'buttons', {
-    type: 'object',
-    properties: {
-      buttons: {
-        type: 'array',
-        maxItems: 3,
-        items: { type: 'string', description: 'Label[:white|blue|green|red]' },
+  routeTool('session_read', 'Read a session as markdown.', {
+    scope: 'control',
+    route: 'session.read',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Session ID, thread ID or thread URL' },
+        thinking: { type: 'boolean' },
+        verbose: { type: 'boolean' },
+        json: { type: 'boolean' },
       },
-      ...sessionTarget,
-      fromShell: { type: 'boolean' },
-      toolCall: { type: 'string' },
-    },
-    required: ['buttons'],
-  }),
-  routeTool('user_lookup', 'Resolve Discord users of a guild for mentions.', 'notify', 'user.list', {
-    type: 'object',
-    properties: {
-      guild: { type: 'string', description: 'Guild ID' },
-      query: { type: 'string', description: 'Name filter' },
-    },
-    required: ['guild'],
-  }),
-  routeTool('project_list', 'List project channels and their directories.', 'control', 'project.list', {
-    type: 'object',
-    properties: {},
-  }),
-  routeTool('session_list', 'List sessions with status and token counts.', 'control', 'session.list', {
-    type: 'object',
-    properties: {
-      project: { type: 'string', description: 'Project directory (default: none)' },
-      all: { type: 'boolean', description: 'All projects' },
-      active: { type: 'boolean', description: 'Only busy sessions' },
-      exclude: { type: 'array', items: { type: 'string' } },
-      json: { type: 'boolean' },
+      required: ['id'],
     },
   }),
-  routeTool('session_read', 'Read a session as markdown.', 'control', 'session.read', {
-    type: 'object',
-    properties: {
-      id: { type: 'string', description: 'Session ID, thread ID or thread URL' },
-      thinking: { type: 'boolean' },
-      verbose: { type: 'boolean' },
-      json: { type: 'boolean' },
-    },
-    required: ['id'],
-  }),
-  routeTool('session_archive', 'Archive a session thread.', 'control', 'session.archive', {
-    type: 'object',
-    properties: sessionTarget,
-  }),
-  routeTool('sleep', 'Wake this session later.', 'control', 'sleep', {
-    type: 'object',
-    properties: {
-      ...sessionTarget,
-      duration: { type: 'string', description: 'For example 90s, 30m or 2h' },
-      until: { type: 'string', description: 'UTC ISO time' },
-      reason: { type: 'string' },
+  routeTool('session_archive', 'Archive a session thread.', {
+    scope: 'control',
+    route: 'session.archive',
+    inputSchema: {
+      type: 'object',
+      properties: sessionTarget,
     },
   }),
-  routeTool('routine_list', 'List scheduled routines.', 'control', 'routine.list', {
-    type: 'object',
-    properties: { all: { type: 'boolean', description: 'Include finished routines' } },
+  routeTool('sleep', 'Wake this session later.', {
+    scope: 'control',
+    route: 'sleep',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...sessionTarget,
+        duration: { type: 'string', description: 'For example 90s, 30m or 2h' },
+        until: { type: 'string', description: 'UTC ISO time' },
+        reason: { type: 'string' },
+      },
+    },
+  }),
+  routeTool('routine_list', 'List scheduled routines.', {
+    scope: 'control',
+    route: 'routine.list',
+    inputSchema: {
+      type: 'object',
+      properties: { all: { type: 'boolean', description: 'Include finished routines' } },
+    },
   }),
 ]
 

@@ -88,8 +88,9 @@ export function registerStartCommand(cli: Goke) {
       // Non-TTY hosts get the failure as an `error` event too (programmatic onboarding).
       // Explicit type: TS narrows after a `never` call only for annotated consts.
       const failStartup: (error: Error, installUrl?: string) => never = (error, installUrl) => {
-        if (!process.stdin.isTTY)
+        if (!process.stdin.isTTY) {
           emitEvent({ type: 'error', message: error.message, ...(installUrl && { install_url: installUrl }) })
+        }
         fail(error)
       }
       const dataDir = dataDirOrDefault(options.dataDir)
@@ -192,17 +193,19 @@ export function registerStartCommand(cli: Goke) {
       // The bot keeps running; the next start retries onboarding.
       if (onboarded instanceof Error) {
         logger.error(`onboarding failed`, onboarded)
-        if (!process.stdin.isTTY)
+        if (!process.stdin.isTTY) {
           emitEvent({
             type: 'error',
             message: `Onboarding failed: ${onboarded.message}. The bot is running; restart kimaki to retry.`,
           })
+        }
         return
       }
-      if (onboarded)
+      if (onboarded) {
         process.stderr.write(
           `Onboarding thread: https://discord.com/channels/${onboarded.guildId}/${onboarded.threadId}\n`,
         )
+      }
       // Only the default port: the plugin checks that one. Runtime flags only;
       // credentials and onboarding are saved in SQLite.
       if (lock.port === DEFAULT_LOCK_PORT) {
@@ -217,7 +220,8 @@ export function registerStartCommand(cli: Goke) {
         })
         if (autostart instanceof Error) logger.warn('cannot write the autostart script', autostart)
       }
-      if (!process.stdin.isTTY)
+      if (!process.stdin.isTTY) {
         emitEvent({ type: 'ready', app_id: credentials.appId, guild_ids: [...bot.discord.guilds.cache.keys()] })
+      }
     })
 }

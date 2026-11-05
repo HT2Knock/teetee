@@ -132,11 +132,13 @@ export function createEventLoop({
     const verbosity = state.verbosity[view.channelId] ?? verbosityFromV1(null)
     const contextLimits = modelLimits.get(view.directory)?.limits ?? {}
     const result = reduce({ view, event, prefs: { verbosity, contextLimits } })
-    if (result.view !== view)
+    if (result.view !== view) {
       store.setState((current) => ({ threads: { ...current.threads, [threadId]: result.view } }))
+    }
     effects.run(threadId, result.effects)
-    if (event.type === 'session.moved' && event.data.sessionID === view.sessionId)
+    if (event.type === 'session.moved' && event.data.sessionID === view.sessionId) {
       void loadModelLimits(event.data.location.directory)
+    }
   }
 
   // One line per run start and end of a root session, so the log shows what each thread did.
@@ -163,6 +165,9 @@ export function createEventLoop({
         return logger.warn(`run failed in ${where}${summary(event.created)}: ${event.data.error.message}`)
       case 'session.retry.scheduled':
         return logger.warn(`retry ${event.data.attempt} in ${where}: ${event.data.error.message}`)
+      // Every other event has nothing to log.
+      default:
+        return
     }
   }
 
@@ -490,7 +495,7 @@ export function createEventLoop({
     },
 
     // Held live events wait while this runs (connect protocol, spec 6.8).
-    async onConnect({ client, signal }: ConnectContext): Promise<OpenCodeError | void> {
+    onConnect: async ({ client, signal }: ConnectContext): Promise<OpenCodeError | void> => {
       connection.client = client
       // A new connection may bring new providers, and old unrelated sessions are gone.
       modelLimits.clear()
@@ -505,7 +510,7 @@ export function createEventLoop({
       deliver(threadId, event)
     },
 
-    onEvent(event: V2Event): void {
+    onEvent: (event: V2Event): void => {
       if (CATALOG_EVENTS.has(event.type)) {
         // Credential events have no location: they can change every directory.
         const directories = event.location ? [event.location.directory] : [...modelLimits.keys()]
@@ -530,7 +535,7 @@ export function createEventLoop({
       void resolveUnknownSession(sessionId)
     },
 
-    onDisconnect(): void {
+    onDisconnect: (): void => {
       connection.client = null
     },
   }

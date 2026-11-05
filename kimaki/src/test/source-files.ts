@@ -9,7 +9,7 @@ export async function sourceFiles(directory: string): Promise<string[]> {
     entries.map((entry) => {
       const full = path.join(directory, entry.name)
       if (entry.isDirectory()) return sourceFiles(full)
-      return entry.name.endsWith('.ts') ? [full] : []
+      return Promise.resolve(entry.name.endsWith('.ts') ? [full] : [])
     }),
   )
   return files.flat()

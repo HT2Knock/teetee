@@ -181,7 +181,9 @@ export async function startOpencodeTestServer({
     const child = current.child
     current.child = null
     if (!child || child.exitCode !== null) return
-    const exited = new Promise((resolve) => child.once('exit', resolve))
+    const exited = new Promise((resolve) => {
+      child.once('exit', resolve)
+    })
     child.kill('SIGTERM')
     await Promise.race([exited, sleep(5_000).then(() => child.kill('SIGKILL'))])
   }
@@ -317,7 +319,7 @@ export async function startTestBot({
     const opened = await openDb({ dataDir, migrate: true })
     if (opened instanceof Error) throw opened
     const saved = await saveCredentials({ db: opened.db, credentials })
-    opened.close()
+    await opened.close()
     if (saved instanceof Error) throw saved
   }
   // The bot's agent shells and CLI children talk to the twin, not discord.com.
@@ -408,7 +410,7 @@ export function schedulingKit({
       const opened = await openDb({ dataDir, migrate: false })
       if (opened instanceof Error) throw opened
       const tasks = await listTasks({ db: opened.db })
-      opened.close()
+      await opened.close()
       if (tasks instanceof Error) throw tasks
       return tasks
     },
@@ -590,7 +592,7 @@ export function scriptedTurn({
       then: { parts: toolParts({ toolCallId: step.id, toolName: step.tool, input: step.input }) },
     }
   })
-  const last = steps[steps.length - 1]
+  const last = steps.at(-1)
   return [
     ...toolMatchers,
     {

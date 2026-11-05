@@ -23,7 +23,7 @@ import {
 import { fromResult } from './effect-bridge.ts'
 import { ConfigError, type DbError, DiscordError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
 import { createLogger } from './logger.ts'
-import { type ChannelDirectoryRow } from './rows.ts'
+import type { ChannelDirectoryRow } from './rows.ts'
 import { baseInstructions, INSTRUCTION_KEY, type ScheduledRun } from './system-prompt.ts'
 import { resolveWorkingDirectory } from './worktrees.ts'
 

@@ -86,7 +86,7 @@ const PREFIX_COLORS: Color[] = ['cyan', 'magenta', 'blue', 'green', 'cyanBright'
 function prefixColor(prefix: string): Color {
   let hash = 0
   for (const char of prefix) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
-  return PREFIX_COLORS[hash % PREFIX_COLORS.length]!
+  return PREFIX_COLORS[hash % PREFIX_COLORS.length] ?? 'cyan'
 }
 
 const LEVELS: Record<Level, { symbol: string; color: Color; text: Color | null }> = {

@@ -264,11 +264,12 @@ export function createLoginRoutes(): InteractionRoutes {
     if (provider instanceof Error) return replyError(interaction, provider)
     wizards.set(id, { ...wizard, provider: provider.data })
     const options = methods(provider.data)
-    if (!options.length)
+    if (!options.length) {
       return replyError(
         interaction,
         new ConfigError({ reason: 'No interactive login method. This integration uses environment credentials.' }),
       )
+    }
     await interaction.editReply({
       content: `Connect ${provider.data.name}`,
       components: [
@@ -302,8 +303,9 @@ export function createLoginRoutes(): InteractionRoutes {
     if (value.startsWith('oauth:')) {
       await interaction.deferUpdate()
       const method = provider.methods.find((candidate) => candidate.type === 'oauth' && candidate.id === value.slice(6))
-      if (!method || method.type !== 'oauth')
+      if (!method || method.type !== 'oauth') {
         return replyError(interaction, new ConfigError({ reason: 'Unknown login method' }))
+      }
       const result = await oc(bot, 'integration.oauth.connect', (client) =>
         client.integration.oauth.connect({
           integrationID: provider.id,

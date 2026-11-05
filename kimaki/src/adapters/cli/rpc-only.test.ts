@@ -56,7 +56,9 @@ describe('CLI RPC boundary', () => {
       response.writeHead(200, { 'content-type': 'application/json' })
       response.end(JSON.stringify(bodies[route]))
     })
-    await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', () => resolve()))
+    await new Promise<void>((resolve) => {
+      server.listen(port, '127.0.0.1', () => resolve())
+    })
     fs.mkdirSync(dataDir, { recursive: true })
     fs.writeFileSync(path.join(dataDir, 'lock-token'), control)
     // Opening this as a database would throw SQLITE_NOTADB.

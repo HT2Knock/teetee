@@ -132,11 +132,12 @@ async function queueCommand(bot: Bot, interaction: ChatInputCommandInteraction, 
 async function queueOpencodeCommand(bot: Bot, interaction: ChatInputCommandInteraction, { thread }: SessionTarget) {
   const name = interaction.options.getString('command')?.trim().replace(/^\//, '') ?? ''
   const args = (interaction.options.getString('arguments') ?? '').trim()
-  if (!name)
+  if (!name) {
     return replyError(
       interaction,
       new ConfigError({ reason: 'Pass a command name, for example /queue-command command:review' }),
     )
+  }
   const echo = `/${name} ${args}`.trim()
   return queueInput(bot, { interaction, thread, route: { kind: 'command', name, arguments: args, queue: true }, echo })
 }
@@ -284,8 +285,9 @@ async function diffCommand(bot: Bot, interaction: ChatInputCommandInteraction) {
     cwd: target.directory,
     timeout: 10_000,
   }).catch((e) => new DiscordError({ operation: 'git status', cause: e }))
-  if (status instanceof Error)
+  if (status instanceof Error) {
     return replyError(interaction, new ConfigError({ reason: 'This project is not a git repository' }))
+  }
   if (!status.stdout.trim()) {
     await interaction.editReply({ content: 'No changes to show' })
     return
@@ -303,11 +305,12 @@ async function diffCommand(bot: Bot, interaction: ChatInputCommandInteraction) {
   }
   const output = upload instanceof Error ? (upload.stdout ?? '') : upload.stdout
   const result = parseCritiqueOutput(output)
-  if (!result)
+  if (!result) {
     return replyError(
       interaction,
       new ConfigError({ reason: `critique failed: ${output.slice(0, 200) || 'no output'}` }),
     )
+  }
   if (!result.ok) return replyError(interaction, new ConfigError({ reason: result.error }))
   const embed = new EmbedBuilder()
     .setTitle(title)
