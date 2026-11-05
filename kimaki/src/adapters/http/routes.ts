@@ -240,8 +240,9 @@ function localSession(bot: Bot, input: { sessionId?: string; threadId?: string }
   const { sessionThreads, roots } = bot.store.getState()
   const threadId = input.threadId ?? (input.sessionId ? sessionThreads[input.sessionId] : undefined)
   const sessionId = threadId ? roots[threadId] : undefined
-  if (!threadId || !sessionId)
+  if (!threadId || !sessionId) {
     return new ConfigError({ reason: 'No local session. Pass a session ID, thread ID or thread URL.' })
+  }
   if (!bot.opencode.endpoint) return new OpenCodeUnavailableError({ reason: 'not connected' })
   return { threadId, sessionId }
 }
@@ -285,7 +286,7 @@ const sessionInput = <T extends z.ZodRawShape>(shape: T) =>
 
 const sessionText = sessionInput({ text: text('text') })
 
-const cliAuthor = (bot: Bot) => ({ id: bot.discord.user!.id, username: 'CLI' })
+const cliAuthor = (bot: Bot) => ({ id: bot.discord.user?.id ?? '', username: 'CLI' })
 
 // A session or thread ID from the CLI; a subagent session has no row, so its ID
 // stays and threadId is null.
@@ -884,8 +885,9 @@ const lockRoutes = {
       )
       if (rows instanceof Error) return rows
       const titles: Record<string, string> = {}
-      for (const row of parseRows<ThreadSessionRow>('thread_sessions', rows))
+      for (const row of parseRows<ThreadSessionRow>('thread_sessions', rows)) {
         if (!titles[row.session_id] && row.last_synced_name) titles[row.session_id] = row.last_synced_name
+      }
       return { titles }
     },
   }),

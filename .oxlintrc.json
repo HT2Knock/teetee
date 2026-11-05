@@ -4,15 +4,24 @@
   "categories": {
     "correctness": "error"
   },
+  "options": {
+    "typeAware": true
+  },
   "env": {
     "builtin": true
   },
   "rules": {
     "eqeqeq": ["error", "always", { "null": "ignore" }],
+    "eslint/curly": ["error", "multi-line"],
+    "eslint/max-depth": ["error", 4],
+    "eslint/max-params": ["error", 4],
     "eslint/no-console": "error",
     "eslint/no-else-return": "error",
+    "eslint/no-empty": "error",
+    "eslint/no-empty-function": "error",
     "eslint/no-lonely-if": "error",
     "eslint/no-nested-ternary": "error",
+    "eslint/no-promise-executor-return": "error",
     "eslint/no-shadow": "error",
     "eslint/no-throw-literal": "error",
     "eslint/no-unneeded-ternary": "error",
@@ -28,13 +37,26 @@
     "eslint/prefer-object-spread": "error",
     "eslint/prefer-rest-params": "error",
     "eslint/prefer-template": "error",
+    "import/no-cycle": "error",
     "import/no-duplicates": "error",
+    "import/no-self-import": "error",
     "promise/param-names": "error",
+    "typescript/await-thenable": "error",
+    "typescript/ban-ts-comment": "error",
     "typescript/consistent-type-imports": "error",
+    "typescript/no-base-to-string": "error",
     "typescript/no-explicit-any": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-import-type-side-effects": "error",
+    "typescript/no-non-null-assertion": "error",
+    "typescript/only-throw-error": "error",
+    "typescript/restrict-template-expressions": "error",
+    "typescript/switch-exhaustiveness-check": ["error", { "considerDefaultExhaustiveForUnions": true }],
+    "typescript/unbound-method": "error",
     "unicorn/no-invalid-fetch-options": "error",
     "unicorn/no-thenable": "off",
     "unicorn/no-useless-spread": "error",
+    "unicorn/prefer-at": "error",
     "unicorn/prefer-node-protocol": "error",
     "unicorn/prefer-number-properties": "error"
   },
@@ -108,10 +130,21 @@
       }
     },
     {
-      "files": ["**/*.test.ts", "**/test/**"],
+      // The twin answers like a fetch handler: `throw new Response` returns an
+      // HTTP response, so a Response is the error object there.
+      "files": ["discord-digital-twin/src/server.ts"],
       "rules": {
+        "typescript/only-throw-error": "off"
+      }
+    },
+    {
+      "files": ["**/*.test.ts", "**/test/**", "**/tests/**"],
+      "rules": {
+        "eslint/max-params": "off",
         "eslint/no-shadow": "off",
-        "eslint/no-useless-escape": "off"
+        "eslint/no-useless-escape": "off",
+        "typescript/no-non-null-assertion": "off",
+        "typescript/unbound-method": "off"
       }
     }
   ],

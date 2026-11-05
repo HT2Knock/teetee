@@ -522,8 +522,9 @@ function setModelForScope({
 // What /model answers for the scope it wrote.
 function modelScopeMessage({ scope, label }: { scope: string; label: string }): string {
   if (scope === 'session') return `Model set for this session:\n${label}\nApplies from the next step.`
-  if (scope === 'global')
+  if (scope === 'global') {
     return `Model preference set for all channels:\n${label}\nNew sessions use this model, except in channels with their own model.`
+  }
   return `Model preference set for this channel:\n${label}\nAll new sessions in this channel will use this model.`
 }
 

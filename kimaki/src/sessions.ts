@@ -27,7 +27,7 @@ import { createLogger } from './logger.ts'
 import { prompt } from './prompt.ts'
 import { parseRows, type ChannelDirectoryRow } from './rows.ts'
 import { NO_QUESTION_TOOL, bindThread, putInstructions, switchAgent, threadProject } from './session-context.ts'
-import { type ScheduledRun } from './system-prompt.ts'
+import type { ScheduledRun } from './system-prompt.ts'
 import { createWorktree, resolveWorkingDirectory } from './worktrees.ts'
 
 const logger = createLogger('SESSIONS')

@@ -113,8 +113,9 @@ class AttachmentError extends Data.TaggedError('AttachmentError')<{ file: string
 async function remotePromptText(url: string) {
   const response = await fetch(url).catch((cause) => new AttachmentError({ file: REMOTE_PROMPT_FILE, cause }))
   if (response instanceof Error) return response
-  if (!response.ok)
+  if (!response.ok) {
     return new AttachmentError({ file: REMOTE_PROMPT_FILE, cause: new Error(`HTTP ${response.status}`) })
+  }
   return response.text().catch((cause) => new AttachmentError({ file: REMOTE_PROMPT_FILE, cause }))
 }
 
@@ -173,8 +174,9 @@ async function handleRemoteEnvelope(
   const value = decoded.value
   if (!value || typeof value !== 'object') return
   if (!('requestId' in value) || typeof value.requestId !== 'string' || !/^[0-9a-f]{16}$/.test(value.requestId)) return
-  if (!('options' in value) || !value.options || typeof value.options !== 'object' || Array.isArray(value.options))
+  if (!('options' in value) || !value.options || typeof value.options !== 'object' || Array.isArray(value.options)) {
     return
+  }
   const promptInFile = 'promptFile' in value && value.promptFile === REMOTE_PROMPT_FILE
   const first = message.attachments.first()
   const promptAttachment = promptInFile && first?.name === REMOTE_PROMPT_FILE ? first : undefined

@@ -329,8 +329,9 @@ test('snapshot closes the ack of an item promoted while disconnected, without an
     (event) => event.type === 'session.inbox.enqueued' && event.data.item.delivery === 'queue',
   )
   const enqueued = events[index]
-  if (enqueued?.type !== 'session.inbox.enqueued' || enqueued.data.item.type !== 'user')
+  if (enqueued?.type !== 'session.inbox.enqueued' || enqueued.data.item.type !== 'user') {
     throw new Error('fixture has no queued user item')
+  }
   const { view } = replay({ events: events.slice(0, index + 1) })
   expect(view.inbox[0]?.acked).toBe(true)
   const snapshot = {

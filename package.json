@@ -12,20 +12,22 @@
   "scripts": {
     "build": "bun run --filter kimaki build",
     "check": "bun run --filter kimaki check && bun run --filter discord-digital-twin typecheck && bun run --filter opencode-deterministic-provider typecheck",
-    "lint": "oxlint .",
-    "lint:fix": "oxlint --fix .",
+    "lint": "oxlint --type-aware --deny-warnings .",
+    "lint:fix": "oxlint --type-aware --fix .",
     "fmt": "oxfmt .",
     "fmt:check": "oxfmt --check .",
     "fallow": "fallow dead-code && fallow architecture",
     "fallow:health": "fallow health --hotspots --targets",
-    "verify": "bun run check && bun run lint && bun run fmt:check && bun run fallow && bun run build",
-    "test": "bun run --filter kimaki test"
+    "verify": "bun run check && bun run lint && bun run fmt:check && bun run fallow && bun run complexity && bun run build",
+    "test": "bun run --filter kimaki test",
+    "complexity": "fallow health --baseline .fallow-health-baseline.json --baseline-mode identity"
   },
   "dependencies": {},
   "devDependencies": {
     "fallow": "3.38.1",
     "oxfmt": "0.75.0",
     "oxlint": "1.90.0",
+    "oxlint-tsgolint": "7.0.2005",
     "typescript": "^5.9.2"
   },
   "overrides": {

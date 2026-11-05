@@ -143,7 +143,7 @@ test('session resume finds the project channel when SQLite stores a symlink alia
   const opened = await openDb({ dataDir, migrate: false })
   if (opened instanceof Error) throw opened
   await opened.db`UPDATE channel_directories SET directory = ${alias} WHERE channel_id = ${twin.channelId}`
-  opened.close()
+  await opened.close()
   let failure: unknown = null
   try {
     const source = await newSession('alias-source')
@@ -155,8 +155,8 @@ test('session resume finds the project channel when SQLite stores a symlink alia
   const restore = await openDb({ dataDir, migrate: false })
   if (!(restore instanceof Error)) {
     await restore.db`UPDATE channel_directories SET directory = ${server.projectDirectory} WHERE channel_id = ${twin.channelId}`
-    restore.close()
+    await restore.close()
   }
   fs.rmSync(path.dirname(alias), { recursive: true, force: true })
-  if (failure) throw failure
+  if (failure) throw failure instanceof Error ? failure : new Error(JSON.stringify(failure))
 })

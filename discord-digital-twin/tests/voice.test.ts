@@ -47,7 +47,9 @@ beforeAll(async () => {
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates],
     rest: { api: discord.restUrl, version: '10' },
   })
-  const ready = new Promise<void>((resolve) => client.once('clientReady', () => resolve()))
+  const ready = new Promise<void>((resolve) => {
+    client.once('clientReady', () => resolve())
+  })
   await client.login(discord.botToken)
   await ready
 })
@@ -96,7 +98,9 @@ test('a user speaking reaches the bot receiver as the same opus frames', async (
     selfDeaf: false,
   })
   await entersState(connection, VoiceConnectionStatus.Ready, 8_000)
-  const speaker = new Promise<string>((resolve) => connection.receiver.speaking.once('start', resolve))
+  const speaker = new Promise<string>((resolve) => {
+    connection.receiver.speaking.once('start', resolve)
+  })
   const received: Buffer[] = []
   const ended = new Promise<void>((resolve) => {
     connection.receiver.speaking.once('start', (userId) => {

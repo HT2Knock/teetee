@@ -225,10 +225,10 @@ function patchStats(patchText: string): Array<{ file: string; added: number; rem
   for (const line of patchText.split('\n')) {
     const header = line.match(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/)
     if (header) {
-      files.push({ file: header[1]!.trim(), added: 0, removed: 0 })
+      files.push({ file: (header[1] ?? '').trim(), added: 0, removed: 0 })
       continue
     }
-    const current = files[files.length - 1]
+    const current = files.at(-1)
     if (!current || line.startsWith('***')) continue
     if (line.startsWith('+')) current.added++
     if (line.startsWith('-')) current.removed++

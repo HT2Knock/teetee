@@ -47,7 +47,7 @@ describe('discord.js SDK compatibility', () => {
   }, 15000)
 
   afterAll(async () => {
-    client?.destroy()
+    await client?.destroy()
     await discord?.stop()
   })
 

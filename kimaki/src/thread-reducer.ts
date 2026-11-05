@@ -378,6 +378,9 @@ function applyOpencode({ draft, event, prefs, emit }: Context & { event: V2Event
       return showPermission({ draft, emit, request: event.data, label })
     case 'permission.replied':
       return closePermission({ draft, emit, requestID: event.data.requestID, status: STATUS[event.data.reply] })
+    // Every other event belongs to the child or the root below.
+    default:
+      break
   }
   if (child) return applyChild({ draft, prefs, emit, event, child })
   applyRoot({ draft, prefs, emit, event })
@@ -398,8 +401,9 @@ function applyRoot(context: Context & { event: V2Event }) {
       draft.turn ??= { startedAt: event.created, model: null, agent: null, tokens: 0, slept: false }
       draft.turn.model = model
       draft.turn.agent = event.data.agent
-      if (draft.bannerPending)
+      if (draft.bannerPending) {
         emit({ type: 'send', text: formatBanner({ model: event.data.model, agent: event.data.agent }) })
+      }
       draft.bannerPending = false
       return
     }
@@ -517,6 +521,9 @@ function applyChild({ draft, prefs, emit, event, child }: Context & { event: V2E
         toolLine({ draft, prefs, emit }, formatSubagentFinished({ agent: child.agent, description: child.description }))
       }
       return
+    // Every other event is a tool event.
+    default:
+      break
   }
   // Background children post no tool lines: they would interleave with later turns.
   applyTool({ draft, prefs, emit, event, label: child.agent, render: !child.background })
@@ -527,6 +534,9 @@ function applyChild({ draft, prefs, emit, event, child }: Context & { event: V2E
 function applyTool(context: Context & { event: V2Event; label: string | undefined; render: boolean }) {
   const { draft, event, prefs, label, render } = context
   switch (event.type) {
+    // Every other event is a tool event.
+    default:
+      break
     case 'session.tool.input.started':
       draft.tools[toolKey(event.data)] = {
         name: event.data.name,
@@ -557,8 +567,9 @@ function applyTool(context: Context & { event: V2Event; label: string | undefine
         if (reused) Object.assign(reused, { ...call, agent: call.agent || reused.agent })
       }
       draft.tools[key] = tool
-      if (render && isToolVisible({ name, input }, prefs.verbosity))
+      if (render && isToolVisible({ name, input }, prefs.verbosity)) {
         toolLine(context, formatToolLine({ name, input }, { label }))
+      }
       return
     }
     case 'session.tool.progress': {
@@ -585,8 +596,9 @@ function applyTool(context: Context & { event: V2Event; label: string | undefine
         const { metadata } = event.data
         showInnerCalls({ ...context, tool, metadata })
         if (render && event.type === 'session.tool.success') {
-          for (const line of formatExecuteFailures({ metadata, content: event.data.content, label }))
+          for (const line of formatExecuteFailures({ metadata, content: event.data.content, label })) {
             toolLine(context, line)
+          }
         }
       }
       delete draft.tools[key]

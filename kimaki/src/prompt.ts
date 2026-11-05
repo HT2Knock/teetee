@@ -17,7 +17,7 @@ import fs from 'node:fs'
 import type { SessionMessageInfo } from '@opencode/client'
 import { Effect } from 'effect'
 
-import { type Message } from './adapters/discord/index.ts'
+import type { Message } from './adapters/discord/index.ts'
 import { ocEffect, projectOf, rootSession, type Author, type Bot, type PromptFile } from './bot.ts'
 import { runResult } from './effect-bridge.ts'
 import { ConfigError, OpenCodeError, OpenCodeUnavailableError } from './errors.ts'
@@ -27,7 +27,7 @@ import { splitPromptFiles } from './prompt-files.ts'
 import { parseTextMessage, type Route } from './routes.ts'
 import { allMessages } from './session-events.ts'
 import { cancelSleep } from './sleep-store.ts'
-import { type TurnContext } from './system-prompt.ts'
+import type { TurnContext } from './system-prompt.ts'
 import { isBusy, type UploadFile } from './thread-reducer.ts'
 
 const logger = createLogger('PROMPT')
@@ -254,6 +254,7 @@ export function shell(
       logger.error(`shell in ${threadId} failed`, result)
       bot.effects.run(threadId, [{ type: 'send', text: formatError(result.message), notify: true }])
     })
+  return
 }
 
 // User shells of a session that still run (for /abort).
@@ -375,9 +376,9 @@ export async function upload(bot: Bot, { id, files }: { id: string; files: Array
     if (!stat?.isFile()) return new ConfigError({ reason: `File not found: ${file.path}` })
     sized.push({ ...file, size: stat.size })
   }
-  const error = await new Promise<Error | null>((resolve) =>
-    bot.effects.run(threadId, [{ type: 'attachments', files: sized, settle: resolve }]),
-  )
+  const error = await new Promise<Error | null>((resolve) => {
+    bot.effects.run(threadId, [{ type: 'attachments', files: sized, settle: resolve }])
+  })
   if (error) return error
   return { uploaded: files.map((file) => file.name) }
 }

@@ -70,7 +70,8 @@ export function resolveGuildId({
     )
     const directories = parseRows<ChannelDirectoryRow>('channel_directories', rows)
     const guilds = [...new Set(directories.flatMap((row) => (row.guild_id ? [row.guild_id] : [])))]
-    if (guilds.length === 1) return guilds[0]!
+    const onlyGuild = guilds[0]
+    if (onlyGuild) return onlyGuild
     if (guilds.length === 0) {
       return yield* Effect.fail(new ConfigError({ reason: 'No Kimaki channels yet. Start the bot once to onboard.' }))
     }

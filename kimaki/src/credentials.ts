@@ -101,7 +101,7 @@ export function installUrlFor({ credentials }: { credentials: Credentials }): st
     scope: [OAuth2Scopes.Bot, OAuth2Scopes.ApplicationsCommands].join(' '),
     permissions: permissions.toString(),
   })
-  return `https://discord.com/oauth2/authorize?${params}`
+  return `https://discord.com/oauth2/authorize?${params.toString()}`
 }
 
 // Non-TTY hosts (cloud sandboxes, CI) read these on stdout. SSE framing, so

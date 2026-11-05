@@ -69,10 +69,12 @@ export function registerSendCommand(cli: Goke) {
     .option('--pre-run <command>', 'Scheduled only: run first in the project. Exit 0 starts, stdout is appended')
     .option('--allow-concurrency', 'Scheduled only: allow overlapping runs of this routine')
     .action(async (options) => {
-      if (options.wait && options.sendAt)
+      if (options.wait && options.sendAt) {
         fail(new Error('--wait cannot be used with --send-at: the routine runs later'))
-      if (options.thread !== undefined && options.session !== undefined)
+      }
+      if (options.thread !== undefined && options.session !== undefined) {
         fail(new Error('Use exactly one of --channel, --thread, --session, --project'))
+      }
       const continued = options.thread ?? options.session
       const target = continued === undefined ? {} : parseTarget(continued)
       if (target instanceof Error) fail(target)
@@ -104,8 +106,9 @@ export function registerSendCommand(cli: Goke) {
       })
       if (result instanceof BotNotRunningError) {
         // No local bot (CI, another machine): the bot that owns the channel runs it (remote-send.ts).
-        if (options.sendAt || options.wait)
+        if (options.sendAt || options.wait) {
           fail(new Error('Kimaki bot is not running here. --send-at and --wait need a local bot.'))
+        }
         const [{ sendInput }, { sendWithoutBot }] = await Promise.all([
           import('../http/routes.ts'),
           import('../../remote-send.ts'),
@@ -122,8 +125,9 @@ export function registerSendCommand(cli: Goke) {
       process.stdout.write(`${JSON.stringify(result.data)}\n`)
       if (!options.wait) return
       const data = result.data
-      if (!data || typeof data !== 'object' || !('sessionId' in data) || typeof data.sessionId !== 'string')
+      if (!data || typeof data !== 'object' || !('sessionId' in data) || typeof data.sessionId !== 'string') {
         fail(new Error('--wait requires an AI session, not --notify-only'))
+      }
       await waitAndPrintSession({ client: await readClient(), sessionId: data.sessionId })
     })
 }

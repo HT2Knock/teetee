@@ -65,8 +65,9 @@ export default Plugin.define({
         typeof parentMarker === 'object' &&
         !Array.isArray(parentMarker) &&
         parentMarker['threadId'] === current.get('threadId')
-      )
+      ) {
         return marker(session.parentID)
+      }
       return current
     }
     // The git branch reaches the model as a synthetic message saved right before
@@ -131,8 +132,9 @@ export default Plugin.define({
       }
     })
     await ctx.tool.hook('execute.before', async (event) => {
-      if (event.tool !== 'shell' || !event.input || typeof event.input !== 'object' || Array.isArray(event.input))
+      if (event.tool !== 'shell' || !event.input || typeof event.input !== 'object' || Array.isArray(event.input)) {
         return
+      }
       const info = await marker(event.sessionID)
       const dataDir = info?.get('dataDir')
       const lockPort = info?.get('lockPort')

@@ -97,7 +97,8 @@ function hide(text: string) {
 
 test('session cwd changes preserve the session and use the new location after restart and btw', async () => {
   const sent = await send(bot, { channelId: twin.channelId, prompt: 'Start cwd session', name: 'cwd-test' })
-  if (sent instanceof Error || !sent.sessionId) throw sent
+  if (sent instanceof Error) throw sent
+  if (!sent.sessionId) throw new Error('session was not created')
   await waitForFooter({ discord: twin.discord, threadId: sent.threadId })
   const moved = await runLockRoute(bot, {
     route: 'session.cwd',
@@ -162,7 +163,8 @@ test('session cwd changes preserve the session and use the new location after re
 
 test('native moves of a busy session update the live footer without aborting its response', async () => {
   const sent = await send(bot, { channelId: twin.channelId, prompt: 'busy-move-marker' })
-  if (sent instanceof Error || !sent.sessionId) throw sent
+  if (sent instanceof Error) throw sent
+  if (!sent.sessionId) throw new Error('session was not created')
   await waitForBotMessageContaining({ discord: twin.discord, threadId: sent.threadId, text: '*using ' })
   const client = await server.client()
   await client.session.move({ sessionID: sent.sessionId, directory: path.join(server.projectDirectory, 'sub') })
@@ -192,7 +194,8 @@ test('native moves of a busy session update the live footer without aborting its
 test('new-worktree forks context, and CLI creation and worktree toggle use the same directory policy', async () => {
   const client = await server.client()
   const source = await send(bot, { channelId: twin.channelId, prompt: 'Remember fork context' })
-  if (source instanceof Error || !source.sessionId) throw source
+  if (source instanceof Error) throw source
+  if (!source.sessionId) throw new Error('session was not created')
   await waitForFooter({ discord: twin.discord, threadId: source.threadId })
   const before = new Set((await twin.discord.channel(twin.channelId).getThreads()).map((thread) => thread.id))
   await twin.discord
@@ -255,7 +258,8 @@ test('new-worktree forks context, and CLI creation and worktree toggle use the s
   const enabled = await setAutoWorktrees(bot, { channelId: twin.channelId, enabled: true })
   if (enabled instanceof Error) throw enabled
   const automatic = await send(bot, { channelId: twin.channelId, prompt: 'Automatic isolation' })
-  if (automatic instanceof Error || !automatic.sessionId) throw automatic
+  if (automatic instanceof Error) throw automatic
+  if (!automatic.sessionId) throw new Error('session was not created')
   await waitForFooter({ discord: twin.discord, threadId: automatic.threadId })
   expect(
     hide(await twin.discord.thread(automatic.threadId).text()).replace(
@@ -300,7 +304,8 @@ test('send worktree creates an isolated named checkout, while explicit cwd reuse
     worktree: 'isolated',
     name: 'isolated-test',
   })
-  if (sent instanceof Error || !sent.sessionId) throw sent
+  if (sent instanceof Error) throw sent
+  if (!sent.sessionId) throw new Error('session was not created')
   await waitForFooter({ discord: twin.discord, threadId: sent.threadId })
   expect(hide(await twin.discord.thread(sent.threadId).text())).toMatchInlineSnapshot(`
     "--- from: assistant (TestBot)
@@ -317,7 +322,8 @@ test('send worktree creates an isolated named checkout, while explicit cwd reuse
   expect(fs.readFileSync(path.join(info.location.directory, 'cwd.txt'), 'utf8')).toBe('isolated')
   expect(fs.existsSync(path.join(server.projectDirectory, 'cwd.txt'))).toBe(false)
   const reused = await send(bot, { channelId: twin.channelId, prompt: 'Reuse checkout', cwd: info.location.directory })
-  if (reused instanceof Error || !reused.sessionId) throw reused
+  if (reused instanceof Error) throw reused
+  if (!reused.sessionId) throw new Error('session was not created')
   await waitForFooter({ discord: twin.discord, threadId: reused.threadId })
   expect(hide(await twin.discord.thread(reused.threadId).text())).toMatchInlineSnapshot(`
     "--- from: assistant (TestBot)

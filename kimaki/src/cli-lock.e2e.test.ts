@@ -417,6 +417,7 @@ test('CLI registry shares thread actions, preferences, title and archive', async
     `https://discord.com/channels/${twin.discord.guildId}/${started.threadId}`,
   ])
   await cli(['session', 'queue', 'add', 'Registry queued', '--session', started.threadId])
+  // oxlint-disable-next-line typescript/await-thenable -- bun types give rejects.toThrow() type unknown, the runtime returns a promise
   await expect(cli(['session', 'queue', 'list', '--session', 'not-an-id'])).rejects.toThrow(
     'Not a session ID, Discord thread ID or thread URL: not-an-id',
   )
@@ -471,6 +472,7 @@ test('send settings reach native session creation; notifications create no sessi
     { action: 'question', resource: '*', effect: 'deny' },
     { action: 'shell', resource: '*', effect: 'deny' },
   ])
+  // oxlint-disable-next-line typescript/await-thenable -- bun types give rejects.toMatchObject() type unknown, the runtime returns a promise
   await expect(
     cli(['send', '--thread', ids.threadId, '-p', 'Must not run', '--permission', 'shell:deny']),
   ).rejects.toMatchObject({ stderr: expect.stringContaining('--permission applies only to new sessions') })

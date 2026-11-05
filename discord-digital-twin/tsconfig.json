@@ -7,7 +7,6 @@
     "allowJs": true,
     "outDir": "dist",
     "rootDir": "src",
-    "useUnknownInCatchVariables": false,
     "moduleResolution": "nodenext",
     "verbatimModuleSyntax": true,
     "declaration": true,
@@ -19,9 +18,10 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noPropertyAccessFromIndexSignature": false
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noPropertyAccessFromIndexSignature": false,
+    "noImplicitReturns": true
   },
   "include": ["src"]
 }

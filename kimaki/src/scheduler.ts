@@ -127,8 +127,9 @@ export function decodeTaskPayload(json: string): ConfigError | TaskJob {
   )
   if (parsed instanceof Error) return parsed
   const value = parsed.value
-  if (!value || typeof value !== 'object' || Array.isArray(value))
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return new ConfigError({ reason: 'Routine payload must be an object' })
+  }
   const fields = new Map(Object.entries(value))
   const text = (key: string) => {
     const field = fields.get(key)
@@ -164,8 +165,9 @@ export function decodeTaskPayload(json: string): ConfigError | TaskJob {
   const threadId = text('threadId')
   const channelId = text('channelId')
   if (kind === 'thread' && threadId) return job({ ...common, threadId })
-  if (kind !== 'channel' || !channelId)
+  if (kind !== 'channel' || !channelId) {
     return new ConfigError({ reason: `Routine payload has unknown kind ${kind ?? '(none)'} or no target` })
+  }
   const name = text('name')
   const cwd = text('cwd')
   const worktree = text('worktreeName')
@@ -238,10 +240,11 @@ export type TaskEdit = {
 function userIdOf(value: string): ConfigError | string | null {
   if (!value) return null
   const id = value.replace(/^<@!?(\d+)>$/, '$1')
-  if (!/^\d+$/.test(id))
+  if (!/^\d+$/.test(id)) {
     return new ConfigError({
       reason: `Use a Discord user ID or mention, not "${value}". Find IDs with: kimaki user list --guild <id> --query <name>`,
     })
+  }
   return id
 }
 
@@ -340,8 +343,9 @@ async function preRun({
   const command = job.preRun
   const prompt = job.send.prompt
   if (!command) return { prompt }
-  if (!row.project_directory)
+  if (!row.project_directory) {
     return new ConfigError({ reason: `Routine ${row.id} has a pre-run command but no project directory` })
+  }
   const result = await execAsync(command, { cwd: row.project_directory, timeout: PRE_RUN_TIMEOUT_MS }).catch(
     (cause: Error & { code?: number | string; stdout?: string; stderr?: string }) => cause,
   )
@@ -425,8 +429,9 @@ async function finish(
     // The claim makes this process the only writer of the row until finish.
     const attempts = row.attempts + 1
     // A cron task tries again at its next occurrence.
-    if (next)
+    if (next) {
       return update({ status: 'planned', next_run_at: next, last_run_at: at, last_error: outcome.message, attempts })
+    }
     return update({ status: 'failed', last_run_at: at, last_error: outcome.message, attempts })
   }
   if (outcome.kind === 'busy') {
@@ -445,12 +450,13 @@ async function finish(
     if (removed instanceof Error) return removed
     return
   }
-  if (!next)
+  if (!next) {
     return update({
       status: 'failed',
       last_run_at: at,
       last_error: nextRunAt instanceof Error ? nextRunAt.message : 'No next run',
     })
+  }
   return update({ status: 'planned', next_run_at: next, last_run_at: at, last_error: null, ...ran })
 }
 
@@ -508,10 +514,11 @@ async function runDueTasks(bot: Bot): Promise<void> {
 export async function createTask(bot: Bot, { send: input, options }: { send: SendInput; options: ScheduleOptions }) {
   const when = parseSendAt({ value: options.sendAt, now: bot.clock.now() })
   if (when instanceof Error) return when
-  if (input.files?.length)
+  if (input.files?.length) {
     return new ConfigError({
       reason: '--file cannot be scheduled. Put the file in the project and name it in the prompt.',
     })
+  }
   if ((input.user?.length ?? 0) > 1) return new ConfigError({ reason: 'A routine takes one --user' })
   const user = userIdOf(input.user?.[0] ?? '')
   if (user instanceof Error) return user
@@ -523,10 +530,15 @@ export async function createTask(bot: Bot, { send: input, options }: { send: Sen
       reason: 'Schedule thread routines on the machine that owns the thread (no local session for it)',
     })
   }
-  if (threadId && input.notifyOnly)
+  if (threadId && input.notifyOnly) {
     return new ConfigError({ reason: '--notify-only needs --channel or --project, not a thread' })
-  if (threadId && input.permissions?.length)
+  }
+  if (threadId && input.permissions?.length) {
     return new ConfigError({ reason: '--permission applies only to new sessions, not a thread' })
+  }
+  if (!threadId && !input.channelId && !input.project) {
+    return new ConfigError({ reason: 'Pass --channel, --project or --thread' })
+  }
   const project = await (async () => {
     if (threadId) {
       const thread = await bot.discord.channels
@@ -541,16 +553,17 @@ export async function createTask(bot: Bot, { send: input, options }: { send: Sen
         ? bot.db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories WHERE channel_id = ${input.channelId} LIMIT 1`
         : bot.db<
             ChannelDirectoryRow[]
-          >`SELECT * FROM channel_directories WHERE directory = ${path.resolve(input.project!)} LIMIT 1`
+          >`SELECT * FROM channel_directories WHERE directory = ${path.resolve(input.project ?? '')} LIMIT 1`
     ).catch((cause) => new DbError({ operation: 'resolve routine project', cause }))
     if (rows instanceof Error) return rows
     return parseFirst<ChannelDirectoryRow>('channel_directories', rows)
   })()
   if (project instanceof Error) return project
-  if (!project)
+  if (!project) {
     return new ConfigError({
       reason: 'Schedule routines on the machine that owns the channel (no local project for it)',
     })
+  }
   // The encoder keeps only the fields of the target kind.
   const target = threadId ? { threadId } : { channelId: project.channel_id }
   const payload = encodeTaskPayload({
@@ -565,10 +578,12 @@ export async function createTask(bot: Bot, { send: input, options }: { send: Sen
   const inserted = await bot.db<
     { id: number }[]
   >`INSERT INTO scheduled_tasks (status, schedule_kind, run_at, cron_expr, timezone, next_run_at, payload_json, prompt_preview, channel_id, thread_id, session_id, project_directory)
-    VALUES (${'planned'}, ${when.kind}, ${when.kind === 'at' ? toDbDate(new Date(when.runAt)) : null}, ${when.kind === 'cron' ? when.cronExpr : null}, ${when.kind === 'cron' ? 'UTC' : null}, ${toDbDate(new Date(nextRunAt))}, ${payload}, ${preview(input.prompt)}, ${project.channel_id}, ${threadId ?? null}, ${threadId ? roots[threadId]! : null}, ${project.directory})
+    VALUES (${'planned'}, ${when.kind}, ${when.kind === 'at' ? toDbDate(new Date(when.runAt)) : null}, ${when.kind === 'cron' ? when.cronExpr : null}, ${when.kind === 'cron' ? 'UTC' : null}, ${toDbDate(new Date(nextRunAt))}, ${payload}, ${preview(input.prompt)}, ${project.channel_id}, ${threadId ?? null}, ${threadId ? (roots[threadId] ?? null) : null}, ${project.directory})
     RETURNING id`.catch((cause) => new DbError({ operation: 'insert routine', cause }))
   if (inserted instanceof Error) return inserted
-  const routineId = inserted[0]!.id
+  const insertedRow = inserted[0]
+  if (!insertedRow) return new DbError({ operation: 'insert routine', cause: 'RETURNING id returned no row' })
+  const routineId = insertedRow.id
   logger.log(`scheduled routine ${routineId} (${when.kind}) for ${new Date(nextRunAt).toISOString()}`)
   return {
     routineId,
@@ -590,8 +605,9 @@ export async function editTask(bot: Bot, edit: TaskEdit) {
   const row = await findTask(bot.db, edit.id)
   if (row instanceof Error) return row
   if (!row) return new ConfigError({ reason: `Routine ${edit.id} not found. List routines with: kimaki routine list` })
-  if (row.status !== 'planned')
+  if (row.status !== 'planned') {
     return new ConfigError({ reason: `Routine ${edit.id} is ${row.status}; only planned routines can be edited` })
+  }
   const job = decodeTaskPayload(row.payload_json)
   if (job instanceof Error) return job
   const user = edit.user === undefined ? null : userIdOf(edit.user)
@@ -632,8 +648,9 @@ export async function editTask(bot: Bot, edit: TaskEdit) {
     )
     .catch((cause) => new DbError({ operation: 'update routine', cause }))
   if (saved instanceof Error) return saved
-  if (saved.length === 0)
+  if (saved.length === 0) {
     return new ConfigError({ reason: `Routine ${edit.id} started running meanwhile; edit it again later` })
+  }
   return {
     routineId: edit.id,
     updated: Object.entries(edit)
@@ -647,8 +664,9 @@ export async function deleteTask(bot: Bot, id: number) {
     (cause) => new DbError({ operation: 'delete routine', cause }),
   )
   if (removed instanceof Error) return removed
-  if (removed.length === 0)
+  if (removed.length === 0) {
     return new ConfigError({ reason: `Routine ${id} not found. List routines with: kimaki routine list` })
+  }
   return { routineId: id, deleted: true }
 }
 
@@ -659,8 +677,9 @@ export async function runTaskNow(bot: Bot, id: number) {
   if (!row) return new ConfigError({ reason: `Routine ${id} not found. List routines with: kimaki routine list` })
   const outcome = await runTask(bot, { id, dueAt: null })
   if (outcome instanceof Error) return outcome
-  if (outcome.kind === 'busy')
+  if (outcome.kind === 'busy') {
     return { routineId: id, ran: false, reason: `its last session ${outcome.sessionId} is still running` }
+  }
   if (outcome.kind === 'skipped') return { routineId: id, ran: false, reason: outcome.reason }
   return { routineId: id, ran: true, threadId: outcome.threadId, sessionId: outcome.sessionId }
 }
@@ -677,11 +696,12 @@ function formatTaskTarget({ threadId, channelId }: { threadId: string | null; ch
 async function renderTasks(bot: Bot, { notice, guildId }: { notice: string | null; guildId: string }) {
   const tasks = await listTasks({ db: bot.db, guildId })
   // A Components V2 message cannot switch back to plain content.
-  if (tasks instanceof Error)
+  if (tasks instanceof Error) {
     return {
       flags: MessageFlags.IsComponentsV2 as const,
       components: [{ type: ComponentType.TextDisplay as const, content: tasks.message }],
     }
+  }
   const shown = tasks.slice(0, MAX_TASK_ROWS)
   const header = [
     notice,
@@ -732,7 +752,11 @@ async function renderTasks(bot: Bot, { notice, guildId }: { notice: string | nul
 
 async function tasksCommand(bot: Bot, interaction: ChatInputCommandInteraction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral })
-  await interaction.editReply(await renderTasks(bot, { notice: null, guildId: interaction.guildId! }))
+  if (!interaction.guildId) {
+    await interaction.editReply('Run this in a server channel.')
+    return
+  }
+  await interaction.editReply(await renderTasks(bot, { notice: null, guildId: interaction.guildId }))
 }
 
 // Run now / Delete: acts on a task of this guild, then shows the list again with a notice.
@@ -740,7 +764,8 @@ function taskButton({ prefix, act }: { prefix: string; act: (bot: Bot, id: numbe
   return async (bot: Bot, interaction: ButtonInteraction) => {
     const id = Number(interaction.customId.slice(prefix.length))
     await interaction.deferUpdate()
-    const guildId = interaction.guildId!
+    const guildId = interaction.guildId
+    if (!guildId) return
     const notice = await (async () => {
       // Buttons only act on tasks of this guild, like the list.
       const visible = await listTasks({ db: bot.db, guildId })

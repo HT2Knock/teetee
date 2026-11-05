@@ -99,8 +99,9 @@ test('onboarding thread adds a project channel through the kimaki CLI, which ans
 
     machine: 'test-machine',
   })
-  if (!onboarded || onboarded instanceof Error)
+  if (!onboarded || onboarded instanceof Error) {
     throw new Error(`onboarding failed: ${onboarded?.message}`, { cause: onboarded })
+  }
   await waitForFooter({ discord, threadId: onboarded.threadId })
 
   await discord.thread(onboarded.threadId).user(TEST_USER_ID).sendMessage({ content: 'yes, add-other-project' })

@@ -40,8 +40,9 @@ export function remoteEnvelope(input: SendInput) {
   // A prompt over the message limit travels as an attachment; the content keeps a preview.
   const long = prompt.length > 2000
   const footer = `${REMOTE_SEND_PREFIX}${JSON.stringify({ requestId, options, ...(long && { promptFile: REMOTE_PROMPT_FILE }) })}`
-  if (footer.length > 2048)
+  if (footer.length > 2048) {
     return new ConfigError({ reason: 'Remote send options exceed the Discord embed limit. Send fewer options.' })
+  }
   const attachments: Array<{ name: string; attachment: Buffer | string }> = [
     ...(long ? [{ name: REMOTE_PROMPT_FILE, attachment: Buffer.from(prompt) }] : []),
     ...(files ?? []).map((file) => ({ name: file.name, attachment: promptFilePath(file) })),

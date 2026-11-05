@@ -307,7 +307,7 @@ test('a restarted bot shows the pending question again and it still works', asyn
   await bot.stop()
   bot = await startTestBot({ dataDir, twin, server })
   const selects = await waitForSelects({ threadId: thread.id, count: 2 })
-  const fresh = selects[selects.length - 1]!
+  const fresh = selects.at(-1)!
   await twin.discord
     .thread(thread.id)
     .user(TEST_USER_ID)

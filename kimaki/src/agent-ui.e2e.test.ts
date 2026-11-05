@@ -118,13 +118,16 @@ async function ui(threadId: string, prefix: string) {
   return waitFor({
     label: prefix,
     check: async () => {
-      for (const message of await twin.discord.thread(threadId).getMessages())
+      for (const message of await twin.discord.thread(threadId).getMessages()) {
         for (const row of message.components ?? []) {
           if (row.type !== ComponentType.ActionRow) continue
-          for (const item of row.components)
-            if (item.type === ComponentType.Button && 'custom_id' in item && item.custom_id.startsWith(prefix))
+          for (const item of row.components) {
+            if (item.type === ComponentType.Button && 'custom_id' in item && item.custom_id.startsWith(prefix)) {
               return { message, button: item }
+            }
+          }
         }
+      }
       return null
     },
   })

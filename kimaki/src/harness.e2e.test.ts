@@ -102,7 +102,9 @@ test('a second bot on the same lock port stops the running one and takes over', 
   `
   const argv = evalArgv(code)
   const child = spawn(argv[0] ?? 'kimaki', argv.slice(1), { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] })
-  const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()))
+  const exited = new Promise<void>((resolve) => {
+    child.once('exit', () => resolve())
+  })
   onTestFinished(async () => {
     if (child.exitCode === null && child.signalCode === null) {
       child.kill('SIGTERM')

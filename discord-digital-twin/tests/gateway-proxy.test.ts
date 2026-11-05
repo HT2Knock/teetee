@@ -70,7 +70,9 @@ test('REST scope follows rest_proxy.rs', async () => {
 
 test('client sees only its authorized guilds; unknown tokens cannot connect', async () => {
   const client = new Client({ intents: [GatewayIntentBits.Guilds], rest: { api: discord.restUrl, version: '10' } })
-  const ready = new Promise<void>((resolve) => client.once('clientReady', () => resolve()))
+  const ready = new Promise<void>((resolve) => {
+    client.once('clientReady', () => resolve())
+  })
   await client.login(TOKEN)
   await ready
   expect([...client.guilds.cache.keys()]).toEqual([OWN_GUILD])
@@ -95,7 +97,9 @@ test('messages sent while the client is offline are replayed after READY', async
   const received: string[] = []
   // Registered before login, like the kimaki bot: replayed events are emitted right after clientReady.
   client.on('messageCreate', (message) => void received.push(message.content))
-  const ready = new Promise<void>((resolve) => client.once('clientReady', () => resolve()))
+  const ready = new Promise<void>((resolve) => {
+    client.once('clientReady', () => resolve())
+  })
   await client.login(TOKEN)
   await ready
   await discord.channel(OWN_CHANNEL).user(USER).sendMessage({ content: 'live' })
@@ -116,10 +120,16 @@ test('messages sent while the client is offline are replayed after READY', async
   })
   const replayed: string[] = []
   again.on('messageCreate', (message) => void replayed.push(message.id))
-  const againReady = new Promise<void>((resolve) => again.once('clientReady', () => resolve()))
+  const againReady = new Promise<void>((resolve) => {
+    again.once('clientReady', () => resolve())
+  })
   await again.login(TOKEN)
   await againReady
-  for (let i = 0; i < 10; i++) await new Promise((resolve) => setTimeout(resolve, 20))
+  for (let i = 0; i < 10; i++) {
+    await new Promise((resolve) => {
+      setTimeout(resolve, 20)
+    })
+  }
   expect(replayed).toEqual([])
   await again.destroy()
 })

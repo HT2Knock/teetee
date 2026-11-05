@@ -88,5 +88,5 @@ test('catalog names are sanitized, keep their suffix, skip collisions and MCP pr
       },
     }
   `)
-  expect(dynamic.has(names[names.length - 1]!)).toBe(true)
+  expect(dynamic.has(names.at(-1)!)).toBe(true)
 })

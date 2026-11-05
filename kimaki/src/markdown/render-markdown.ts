@@ -183,7 +183,7 @@ function splitText(text: string, limit: number): string[] {
 function pack(parts: string[], limit: number, separator: string): string[] {
   const out: string[] = []
   for (const part of parts) {
-    const last = out[out.length - 1]
+    const last = out.at(-1)
     if (last !== undefined && last.length + separator.length + part.length <= limit) {
       out[out.length - 1] = `${last}${separator}${part}`
       continue

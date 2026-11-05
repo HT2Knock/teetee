@@ -67,7 +67,8 @@ function containers({ groups, accent }: { groups: Child[][]; accent?: number }):
   if (groups.length === 0) return []
   const messages: Child[][] = [[]]
   for (const group of groups) {
-    const current = messages[messages.length - 1]!
+    const current = messages.at(-1)
+    if (!current) return []
     const count = current.length + group.length + 1
     const chars = textLength(current) + textLength(group)
     if (current.length > 0 && (count > MAX_COMPONENTS || chars > MAX_TEXT_CHARS)) {

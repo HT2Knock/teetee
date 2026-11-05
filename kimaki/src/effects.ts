@@ -124,8 +124,9 @@ function uploadMessage({ files, first, numbered }: { files: readonly UploadFile[
 // Effects that will never run: an upload still waits for its answer.
 function drop(effects: readonly Effect[]) {
   for (const effect of effects) {
-    if (effect.type === 'attachments')
+    if (effect.type === 'attachments') {
       effect.settle(new DiscordError({ operation: 'upload (the thread no longer shows a session)' }))
+    }
   }
 }
 
@@ -251,7 +252,7 @@ export function createEffectsRunner({ discord, markViewed }: { discord: Client; 
       const channel = await sendableChannel(threadId)
       if (!channel || lifecycle.closed) return
       for (const [index, messageId] of ids.entries()) {
-        const message = effect.messages[index] ?? effect.messages[effect.messages.length - 1]
+        const message = effect.messages[index] ?? effect.messages.at(-1)
         if (message) await edit({ channel, messageId, message })
       }
       return

@@ -28,6 +28,7 @@ import type {
 import { WebSocketServer, WebSocket } from 'ws'
 
 import type { DiscordVoiceServer } from './voice.js'
+import { textFrame } from './ws-text.js'
 
 interface ConnectedClient {
   ws: WebSocket
@@ -304,7 +305,7 @@ export class DiscordGateway {
     this.sendHello(client)
 
     ws.on('message', (raw) => {
-      void this.handleMessage(client, raw.toString())
+      void this.handleMessage(client, textFrame(raw))
     })
 
     ws.on('close', () => {
@@ -363,6 +364,9 @@ export class DiscordGateway {
         })
         break
       }
+      // Discord sends opcodes this fake server does not model.
+      default:
+        break
     }
   }
 

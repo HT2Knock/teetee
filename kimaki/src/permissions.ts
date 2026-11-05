@@ -111,8 +111,9 @@ export function hydratePermissions(
 ) {
   const pending = new Set(slice.requests.map((request) => request.id))
   for (const [requestID, request] of Object.entries(slice.draft.permissions)) {
-    if (request.sessionId === slice.sessionId && !pending.has(requestID))
+    if (request.sessionId === slice.sessionId && !pending.has(requestID)) {
       closePermission({ ...slice, requestID, status: '_no longer pending_' })
+    }
   }
   for (const request of slice.requests) showPermission({ ...slice, request })
 }

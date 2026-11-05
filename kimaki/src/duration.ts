@@ -11,12 +11,21 @@ const DURATION_MS = new Map(Object.entries({ ms: 1, s: 1_000, m: 60_000, h: 3_60
 export function parseDuration(text: string, label = 'duration'): ConfigError | number {
   const trimmed = text.trim()
   const match = DURATION.exec(trimmed)
-  if (!match)
+  if (!match) {
     return new ConfigError({
       reason: `Invalid ${label} "${trimmed}". Use a number plus ms, s, m, h, or d (example: 2h)`,
     })
-  const amount = Number(match[1]) * DURATION_MS.get(match[2]!.toLowerCase())!
-  if (!(amount > 0))
+  }
+  const unit = match[2]?.toLowerCase()
+  const unitMs = unit ? DURATION_MS.get(unit) : undefined
+  if (!unitMs) {
+    return new ConfigError({
+      reason: `Invalid ${label} "${trimmed}". Use a number plus ms, s, m, h, or d (example: 2h)`,
+    })
+  }
+  const amount = Number(match[1]) * unitMs
+  if (!(amount > 0)) {
     return new ConfigError({ reason: `${label.charAt(0).toUpperCase()}${label.slice(1)} must be greater than 0` })
+  }
   return amount
 }

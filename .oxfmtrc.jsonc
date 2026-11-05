@@ -8,6 +8,7 @@
   "printWidth": 120,
   "ignorePatterns": [
     "bun.lock",
+    ".fallow/**",
     "dist/**",
     "coverage/**",
     "**/generated/**",
@@ -17,6 +18,7 @@
     "docs/opencode-v2-events/*.jsonl",
   ],
   "trailingComma": "all",
+  "sortPackageJson": true,
   "sortImports": {
     "groups": ["builtin", "external", "internal", "parent", "sibling", "index", "side_effect", "unknown"],
     "newlinesBetween": true,

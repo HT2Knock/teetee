@@ -55,7 +55,7 @@ describe('threads and channels', () => {
   }, 15000)
 
   afterAll(async () => {
-    client?.destroy()
+    await client?.destroy()
     await discord?.stop()
   })
 

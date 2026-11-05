@@ -82,7 +82,12 @@ export function createEventRecorder({ dataDir }: { dataDir: string }) {
     },
     async close(): Promise<void> {
       await Promise.all(
-        [...streams.values()].map(({ stream }) => new Promise<void>((resolve) => stream.end(() => resolve()))),
+        [...streams.values()].map(
+          ({ stream }) =>
+            new Promise<void>((resolve) => {
+              stream.end(() => resolve())
+            }),
+        ),
       )
       streams.clear()
     },
@@ -201,8 +206,9 @@ async function writeTranscript({
     await fs.promises.utimes(temp, session.time.updated / 1000, session.time.updated / 1000)
     await fs.promises.rename(temp, file)
   })().catch((cause) => new ConfigError({ reason: `Cannot write ${file}`, cause }))
-  if (written instanceof Error)
+  if (written instanceof Error) {
     await fs.promises.rm(temp, { force: true }).catch((error) => logger.warn(`cannot remove ${temp}`, error))
+  }
   return written
 }
 
@@ -250,7 +256,8 @@ export async function syncTranscripts({
   const next = { index: 0 }
   const worker = async () => {
     while (next.index < recent.length) {
-      const session = recent[next.index++]!
+      const session = recent[next.index++]
+      if (!session) return
       const file = path.join(transcriptsDir({ dataDir }), `${session.id}.md`)
       const stat = await fs.promises.stat(file).catch(() => null)
       // time.updated may not move when a run ends: the live hook writes busy sessions when they stop.
@@ -328,8 +335,9 @@ export async function waitForSessionReady({
   const result = await (async () => {
     const first = await iterator.next().catch((cause) => new OpenCodeError({ operation: 'event.subscribe', cause }))
     if (first instanceof Error) return first
-    if (first.done || first.value.type !== 'server.connected')
+    if (first.done || first.value.type !== 'server.connected') {
       return new OpenCodeError({ operation: 'connect session wait stream' })
+    }
     const consume = (async () => {
       while (!subscriptionSignal.aborted) {
         const next = await iterator.next().catch((cause) => new OpenCodeError({ operation: 'event.subscribe', cause }))
@@ -343,8 +351,9 @@ export async function waitForSessionReady({
             event.type === 'session.execution.failed' ||
             event.type === 'session.execution.interrupted') &&
           event.data.sessionID === sessionId
-        )
+        ) {
           return
+        }
       }
       return new OpenCodeError({ operation: 'session wait cancelled' })
     })()

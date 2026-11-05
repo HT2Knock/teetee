@@ -148,8 +148,9 @@ export async function manageWorktree(
       })
     }
   }
-  if (operation === 'merge')
+  if (operation === 'merge') {
     return mergeWorktree({ projectDirectory: project.directory, directory: candidate, strategy, targetBranch })
+  }
   const removed = await deleteWorktree({ projectDirectory: project.directory, directory: candidate })
   if (removed instanceof Error) return removed
   return { removed: candidate }
@@ -218,8 +219,9 @@ async function deferredTarget(bot: Bot, interaction: ChatInputCommandInteraction
 async function cwdCommand(bot: Bot, interaction: ChatInputCommandInteraction) {
   const target = await deferredTarget(bot, interaction)
   if (!target) return
-  if (!target.thread || !target.sessionId)
+  if (!target.thread || !target.sessionId) {
     return replyError(interaction, new ConfigError({ reason: 'Use /cwd in a session thread.' }))
+  }
   const result = await runResult(
     sessionCwd(bot, { thread: target.thread, directory: interaction.options.getString('path') ?? undefined }),
   )
@@ -255,11 +257,13 @@ async function newWorktreeCommand(bot: Bot, interaction: ChatInputCommandInterac
 async function mergeWorktreeCommand(bot: Bot, interaction: ChatInputCommandInteraction) {
   const target = await deferredTarget(bot, interaction)
   if (!target) return
-  if (!target.sessionId)
+  if (!target.sessionId) {
     return replyError(interaction, new ConfigError({ reason: 'Use /merge-worktree inside a worktree session thread.' }))
+  }
   const strategy = interaction.options.getString('strategy') ?? 'rebase'
-  if (strategy !== 'rebase' && strategy !== 'squash')
+  if (strategy !== 'rebase' && strategy !== 'squash') {
     return replyError(interaction, new ConfigError({ reason: 'Choose rebase or squash.' }))
+  }
   const result = await manageWorktree(bot, {
     channelId: target.channelId,
     directory: target.directory,
@@ -346,8 +350,9 @@ export const worktreeRoutes: InteractionRoutes = {
     [TOGGLE_PREFIX]: listButton({
       prefix: TOGGLE_PREFIX,
       act: async (bot, { channelId, value }) => {
-        if (value !== 'on' && value !== 'off')
+        if (value !== 'on' && value !== 'off') {
           return new ConfigError({ reason: 'Invalid worktree toggle. Run /worktrees again.' })
+        }
         const result = await setAutoWorktrees(bot, { channelId, enabled: value === 'on' })
         if (result instanceof Error) return result
         return { page: 0, note: null }

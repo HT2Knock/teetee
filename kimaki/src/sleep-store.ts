@@ -6,7 +6,7 @@
 import { Effect } from 'effect'
 
 import type { Bot } from './bot.ts'
-import { type DbError } from './errors.ts'
+import type { DbError } from './errors.ts'
 import { createLogger } from './logger.ts'
 
 const logger = createLogger('SLEEP')

@@ -53,7 +53,7 @@ export function extractEditedFiles({
     ...patchText.matchAll(/^\*\*\* (?:Add|Update|Delete) File:\s+(.+)$/gm),
     ...patchText.matchAll(/^\*\*\* Move to:\s+(.+)$/gm),
   ]
-  return [...new Set(headers.map((match) => match[1]!.trim()).filter(Boolean))].map((file) =>
+  return [...new Set(headers.map((match) => (match[1] ?? '').trim()).filter(Boolean))].map((file) =>
     resolveToolPath(directory, file),
   )
 }

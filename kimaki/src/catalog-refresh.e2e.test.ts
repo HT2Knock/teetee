@@ -68,7 +68,9 @@ test('agents loaded after startup get their slash commands', async () => {
   // agent.updated fires when the catalog finishes loading; the refresh follows it.
   const deadline = Date.now() + 8_000
   while (Date.now() < deadline && !(await registeredNames()).includes('late-agent')) {
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    await new Promise((resolve) => {
+      setTimeout(resolve, 100)
+    })
   }
   expect(await registeredNames()).toContain('late-agent')
 
@@ -105,7 +107,9 @@ test('a skill change adds its command; catalog events with the same catalog writ
   const waitForCommand = async () => {
     const deadline = Date.now() + 8_000
     while (Date.now() < deadline && !(await registeredNames()).includes('demo-skill')) {
-      await new Promise((resolve) => setTimeout(resolve, 100))
+      await new Promise((resolve) => {
+        setTimeout(resolve, 100)
+      })
     }
   }
   fs.mkdirSync(path.dirname(skillFile), { recursive: true })
@@ -115,7 +119,9 @@ test('a skill change adds its command; catalog events with the same catalog writ
 
   // Let the pass of the first write finish before measuring: a late bulk write
   // from it would look like a write caused by the second event.
-  await new Promise((resolve) => setTimeout(resolve, 1_000))
+  await new Promise((resolve) => {
+    setTimeout(resolve, 1_000)
+  })
   // Same file content again: OpenCode rescans and publishes skill.updated, the commands stay the same.
   const bulkWrites: string[] = []
   const commandsRoute = Routes.applicationGuildCommands(bot.discord.user!.id, twin.discord.guildId)
@@ -127,6 +133,8 @@ test('a skill change adds its command; catalog events with the same catalog writ
   await event
   // Let the pass that the event started finish. It is asynchronous and slower
   // than the test on a loaded machine, so the window is generous.
-  await new Promise((resolve) => setTimeout(resolve, 1_500))
+  await new Promise((resolve) => {
+    setTimeout(resolve, 1_500)
+  })
   expect(bulkWrites).toEqual([])
 })

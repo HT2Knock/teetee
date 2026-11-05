@@ -20,6 +20,9 @@ const days = Number(args.days)
 const exampleLimit = Number(args.examples)
 const since = Date.now() - days * 86_400_000
 
+// Tool inputs are unknown JSON values; print strings as they are and objects as JSON.
+const asText = (value: unknown): string => (typeof value === 'string' ? value : JSON.stringify(value))
+
 type ToolPart = {
   id: string
   name: string
@@ -162,7 +165,7 @@ function redirectTargets(command: string): string[] {
 }
 
 function categorize(command: string) {
-  return shellCategories.find((category) => category.test(command))!
+  return shellCategories.find((category) => category.test(command)) ?? { name: 'other', test: () => false }
 }
 
 function countBy<T>(items: T[], key: (item: T) => string) {
@@ -243,7 +246,7 @@ out.push(
 
 log('categorizing shell commands')
 const categorized = shells.map((row) => {
-  const command = String(row.part.state.input?.command ?? '')
+  const command = asText(row.part.state.input?.command ?? '')
   return { row, command, category: categorize(command) }
 })
 out.push('## What shell was used for', '')
@@ -321,11 +324,11 @@ for (const [i, row] of executes.entries()) {
   const input = part.state.input ?? {}
   const result = (part.state.content ?? []).map((c) => c.text ?? `[${c.type}]`).join('\n')
   const calls = (part.state.metadata?.toolCalls ?? []).map((c) => `${c.tool}:${c.status}`).join(', ') || 'none'
-  out.push(`### ${i + 1}. ${String(input.description ?? '(no description)')}`, '')
+  out.push(`### ${i + 1}. ${asText(input.description ?? '(no description)')}`, '')
   out.push(`- session: "${row.title ?? ''}" ${row.sessionID}`)
   out.push(`- time: ${new Date(row.time).toISOString()}, model: ${row.model}, agent: ${row.agent}`)
   out.push(`- status: ${part.state.status}${part.state.metadata?.error ? ' (error)' : ''}, inner calls: ${calls}`, '')
-  out.push(fence(String(input.code ?? ''), 'js'), '', 'result:', '', fence(truncate(result, 800)), '')
+  out.push(fence(asText(input.code ?? ''), 'js'), '', 'result:', '', fence(truncate(result, 800)), '')
 }
 
 process.stdout.write(`${out.join('\n')}\n`)

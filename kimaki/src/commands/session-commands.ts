@@ -271,7 +271,7 @@ async function sessionAutocomplete(bot: Bot, interaction: AutocompleteInteractio
       .map((part) => part.trim())
       .filter(Boolean)
     const found = await oc(bot, 'file.find', (client) =>
-      client.file.find({ location, query: parts[parts.length - 1]?.trim() ?? '', type: 'file', limit: MAX_OPTIONS }),
+      client.file.find({ location, query: parts.at(-1)?.trim() ?? '', type: 'file', limit: MAX_OPTIONS }),
     )
     if (found instanceof Error) return respondChoices(interaction, found)
     return respondChoices(

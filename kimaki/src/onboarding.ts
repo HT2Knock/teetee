@@ -63,7 +63,9 @@ async function waitForGuild({
   if (first) return first
   logger.log(`bot is in no server yet, install it: ${installUrl}`)
   process.stderr.write(`\nAdd the bot to your Discord server:\n${installUrl}\n\nWaiting...\n`)
-  return new Promise((resolve) => discord.once(Events.GuildCreate, resolve))
+  return new Promise((resolve) => {
+    discord.once(Events.GuildCreate, resolve)
+  })
 }
 
 // Many servers: --guild, else a prompt, else an error listing the choices.
@@ -127,14 +129,16 @@ export async function ensureOpencode({
     child.on('close', (code) => resolve(code ?? 1))
   })
   if (exitCode instanceof Error) return exitCode
-  if (exitCode !== 0)
+  if (exitCode !== 0) {
     return new ConfigError({ reason: `OpenCode install exited with code ${exitCode}. ${missing.message}` })
+  }
   const installed = await findOpencodeBinary()
   if (installed instanceof Error) return installed
-  if (installed === null)
+  if (installed === null) {
     return new ConfigError({
       reason: `OpenCode install finished but ${installedOpencodeBinary()} does not run. ${missing.message}`,
     })
+  }
   logger.info(`installed OpenCode 2 at ${installed}`)
 }
 

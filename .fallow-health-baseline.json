@@ -1,0 +1,902 @@
+{
+  "kind": "health",
+  "finding_counts": {
+    "discord-digital-twin/src/gateway.ts": {
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "discord-digital-twin/src/index.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "discord-digital-twin/src/server.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_high": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 10
+      }
+    },
+    "discord-digital-twin/src/voice.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "kimaki/scripts/tool-usage-report.ts": {
+      "crap_high": {
+        "count": 2
+      }
+    },
+    "kimaki/src/adapters/cli/bot.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "kimaki/src/adapters/cli/discord.ts": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/src/adapters/cli/schedule.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/adapters/cli/session.ts": {
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "kimaki/src/adapters/cli/shared.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/adapters/cli/start.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "kimaki/src/adapters/http/routes.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "kimaki/src/adapters/http/rpc.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/adapters/opencode/index.ts": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/agent-ui.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/src/commands/login-commands.ts": {
+      "complexity_moderate": {
+        "count": 2
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/commands/preference-commands.ts": {
+      "complexity_high": {
+        "count": 3
+      },
+      "crap_high": {
+        "count": 5
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "kimaki/src/commands/session-commands.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/commands/thread-commands.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/credentials.ts": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/effects.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/event-loop.ts": {
+      "crap_moderate": {
+        "count": 4
+      }
+    },
+    "kimaki/src/file-edit-log.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/src/ingress.ts": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 2
+      }
+    },
+    "kimaki/src/input.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/markdown/render-markdown.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/src/onboarding.ts": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/plugin/index.ts": {
+      "crap_critical": {
+        "count": 3
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/questions.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/queue.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/remote-send.ts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/src/routines.e2e.test.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/scheduler.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_high": {
+        "count": 2
+      },
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/session-events.ts": {
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "kimaki/src/sessions.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/slash-commands.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "kimaki/src/test/fake-mcp-server.ts": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "kimaki/src/test/replay.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/thread-reducer.ts": {
+      "complexity_critical": {
+        "count": 4
+      },
+      "crap_critical": {
+        "count": 4
+      }
+    },
+    "kimaki/src/worktrees.ts": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
+    "opencode-deterministic-provider/src/deterministic-provider.ts": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    }
+  },
+  "identity_finding_counts": {
+    "discord-digital-twin/src/gateway.ts\u0000broadcast": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "discord-digital-twin/src/gateway.ts\u0000handleVoiceStateUpdate": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "discord-digital-twin/src/gateway.ts\u0000sendReadySequence": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "discord-digital-twin/src/index.ts\u0000collectComponentText": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "discord-digital-twin/src/index.ts\u0000seed": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "discord-digital-twin/src/index.ts\u0000simulateInteraction": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "discord-digital-twin/src/index.ts\u0000simulateUserMessage": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "discord-digital-twin/src/index.ts\u0000text": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "discord-digital-twin/src/server.ts\u0000handler": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 10
+      }
+    },
+    "discord-digital-twin/src/server.ts\u0000proxyRejection": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "discord-digital-twin/src/server.ts\u0000resolveRouteScope": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
+    "discord-digital-twin/src/voice.ts\u0000handleMessage": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "discord-digital-twin/src/voice.ts\u0000handleUdp": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/scripts/tool-usage-report.ts\u0000<arrow>": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/scripts/tool-usage-report.ts\u0000test": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/src/adapters/cli/bot.ts\u0000<arrow>": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/adapters/cli/bot.ts\u0000followFile": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/adapters/cli/discord.ts\u0000<arrow>": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/src/adapters/cli/schedule.ts\u0000<arrow>": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/adapters/cli/session.ts\u0000<arrow>": {
+      "crap_high": {
+        "count": 3
+      },
+      "crap_moderate": {
+        "count": 2
+      }
+    },
+    "kimaki/src/adapters/cli/shared.ts\u0000parseTarget": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/adapters/cli/start.ts\u0000<arrow>": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "kimaki/src/adapters/http/routes.ts\u0000checkSend": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/adapters/http/routes.ts\u0000run": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/adapters/http/rpc.ts\u0000callBot": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/adapters/opencode/index.ts\u0000<arrow>": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/agent-ui.ts\u0000submitUpload": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/src/commands/login-commands.ts\u0000loginCli": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/commands/login-commands.ts\u0000methodSelect": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/commands/preference-commands.ts\u0000baseModel": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/commands/preference-commands.ts\u0000channelDefaultModel": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/src/commands/preference-commands.ts\u0000current": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/src/commands/preference-commands.ts\u0000modelReset": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/commands/preference-commands.ts\u0000modelSelect": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/src/commands/preference-commands.ts\u0000renderStep": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/src/commands/preference-commands.ts\u0000resetButtons": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/commands/preference-commands.ts\u0000setAgent": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/src/commands/session-commands.ts\u0000forkSelected": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/commands/thread-commands.ts\u0000diffCommand": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/credentials.ts\u0000resolveCredentials": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/effects.ts\u0000runBatch": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/effects.ts\u0000runOne": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "kimaki/src/event-loop.ts\u0000loadView": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/event-loop.ts\u0000logRun": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/event-loop.ts\u0000onEvent": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/event-loop.ts\u0000snapshots": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/file-edit-log.ts\u0000parseEvent": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/src/ingress.ts\u0000handleMessage": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "kimaki/src/ingress.ts\u0000handleRemoteEnvelope": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "kimaki/src/input.ts\u0000sendContext": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/markdown/render-markdown.ts\u0000splitCallouts": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/src/onboarding.ts\u0000ensureOpencode": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/onboarding.ts\u0000runOnboarding": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/plugin/index.ts\u0000ctx.session.hook(\"context\")": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "kimaki/src/plugin/index.ts\u0000ctx.session.hook(\"prompt\")": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/src/plugin/index.ts\u0000ctx.tool.hook(\"execute.after\")": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/plugin/index.ts\u0000ctx.tool.hook(\"execute.before\")": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "kimaki/src/plugin/index.ts\u0000marker": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "kimaki/src/questions.ts\u0000fields": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/queue.ts\u0000inputFields": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/remote-send.ts\u0000sendWithoutBot": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/src/routines.e2e.test.ts\u0000walk": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/scheduler.ts\u0000<arrow>": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/src/scheduler.ts\u0000createTask": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/src/scheduler.ts\u0000decodeTaskPayload": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/scheduler.ts\u0000editTask": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "kimaki/src/scheduler.ts\u0000execute": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "kimaki/src/scheduler.ts\u0000finish": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/session-events.ts\u0000consume": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/session-events.ts\u0000parts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/sessions.ts\u0000fork": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/slash-commands.ts\u0000adminOnly": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/slash-commands.ts\u0000handle": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "kimaki/src/slash-commands.ts\u0000handleDynamic": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/slash-commands.ts\u0000sendInput": {
+      "complexity_moderate": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/test/fake-mcp-server.ts\u0000result": {
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "kimaki/src/test/replay.ts\u0000<arrow>": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "kimaki/src/thread-reducer.ts\u0000applyKimaki": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "kimaki/src/thread-reducer.ts\u0000applyOpencode": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "kimaki/src/thread-reducer.ts\u0000applyRoot": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "kimaki/src/thread-reducer.ts\u0000applyTool": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
+    "kimaki/src/worktrees.ts\u0000mergeWorktree": {
+      "complexity_high": {
+        "count": 1
+      }
+    },
+    "opencode-deterministic-provider/src/deterministic-provider.ts\u0000<arrow>": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "opencode-deterministic-provider/src/deterministic-provider.ts\u0000buildGenerateResult": {
+      "complexity_high": {
+        "count": 1
+      },
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "opencode-deterministic-provider/src/deterministic-provider.ts\u0000ensureTerminalStreamPartsAndDelays": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "opencode-deterministic-provider/src/deterministic-provider.ts\u0000matcherMatches": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    }
+  },
+  "runtime_coverage_findings": [],
+  "target_keys": [
+    "kimaki/src/ingress.ts:complexity",
+    "kimaki/src/prompt.ts:hidden coupling",
+    "kimaki/src/adapters/http/rpc.ts:high impact",
+    "kimaki/src/plugin/index.ts:untested risk",
+    "kimaki/src/agent-ui.ts:high impact",
+    "kimaki/src/commands/worktree-commands.ts:hidden coupling",
+    "kimaki/src/scheduler.ts:high impact",
+    "kimaki/src/effects.ts:complexity",
+    "kimaki/src/worktrees.ts:high impact",
+    "kimaki/src/format-parts.ts:high impact",
+    "kimaki/src/project.ts:hidden coupling",
+    "kimaki/src/sleeps.ts:hidden coupling",
+    "kimaki/src/queue.ts:high impact",
+    "kimaki/src/slash-commands.ts:hidden coupling",
+    "kimaki/src/sessions.ts:hidden coupling",
+    "kimaki/src/thread-reducer.ts:complexity",
+    "kimaki/src/credentials.ts:hidden coupling",
+    "kimaki/src/file-edit-log.ts:high impact",
+    "kimaki/src/commands/preference-commands.ts:untested risk",
+    "kimaki/src/remote-send.ts:high impact",
+    "kimaki/src/event-loop.ts:untested risk",
+    "kimaki/src/adapters/cli/start.ts:complexity",
+    "discord-digital-twin/src/index.ts:complexity",
+    "kimaki/src/harness.e2e.test.ts:hidden coupling",
+    "kimaki/scripts/tool-usage-report.ts:untested risk",
+    "discord-digital-twin/src/server.ts:complexity",
+    "kimaki/src/commands.e2e.test.ts:hidden coupling",
+    "discord-digital-twin/tests/messages.test.ts:hidden coupling",
+    "discord-digital-twin/tests/interactions.test.ts:hidden coupling"
+  ]
+}

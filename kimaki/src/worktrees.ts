@@ -110,11 +110,12 @@ export async function resolveWorkingDirectory({
   const project = await canonicalPath(projectDirectory)
   if (inside({ parent: project, candidate: directory })) return directory
   const entries = await allWorktrees(project)
-  if (entries instanceof Error)
+  if (entries instanceof Error) {
     return new ConfigError({
       reason: `Working directory must be inside ${project}. Add another project with kimaki project add.`,
       cause: entries,
     })
+  }
   const common = await commonDirectory(project)
   if (common instanceof Error) return common
   const otherCommon = await commonDirectory(directory)
@@ -130,8 +131,9 @@ export async function resolveWorkingDirectory({
 }
 
 export function worktreeName(name: string) {
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) || name.length > 64)
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) || name.length > 64) {
     return new ConfigError({ reason: 'Use a worktree name of at most 64 lowercase letters, digits and hyphens.' })
+  }
   return name
 }
 
@@ -176,16 +178,18 @@ export async function createWorktree({
   ])
   if (head instanceof Error) return head
   if (identity instanceof Error) return identity
-  if (head !== base || identity !== common)
+  if (head !== base || identity !== common) {
     return new ConfigError({
       reason: `Worktree identity mismatch at ${directory}. No session was started; inspect this checkout.`,
     })
+  }
   const setup = await setupWorktree(directory)
-  if (setup instanceof Error)
+  if (setup instanceof Error) {
     return new ConfigError({
       reason: `Worktree created at ${directory}, but setup failed: ${setup.message}. Fix setup there, then use send --cwd with this directory.`,
       cause: setup,
     })
+  }
   return { directory: await canonicalPath(directory), branch }
 }
 
@@ -209,6 +213,7 @@ async function setupWorktree(directory: string) {
   const manager = lockfiles.find(([file]) => fs.existsSync(path.join(directory, file)))?.[1]
   if (!manager) return
   const args = manager === 'npm' ? ['ci'] : ['install', '--frozen-lockfile']
+  // Every path below returns a result or throws inside git().
   logger.log(`running ${manager} ${args.join(' ')} in ${directory}`)
   const result = await execAsync(manager, args, {
     cwd: directory,
@@ -217,18 +222,21 @@ async function setupWorktree(directory: string) {
   }).catch((cause) => new ConfigError({ reason: `${manager} install failed`, cause }))
   if (result instanceof Error) return result
   logger.log(`setup complete in ${directory}`)
+  return
 }
 
 async function linkedWorktree({ projectDirectory, directory }: { projectDirectory: string; directory: string }) {
   const canonical = await canonicalPath(directory)
-  if (canonical === (await canonicalPath(projectDirectory)))
+  if (canonical === (await canonicalPath(projectDirectory))) {
     return new ConfigError({ reason: 'Cannot remove or merge the project checkout itself. Choose a linked worktree.' })
+  }
   const entries = await listWorktrees({ projectDirectory })
   if (entries instanceof Error) return entries
   for (const entry of entries) {
     if ((await canonicalPath(entry.directory)) !== canonical) continue
-    if (entry.locked || entry.prunable)
+    if (entry.locked || entry.prunable) {
       return new ConfigError({ reason: 'Worktree is locked or missing. Inspect it with git worktree list.' })
+    }
     return { ...entry, directory: canonical }
   }
   return new ConfigError({
@@ -243,6 +251,7 @@ async function clean(directory: string) {
   })
   if (status instanceof Error) return status
   if (status) return new ConfigError({ reason: `Uncommitted changes in ${directory}. Commit or discard them first.` })
+  return
 }
 
 export async function deleteWorktree(input: { projectDirectory: string; directory: string }) {
@@ -259,10 +268,11 @@ export async function deleteWorktree(input: { projectDirectory: string; director
     args: ['rev-list', tree.head, '--not', ...retained],
   })
   if (remaining instanceof Error) return remaining
-  if (remaining)
+  if (remaining) {
     return new ConfigError({
       reason: 'This worktree has unmerged commits. Merge or preserve them on another branch before deleting.',
     })
+  }
   logger.log(`removing ${tree.directory}`)
   const removed = await git({
     directory: input.projectDirectory,
@@ -282,6 +292,7 @@ export async function deleteWorktree(input: { projectDirectory: string; director
   }
   if (removed instanceof Error) return removed
   // Keep branch refs. Git remains the source of truth and no force-delete is needed.
+  return
 }
 
 export async function mergeWorktree({
@@ -300,11 +311,12 @@ export async function mergeWorktree({
   for (const name of ['rebase-merge', 'rebase-apply']) {
     const rebasePath = await git({ directory, args: ['rev-parse', '--git-path', name] })
     if (rebasePath instanceof Error) return rebasePath
-    if (fs.existsSync(path.resolve(directory, rebasePath)))
+    if (fs.existsSync(path.resolve(directory, rebasePath))) {
       return new ConfigError({
         reason:
           'A rebase is already paused. Resolve conflicts and run git rebase --continue, or git rebase --abort, before merging.',
       })
+    }
   }
   const status = await clean(directory)
   if (status instanceof Error) return status
@@ -313,8 +325,9 @@ export async function mergeWorktree({
   const target = targetBranch || current || 'main'
   const valid = await git({ directory, args: ['check-ref-format', `refs/heads/${target}`] })
   if (valid instanceof Error) return valid
-  if (tree.branch === target)
+  if (tree.branch === target) {
     return new ConfigError({ reason: 'Source and target branches are the same. Choose another target.' })
+  }
   const targetRef = `refs/heads/${target}`
   const targetSha = await git({ directory, args: ['rev-parse', '--verify', targetRef] })
   if (targetSha instanceof Error) return targetSha
@@ -329,11 +342,12 @@ export async function mergeWorktree({
   if (count === '0') return new ConfigError({ reason: `No commits to merge into ${target}.` })
   logger.log(`rebasing ${tree.branch || 'detached HEAD'} onto ${target}`)
   const rebased = await git({ directory, args: ['rebase', targetSha], timeout: 60_000 })
-  if (rebased instanceof Error)
+  if (rebased instanceof Error) {
     return new ConfigError({
       reason: `Rebase failed in ${directory}. Resolve conflicts and run git rebase --continue, then retry the merge.`,
       cause: rebased,
     })
+  }
   const head = await git({ directory, args: ['rev-parse', 'HEAD'] })
   if (head instanceof Error) return head
   const mergeSha = await (async () => {
@@ -355,8 +369,9 @@ export async function mergeWorktree({
   if (mergeSha instanceof Error) return mergeSha
   const unchanged = await git({ directory, args: ['rev-parse', targetRef] })
   if (unchanged instanceof Error) return unchanged
-  if (unchanged !== targetSha)
+  if (unchanged !== targetSha) {
     return new ConfigError({ reason: 'Target branch changed during the merge. Retry; no target update was made.' })
+  }
   const common = await commonDirectory(directory)
   if (common instanceof Error) return common
   logger.log(`fast-forwarding local ${target}`)
@@ -372,11 +387,12 @@ export async function mergeWorktree({
   })
   if (pushed instanceof Error) return pushed
   const detached = await git({ directory, args: ['switch', '--detach', mergeSha] })
-  if (detached instanceof Error)
+  if (detached instanceof Error) {
     return new ConfigError({
       reason: `Merged into ${target}, but cleanup failed. Inspect ${directory} before retrying.`,
       cause: detached,
     })
+  }
   // The source ref is intentionally retained; deletion never needs a force flag.
   return { targetBranch: target, commitCount: Number(count), sha: mergeSha.slice(0, 8) }
 }

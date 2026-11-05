@@ -50,10 +50,7 @@ const logger = createLogger('OPENCODE')
 const MIN_OPENCODE_VERSION = '2.0.19'
 
 function parseVersion(version: string): number[] {
-  return version
-    .split('-')[0]!
-    .split('.')
-    .map((part) => Number.parseInt(part, 10) || 0)
+  return (version.split('-')[0] ?? '').split('.').map((part) => Number.parseInt(part, 10) || 0)
 }
 
 // Dev builds report 0.0.0-dev-<n> and are always accepted.
@@ -236,8 +233,14 @@ async function isKimakiPluginDirectory({ target, directory }: { target: string; 
   for (const root of roots) {
     const manifest = await fs.promises.readFile(path.join(root, 'package.json'), 'utf8').catch(() => null)
     const parsed: unknown = manifest === null ? null : attempt(() => JSON.parse(manifest))
-    if (parsed && typeof parsed === 'object' && !(parsed instanceof Error) && Reflect.get(parsed, 'name') === 'kimaki')
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      !(parsed instanceof Error) &&
+      Reflect.get(parsed, 'name') === 'kimaki'
+    ) {
       return true
+    }
   }
   return false
 }
@@ -297,8 +300,9 @@ export async function installPluginShim({
       const configured = await Promise.all(
         targets.map((target) => isKimakiPluginDirectory({ target, directory: shim.directory })),
       )
-      if (configured.includes(true))
+      if (configured.includes(true)) {
         return removeShim({ configDir, name: shim.name, why: 'opencode.json already loads this plugin' })
+      }
       return installShim({ configDir, name: shim.name, entry: kimakiPluginEntry(shim.directory) })
     }),
     ...LEGACY_SHIMS.map((name) => removeShim({ configDir, name, why: 'replaced by the kimaki plugin' })),
@@ -474,7 +478,7 @@ export function watchOpencode({
     })()
     clearTimeout(watchdog.timer)
     retry.abort()
-    void iterator.return?.(undefined).catch(() => {})
+    void iterator.return?.(undefined).catch(() => undefined)
     state.connected = false
     // Hydration may have published the client before failing: always undo it.
     if (hydrating.started) onDisconnect()

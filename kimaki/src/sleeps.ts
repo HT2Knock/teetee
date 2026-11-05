@@ -211,7 +211,7 @@ function wake(bot: Bot, row: SessionSleepRow): Effect.Effect<void, DbError | Con
         text,
         echo,
         delivery: 'steer',
-        author: { id: bot.discord.user!.id, username: 'kimaki' },
+        author: { id: bot.discord.user?.id ?? '', username: 'kimaki' },
         messageId: deliveryId,
         id: `msg_sleep_${deliveryId}`,
       }).pipe(Effect.match({ onFailure: (error) => error, onSuccess: () => null }))

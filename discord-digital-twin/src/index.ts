@@ -311,7 +311,9 @@ export class DigitalDiscord {
         return !candidate.speaking && candidate.opusPackets.length > 0 && Date.now() - candidate.lastPacketAt > 200
       })
       if (stream) return stream
-      await new Promise((resolve) => setTimeout(resolve, 50))
+      await new Promise((resolve) => {
+        setTimeout(resolve, 50)
+      })
     }
     throw new Error(`Timed out waiting for a voice stream in ${channelId ?? 'any channel'}`)
   }
@@ -1038,7 +1040,7 @@ export class DigitalDiscord {
     // Build the list of guilds to seed
     const guildConfigs: Array<{ id: string; config: DigitalDiscordGuildOption }> = (() => {
       if (opts.guilds && opts.guilds.length > 0) {
-        return this.guildIds.map((id, i) => ({ id, config: opts.guilds![i] ?? {} }))
+        return this.guildIds.map((id, i) => ({ id, config: opts.guilds?.[i] ?? {} }))
       }
       return [{ id: this.guildId, config: opts.guild ?? {} }]
     })()
