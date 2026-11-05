@@ -4,17 +4,14 @@
 // neither of those imports it, so the graph stays acyclic.
 
 import crypto from 'node:crypto'
-import path from 'node:path'
 
 import { Events, MessageFlags, type Message, type TextChannel, type ThreadChannel } from './adapters/discord/index.ts'
-import type { SendInput } from './adapters/http/routes.ts'
 import type { OpenCodeClient } from './adapters/opencode/index.ts'
 import {
   cliContext,
   fetchThread,
   globalModel,
   oc,
-  parseModel,
   projectOf,
   rootSession,
   routeText,
@@ -22,7 +19,6 @@ import {
   threadOfSession,
   type Author,
   type Bot,
-  type ModelChoice,
   type PromptFile,
 } from './bot.ts'
 import { disabledSkillRules } from './builtin-skills.ts'
@@ -30,7 +26,9 @@ import { runResult } from './effect-bridge.ts'
 import { ConfigError, DbError, DiscordError, type OpenCodeError, type OpenCodeUnavailableError } from './errors.ts'
 import { NOTIFY_MESSAGE_FLAGS, SILENT_MESSAGE_FLAGS } from './format-parts.ts'
 import { createLogger } from './logger.ts'
+import { parseModel, type ModelChoice } from './model-choice.ts'
 import { splitPromptFiles } from './prompt-files.ts'
+import { attachmentsBlock } from './prompt-text.ts'
 import { cancelPendingUi, interrupt, prompt, shell, steer } from './prompt.ts'
 import { formatEcho } from './queue.ts'
 import {
@@ -43,12 +41,22 @@ import {
 } from './remote-send.ts'
 import { parseTextMessage, type Route } from './routes.ts'
 import { parseFirst, type ChannelDirectoryRow } from './rows.ts'
+import type { ScheduledRun } from './scheduled-run.ts'
+import { validateSend, type SendInput } from './send-command.ts'
+import {
+  parsePermissions,
+  pickModel,
+  sessionModel,
+  sessionThreadName,
+  worktreeOf,
+  type ModelInput,
+  type SessionModel,
+} from './send-policy.ts'
 import {
   type ChannelDefaults,
   type ChannelDefaultsRow,
   NO_QUESTION_TOOL,
   agentSelection,
-  bindThread,
   channelDefaults,
   ensureSessionMarker,
   putInstructions,
@@ -56,20 +64,14 @@ import {
   switchModel,
   threadProject,
 } from './session-context.ts'
-import { forkBtw } from './sessions.ts'
+import { bindThread, createSessionThread, forkBtw } from './sessions.ts'
 import { cancelSleep } from './sleep-store.ts'
-import { attachmentsBlock, type ScheduledRun } from './system-prompt.ts'
+import { projectOfTarget } from './target.ts'
 import { createWorktree, resolveWorkingDirectory } from './worktrees.ts'
 
 const logger = createLogger('INPUT')
 
 type PermissionRules = NonNullable<NonNullable<Parameters<OpenCodeClient['session']['create']>[0]>['permissions']>
-
-// A model as callers pass it: ModelChoice uses null for "no variant".
-type ModelInput = { providerID: string; id: string; variant?: string | null }
-
-// The model shape `session.create` takes: an absent variant, not null.
-type SessionModel = { providerID: string; id: string; variant?: string }
 
 // Channel defaults: the project directory plus the one-to-one channel model,
 // agent and worktree rows.
@@ -90,7 +92,7 @@ async function channelDefaultsOf(bot: Bot, channelId: string) {
 
 // Discord only adds the thread creator (the bot); the user must be added to see
 // the thread in the sidebar.
-async function createSessionThread(
+async function openSessionThread(
   bot: Bot,
   {
     channelId,
@@ -101,9 +103,8 @@ async function createSessionThread(
 ) {
   const channel = await runResult(textChannel(bot, channelId))
   if (channel instanceof Error) return channel
-  const thread = await channel.threads
-    .create({ name: threadName, autoArchiveDuration: 1440, ...(startMessageId && { startMessage: startMessageId }) })
-    .catch((cause) => new DiscordError({ operation: 'create thread', cause }))
+  // sessions.ts owns the name rule and the thread options.
+  const thread = await runResult(createSessionThread(channel, { name: threadName, startMessageId }))
   if (thread instanceof Error) return thread
   if (author.id !== bot.discord.user?.id) {
     await thread.members.add(author.id).catch((e: Error) => logger.warn(`add member`, e))
@@ -137,32 +138,6 @@ async function resolveCheckout(
   })
   if (checkout instanceof Error) return checkout
   return { checkout }
-}
-
-// Explicit flags win over the channel default, which wins over the agent's own
-// model and then the global default.
-function pickModel({
-  explicitModel,
-  agentFlagModel,
-  channelModel,
-  agentModel,
-  global,
-}: {
-  explicitModel?: ModelInput
-  agentFlagModel?: ModelChoice | null
-  channelModel?: { model_id: string | null; variant: string | null } | null
-  agentModel?: ModelChoice | null
-  global: ModelChoice | null
-}): ModelChoice | null {
-  const channel = channelModel ? parseModel(channelModel.model_id, channelModel.variant) : null
-  const picked = explicitModel ?? agentFlagModel ?? channel ?? agentModel ?? global
-  return picked ? { providerID: picked.providerID, id: picked.id, variant: picked.variant ?? null } : null
-}
-
-// `session.create` takes the provider, id and optional variant only.
-function sessionModel(choice: ModelInput | null | undefined): SessionModel | undefined {
-  if (!choice) return undefined
-  return { providerID: choice.providerID, id: choice.id, ...(choice.variant ? { variant: choice.variant } : {}) }
 }
 
 // The agent and model of a new session.
@@ -334,28 +309,9 @@ async function createBoundSession(
     }),
   )
   if (instructions instanceof Error) return instructions
-  const bound = await runResult(
-    bindThread(bot, { threadId: thread.id, sessionId: session.id, channelId, directory, isNew: true }),
-  )
+  const bound = await runResult(bindThread(bot, { thread, sessionId: session.id, channelId, directory, isNew: true }))
   if (bound instanceof Error) return bound
   return { sessionId: session.id }
-}
-
-// A worktree thread is named after its branch, everything else after the text.
-function sessionThreadName({
-  explicitName,
-  useWorktree,
-  slug,
-  text,
-}: {
-  explicitName?: string
-  useWorktree: boolean
-  slug: string
-  text: string
-}) {
-  if (explicitName) return explicitName
-  if (useWorktree) return `⬦ ${slug}`
-  return text.replace(/\s+/g, ' ').slice(0, 80) || 'Kimaki session'
 }
 
 export async function startSession(
@@ -422,7 +378,7 @@ export async function startSession(
   const threadName = sessionThreadName({ explicitName, useWorktree, slug, text })
 
   // The thread shows in Discord while the checkout, plugin, agent and model are resolved.
-  const creating = createSessionThread(bot, { channelId, threadName, startMessageId, author })
+  const creating = openSessionThread(bot, { channelId, threadName, startMessageId, author })
   const setup = await resolveSetup(bot, {
     requestedDirectory,
     useWorktree,
@@ -694,7 +650,7 @@ export async function send(
   input: SendInput,
   { localOnly = false, task }: { localOnly?: boolean; task?: ScheduledRun } = {},
 ) {
-  const invalid = invalidSend(input)
+  const invalid = validateSend(input)
   if (invalid) return invalid
   const built = sendContext(bot, input, { localOnly, task })
   if (built instanceof Error) return built
@@ -729,59 +685,12 @@ function sendContext(
   return { context: { author, route, messageId: crypto.randomUUID(), userIds, localOnly, ...(task && { task }) } }
 }
 
-// The channel_directories row of --channel or --project; undefined when this
+// The channel_directories row of --channel or --project; null when this
 // machine has no channel for the target.
 async function sendProject(bot: Bot, input: SendInput) {
-  if (!input.channelId && !input.project) {
-    return new ConfigError({ reason: 'Pass --channel, --project or --thread' })
-  }
-  const rows = input.channelId
-    ? await bot.db<
-        ChannelDirectoryRow[]
-      >`SELECT * FROM channel_directories WHERE channel_id = ${input.channelId} LIMIT 1`.catch(
-        (cause) => new DbError({ operation: 'resolve send project', cause }),
-      )
-    : await bot.db<
-        ChannelDirectoryRow[]
-      >`SELECT * FROM channel_directories WHERE directory = ${path.resolve(input.project ?? '')} LIMIT 1`.catch(
-        (cause) => new DbError({ operation: 'resolve send project', cause }),
-      )
-  if (rows instanceof Error) return rows
-  return parseFirst<ChannelDirectoryRow>('channel_directories', rows)
-}
-
-// Flags that must not be combined, checked before any work starts.
-// CRAP is estimated from exports because fallow cannot see e2e coverage.
-// fallow-ignore-next-line complexity
-function invalidSend(input: SendInput): ConfigError | null {
-  if (input.worktree !== undefined && (input.cwd || input.threadId || input.sessionId || input.notifyOnly)) {
-    return new ConfigError({ reason: '--worktree requires a new session without --cwd or --notify-only.' })
-  }
-  if (input.baseBranch && input.worktree === undefined) {
-    return new ConfigError({ reason: '--base-branch requires --worktree.' })
-  }
-  if (input.permissions?.length && (input.threadId || input.sessionId || input.notifyOnly)) {
-    return new ConfigError({
-      reason:
-        '--permission applies only to new sessions. Start a new session without --thread, --session, or --notify-only',
-    })
-  }
-  return null
-}
-
-// `--permission tool[:pattern]:allow|deny|ask`.
-function parsePermissions(rules: readonly string[] | undefined): ConfigError | PermissionRules {
-  const permissions: Array<{ action: string; resource: string; effect: 'allow' | 'deny' | 'ask' }> = []
-  for (const rule of rules ?? []) {
-    const parts = rule.split(':')
-    const action = parts.shift()
-    const effect = parts.pop()
-    if (!action || (effect !== 'allow' && effect !== 'deny' && effect !== 'ask')) {
-      return new ConfigError({ reason: 'Use --permission tool[:pattern]:allow|deny|ask' })
-    }
-    permissions.push({ action, resource: parts.join(':') || '*', effect })
-  }
-  return permissions
+  const project = await runResult(projectOfTarget(bot, input))
+  if (project instanceof Error) return project
+  return project
 }
 
 // Every --user joins the thread; startSession adds the author of a new session itself.
@@ -861,13 +770,6 @@ async function sendNotification(bot: Bot, project: ChannelDirectoryRow, input: S
   if (shown instanceof Error) return shown
   await addMembers(thread, context.userIds)
   return { threadId: thread.id, sessionId: null }
-}
-
-// --cwd reuses that checkout; a scheduled run gets a fresh worktree name per run.
-function worktreeOf(input: SendInput, task: SendContext['task']) {
-  if (input.cwd) return false
-  if (task && input.worktree) return `${input.worktree.slice(0, 40)}-${crypto.randomBytes(4).toString('hex')}`
-  return input.worktree
 }
 
 // CRAP is estimated from exports because fallow cannot see e2e coverage.

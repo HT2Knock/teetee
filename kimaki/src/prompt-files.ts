@@ -6,8 +6,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import type { PromptFile } from './bot.ts'
+import type { PromptAttachment } from './prompt-text.ts'
 import { promptFilePath } from './remote-send.ts'
-import type { PromptAttachment } from './system-prompt.ts'
 
 // OpenCode V2 shows the model only png/jpeg/gif/webp images, PDFs and text
 // files; it drops other files silently, and one file over 20 MB fails the

@@ -1,25 +1,21 @@
-// Permissions feature (spec 10.2, 27.6): a permission request of any session
-// in the thread (subagents included) becomes one message with Accept /
-// Accept Always / Deny. No timeout: it waits until the user answers or a new
-// message rejects it (prompt.ts steer).
+// The pure half of the permissions feature: a permission request becomes one
+// message with Accept / Accept Always / Deny, folded into the thread view. No
+// bot, no OpenCode call, no logger, so thread-reducer.ts can import this
+// without pulling in discord.js.
 //
 //   permission.asked   ─▶ message + 3 buttons (custom id perm:<requestID>:<decision>)
-//   click              ─▶ permission.reply
 //   permission.replied ─▶ buttons removed, decision shown
+//
+// The button handler (permission.reply) lives in permissions-routes.ts.
 
 import type { PermissionRequest } from '@opencode/client'
 import { castDraft, type Draft } from 'immer'
 
-import { ButtonStyle, MessageFlags, type ButtonInteraction } from './adapters/discord/index.ts'
-import { oc, type Bot } from './bot.ts'
+import { ButtonStyle } from './adapters/discord/enums.ts'
 import { button, buttonRow, textOnly, type UiMessage } from './format-parts.ts'
-import type { InteractionRoutes } from './interaction-context.ts'
-import { createLogger } from './logger.ts'
 import type { Emit, ThreadView } from './thread-reducer.ts'
 
-const logger = createLogger('PERMISSION')
-
-const PERMISSION_PREFIX = 'perm:'
+export const PERMISSION_PREFIX = 'perm:'
 
 export type PermissionDecision = 'once' | 'always' | 'reject'
 
@@ -117,27 +113,3 @@ export function hydratePermissions(
   }
   for (const request of slice.requests) showPermission({ ...slice, request })
 }
-
-function parseDecision(value: string | undefined): PermissionDecision | null {
-  return value === 'once' || value === 'always' || value === 'reject' ? value : null
-}
-
-async function handlePermissionButton(bot: Bot, interaction: ButtonInteraction): Promise<void> {
-  const [requestID, rawDecision] = interaction.customId.slice(PERMISSION_PREFIX.length).split(':')
-  const decision = parseDecision(rawDecision)
-  const request = requestID ? bot.store.getState().threads[interaction.channelId]?.permissions[requestID] : undefined
-  if (!requestID || !decision || !request) {
-    await interaction.reply({ content: 'This permission request is no longer pending', flags: MessageFlags.Ephemeral })
-    return
-  }
-  // The buttons go away when permission.replied arrives.
-  await interaction.deferUpdate()
-  const result = await oc(bot, 'permission.reply', (client) =>
-    client.permission.reply({ sessionID: request.sessionId, requestID, decision }),
-  )
-  if (!(result instanceof Error)) return
-  logger.warn(`reply ${requestID} failed`, result)
-  await interaction.followUp({ content: 'This permission request is no longer pending', flags: MessageFlags.Ephemeral })
-}
-
-export const permissionRoutes: InteractionRoutes = { buttons: { [PERMISSION_PREFIX]: handlePermissionButton } }

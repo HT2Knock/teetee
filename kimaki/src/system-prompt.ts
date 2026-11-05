@@ -5,13 +5,12 @@
 import dedent from 'string-dedent'
 import { z } from 'zod'
 
+import { attachmentsBlock, localFilesBlock, PromptAttachmentSchema } from './prompt-text.ts'
+import type { ScheduledRun } from './scheduled-run.ts'
+
 export const INSTRUCTION_KEY = 'kimaki'
 
 export type InstructionAgent = { name: string; description: string }
-
-// The routine that started a session (scheduler.ts). Set once at
-// session.create, so the instruction entry stays stable across turns.
-export type ScheduledRun = { id: number; cronExpr: string | null; timezone: string | null }
 
 const PARENT_SESSION_LINE = 'Your parent OpenCode session ID is: '
 
@@ -527,30 +526,6 @@ function scheduledTaskSection(task: ScheduledRun): string {
 
 function escapeAttribute(value: string): string {
   return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;')
-}
-
-// Prompts stored before turnContext() moved to metadata end with the block; display paths strip it.
-export function stripTurnContext(text: string): string {
-  return text.replace(/\n\n(<local-files>\n[\s\S]*?<\/local-files>\n)?<discord-user [^\n]*\/>$/, '')
-}
-
-const PromptAttachmentSchema = z.object({ name: z.string(), path: z.string(), inline: z.boolean() })
-export type PromptAttachment = z.infer<typeof PromptAttachmentSchema>
-
-// Every attachment of the message, numbered in Discord order, so the user and the
-// model can refer to "image 2". Inline ones are already in the message.
-export function attachmentsBlock(attachments: readonly PromptAttachment[]): string {
-  if (attachments.length === 0) return ''
-  const lines = attachments.map(
-    (file, index) => `${index + 1}. ${file.name}${file.inline ? ' (inline)' : ''}: ${file.path}`,
-  )
-  return `<attachments>\nFiles of this message in the order the user attached them, saved on disk. Read the ones not marked inline with tools.\n${lines.join('\n')}\n</attachments>\n`
-}
-
-// Prompts before numbered attachments: only the files the model could not see inline.
-function localFilesBlock(paths: readonly string[]): string {
-  if (paths.length === 0) return ''
-  return `<local-files>\nAttachments saved on disk. OpenCode cannot show these inline; use tools to read them.\n${paths.join('\n')}\n</local-files>\n`
 }
 
 // metadata.discord of a Kimaki prompt (prompt.ts).

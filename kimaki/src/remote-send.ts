@@ -17,8 +17,8 @@ import { fileURLToPath } from 'node:url'
 import type { API } from '@discordjs/core/http-only'
 import { MessageFlags } from 'discord-api-types/v10'
 
-import type { SendInput } from './adapters/http/routes.ts'
 import { ConfigError, DiscordError, attempt } from './errors.ts'
+import type { SendInput } from './send-command.ts'
 
 export const REMOTE_SEND_PREFIX = 'kimaki-send-v2:'
 export const REMOTE_PROMPT_FILE = 'kimaki-prompt.md'

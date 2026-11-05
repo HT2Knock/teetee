@@ -47,7 +47,7 @@ import {
   type StringSelectMenuInteraction,
 } from './adapters/discord/index.ts'
 import { agentUiRoutes } from './agent-ui.ts'
-import { oc, projectOf, type Bot, type ModelChoice } from './bot.ts'
+import { oc, projectOf, type Bot } from './bot.ts'
 import { isBuiltinSkill } from './builtin-skills.ts'
 import { createLoginRoutes } from './commands/login-commands.ts'
 import { applyAgent, createPreferenceRoutes, variantChoices, variantModel } from './commands/preference-commands.ts'
@@ -70,8 +70,9 @@ import {
   type SlashCommand,
 } from './interaction-context.ts'
 import { createLogger } from './logger.ts'
-import { permissionRoutes } from './permissions.ts'
-import { createQuestionHandlers } from './questions.ts'
+import type { ModelChoice } from './model-choice.ts'
+import { permissionRoutes } from './permissions-routes.ts'
+import { createQuestionHandlers } from './questions-routes.ts'
 import type { Route } from './routes.ts'
 import { taskRoutes } from './scheduler.ts'
 import { switchModel, catalogReady } from './session-context.ts'

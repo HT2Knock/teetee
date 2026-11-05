@@ -110,7 +110,7 @@ export function registerSendCommand(cli: Goke) {
           fail(new Error('Kimaki bot is not running here. --send-at and --wait need a local bot.'))
         }
         const [{ sendInput }, { sendWithoutBot }] = await Promise.all([
-          import('../http/routes.ts'),
+          import('../../send-command.ts'),
           import('../../remote-send.ts'),
         ])
         const parsed = sendInput.safeParse(input)

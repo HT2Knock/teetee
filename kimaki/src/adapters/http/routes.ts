@@ -13,7 +13,7 @@ import { Effect } from 'effect'
 import { z } from 'zod'
 
 import { parseButton } from '../../agent-ui.ts'
-import { fetchThread, oc, parseModel, projectOf, type Bot } from '../../bot.ts'
+import { fetchThread, oc, projectOf, type Bot } from '../../bot.ts'
 import { credential, loginCli } from '../../commands/login-commands.ts'
 import { setChannelAgent, setChannelModel, setGlobalModel, setVerbosity } from '../../commands/preference-commands.ts'
 import { channelWorktrees, manageWorktree, newWorktree, setAutoWorktrees } from '../../commands/worktree-commands.ts'
@@ -29,11 +29,13 @@ import {
   attempt,
 } from '../../errors.ts'
 import { send } from '../../input.ts'
+import { parseModel } from '../../model-choice.ts'
 import { addProjectChannel, createApi, defaultMachineName, listProjects, resolveGuildId } from '../../project.ts'
 import { abort, cancelQueuedPrompt, clearQueue, shell, upload } from '../../prompt.ts'
 import { parseRows, type ThreadSessionRow } from '../../rows.ts'
 import { RUNTIME_NAME } from '../../runtime.ts'
 import { createTask, deleteTask, editTask, listTasks, runTaskNow } from '../../scheduler.ts'
+import { checkSend, sendFields } from '../../send-command.ts'
 import { sessionCwd } from '../../session-context.ts'
 import {
   allMessages,
@@ -44,7 +46,7 @@ import {
 } from '../../session-events.ts'
 import { channelForDirectory, channelForSession, fork, resume } from '../../sessions.ts'
 import { createSleep } from '../../sleeps.ts'
-import { worktreeName } from '../../worktrees.ts'
+import { text } from '../../zod-fields.ts'
 
 import { RESTART_EXIT_CODE } from './rpc.ts'
 
@@ -74,11 +76,6 @@ export function parseInput<S extends z.ZodType>(schema: S, value: unknown): Conf
   return new ConfigError({ reason: parsed.error.issues[0]?.message ?? 'Invalid input' })
 }
 
-const text = (key: string) => {
-  const message = `${key} must be a non-empty string`
-  return z.string({ error: message }).refine((value) => value.trim() !== '', { error: message })
-}
-
 // Typed as string for the CLI, which passes user text through; the bot checks the value.
 const oneOf = <const T extends readonly [string, ...string[]]>(values: T, error: string) =>
   z.string({ error }).pipe(z.enum(values, { error }))
@@ -88,61 +85,6 @@ const routineId = z
   .refine((id) => Number.isSafeInteger(id) && id >= 1, { error: 'Routine ID must be a positive integer' })
 
 // --- `kimaki send` (also remote envelopes in ingress.ts).
-
-const sendFields = {
-  channelId: text('channelId').optional(),
-  threadId: text('threadId').optional(),
-  sessionId: text('sessionId').optional(),
-  project: text('project').optional(),
-  name: text('name').optional(),
-  agent: text('agent').optional(),
-  model: text('model').optional(),
-  // One ID or several (`--user` is repeatable); every user is added to the thread, the first is the author.
-  user: z
-    .union([
-      text('user').transform((id) => [id]),
-      z.array(text('user'), { error: 'user must be a string or a list of strings' }),
-    ])
-    .optional(),
-  cwd: text('cwd').optional(),
-  parentSessionId: text('parentSessionId').optional(),
-  baseBranch: text('baseBranch').optional(),
-  // '' asks for an automatic name.
-  worktree: z.string({ error: 'worktree must be a name or an empty string for an automatic name' }).optional(),
-  notifyOnly: z.boolean({ error: 'notifyOnly must be boolean' }).optional(),
-  permissions: z.array(z.string(), { error: 'Permission rules must be strings' }).optional(),
-  prompt: text('prompt'),
-  files: z
-    .array(z.object({ uri: z.string(), name: z.string() }), { error: 'files must contain uri and name strings' })
-    .optional(),
-}
-
-type SendFields = z.output<z.ZodObject<typeof sendFields>>
-
-function checkSend(input: SendFields, ctx: z.RefinementCtx) {
-  const fail = (message: string) => ctx.addIssue({ code: 'custom', message })
-  if (input.worktree) {
-    const valid = worktreeName(input.worktree)
-    if (valid instanceof Error) return fail(valid.message)
-  }
-  const newSessionOnly =
-    input.cwd !== undefined ||
-    input.threadId !== undefined ||
-    input.sessionId !== undefined ||
-    input.notifyOnly === true
-  if (input.worktree !== undefined && newSessionOnly) {
-    return fail('--worktree requires a new session; do not combine it with --cwd, --thread, --session or --notify-only')
-  }
-  if (input.baseBranch !== undefined && input.worktree === undefined) return fail('--base-branch requires --worktree')
-  const targets = [input.channelId, input.threadId, input.sessionId, input.project].filter(
-    (value) => value !== undefined,
-  )
-  if (targets.length !== 1) return fail('Use exactly one of --channel, --thread, --session, --project')
-}
-
-export const sendInput = z.object(sendFields, { error: 'Expected a send object' }).superRefine(checkSend)
-
-export type SendInput = z.output<typeof sendInput>
 
 const sendRoute = z
   .object(

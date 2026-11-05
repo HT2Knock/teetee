@@ -24,12 +24,13 @@ import {
   type MessageComponentInteraction,
   type StringSelectMenuInteraction,
 } from '../adapters/discord/index.ts'
-import { globalModel, oc, parseModel, type Bot, type ModelChoice } from '../bot.ts'
+import { globalModel, oc, type Bot } from '../bot.ts'
 import { verbosityFromV1, verbosityToV1, type Verbosity } from '../db.ts'
 import { runResult } from '../effect-bridge.ts'
 import { ConfigError, DbError } from '../errors.ts'
 import { button, buttonRow, paginate, selectedPage, selectRow, type UiMessage } from '../format-parts.ts'
 import { replyError, resolveTarget, type InteractionRoutes, type InteractionTarget } from '../interaction-context.ts'
+import { parseModel, type ModelChoice } from '../model-choice.ts'
 import { parseFirst, toDbDate, type ChannelModelRow } from '../rows.ts'
 import { agentSelection, primaryAgents, switchAgent, switchModel } from '../session-context.ts'
 

@@ -13,7 +13,6 @@
 // the task ID goes in session metadata.
 
 import { exec } from 'node:child_process'
-import path from 'node:path'
 import { promisify } from 'node:util'
 
 import { CronExpressionParser } from 'cron-parser'
@@ -27,7 +26,6 @@ import {
   type ButtonInteraction,
   type ChatInputCommandInteraction,
 } from './adapters/discord/index.ts'
-import type { SendInput } from './adapters/http/routes.ts'
 import { oc, projectOf, threadOfSession, type Bot } from './bot.ts'
 import type { KimakiDb } from './db.ts'
 import { runResult } from './effect-bridge.ts'
@@ -36,7 +34,10 @@ import { send } from './input.ts'
 import type { InteractionRoutes } from './interaction-context.ts'
 import { createLogger } from './logger.ts'
 import { parseFirst, parseRows, toDbDate, type ChannelDirectoryRow, type ScheduledTaskRow } from './rows.ts'
+import type { SendInput } from './send-command.ts'
+import { validateSend } from './send-command.ts'
 import { parseFutureUtc, runDueWakes } from './sleeps.ts'
+import { projectOfTarget } from './target.ts'
 
 const logger = createLogger('ROUTINE')
 const execAsync = promisify(exec)
@@ -362,11 +363,10 @@ async function preRun({
 async function execute(bot: Bot, row: TaskRow): Promise<Error | RunOutcome> {
   const job = decodeTaskPayload(row.payload_json)
   if (job instanceof Error) return job
-  if (job.send.permissions?.length && (job.send.threadId || job.send.notifyOnly)) {
-    return new ConfigError({
-      reason: `Routine ${row.id}: --permission applies only to new sessions. Recreate the routine for a project channel without --notify-only`,
-    })
-  }
+  // A routine stored before a rule changed must fail with the same message as
+  // `kimaki send`, not with its own copy of the rule.
+  const invalid = validateSend(job.send)
+  if (invalid) return new ConfigError({ reason: `Routine ${row.id}: ${invalid.reason}`, cause: invalid })
   // Non-overlap: the session of the previous run must be idle.
   const lastSession = row.session_id
   if (!job.allowConcurrency && lastSession) {
@@ -523,6 +523,9 @@ export async function createTask(bot: Bot, { send: input, options }: { send: Sen
   const user = userIdOf(input.user?.[0] ?? '')
   if (user instanceof Error) return user
   if (input.model && !/^[^/]+\/.+$/.test(input.model)) return new ConfigError({ reason: 'Use --model provider/model' })
+  // The same flag rules as `kimaki send`: one list, in send-command.ts.
+  const invalid = validateSend(input)
+  if (invalid) return invalid
   const roots = bot.store.getState().roots
   const threadId = input.threadId ?? (input.sessionId ? threadOfSession(bot, input.sessionId) : null)
   if ((input.threadId || input.sessionId) && (!threadId || !roots[threadId])) {
@@ -533,13 +536,7 @@ export async function createTask(bot: Bot, { send: input, options }: { send: Sen
   if (threadId && input.notifyOnly) {
     return new ConfigError({ reason: '--notify-only needs --channel or --project, not a thread' })
   }
-  if (threadId && input.permissions?.length) {
-    return new ConfigError({ reason: '--permission applies only to new sessions, not a thread' })
-  }
-  if (!threadId && !input.channelId && !input.project) {
-    return new ConfigError({ reason: 'Pass --channel, --project or --thread' })
-  }
-  const project = await (async () => {
+  const project: Error | ChannelDirectoryRow | null = await (async (): Promise<Error | ChannelDirectoryRow | null> => {
     if (threadId) {
       const thread = await bot.discord.channels
         .fetch(threadId)
@@ -548,15 +545,8 @@ export async function createTask(bot: Bot, { send: input, options }: { send: Sen
       if (!thread?.isThread() || !thread.parentId) return null
       return runResult(projectOf(bot, thread.parentId))
     }
-    const rows = await (
-      input.channelId
-        ? bot.db<ChannelDirectoryRow[]>`SELECT * FROM channel_directories WHERE channel_id = ${input.channelId} LIMIT 1`
-        : bot.db<
-            ChannelDirectoryRow[]
-          >`SELECT * FROM channel_directories WHERE directory = ${path.resolve(input.project ?? '')} LIMIT 1`
-    ).catch((cause) => new DbError({ operation: 'resolve routine project', cause }))
-    if (rows instanceof Error) return rows
-    return parseFirst<ChannelDirectoryRow>('channel_directories', rows)
+    // The same lookup `kimaki send` uses: one rule for --channel and --project.
+    return runResult(projectOfTarget(bot, input))
   })()
   if (project instanceof Error) return project
   if (!project) {
