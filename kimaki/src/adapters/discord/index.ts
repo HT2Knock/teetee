@@ -7,8 +7,8 @@
 
 import { Client, Events, GatewayIntentBits, Partials } from 'discord.js'
 
-import { DiscordError } from '../../errors.ts'
-import { createLogger } from '../../logger.ts'
+import { DiscordError } from '../../platform/errors.ts'
+import { createLogger } from '../../platform/logger.ts'
 
 export * from 'discord.js'
 

@@ -8,7 +8,7 @@
 
 import fs from 'node:fs'
 
-import { ConfigError } from '../../errors.ts'
+import { ConfigError } from '../../platform/errors.ts'
 
 import { mcpStateFile, type McpState } from './config-dir.ts'
 
