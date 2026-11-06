@@ -112,8 +112,8 @@ several calls in one `execute` block.
 
 ### 2.4 Agent instructions: prompt to tools
 
-`features/session/system-prompt.ts` is 268 lines and most of it is a CLI manual.
-Phase 5 replaces that with the MCP tools above.
+`features/session/system-prompt.ts` was 268 lines and most of it was a CLI manual.
+Phase 5 replaced the commands with the MCP tools above.
 
 - Keep in the prompt: identity, channel and thread IDs, output style, commit
   trailer, permission rules, and the "you are in Discord" framing.
@@ -124,7 +124,7 @@ Phase 5 replaces that with the MCP tools above.
 - The CLI stays for humans, scripts, and CI. The agent may still call it, but
   the prompt does not document it.
 
-Target: the prompt drops from 268 to about 50 lines.
+Result: 171 file lines, about 110 lines of prompt text. Keep it under 120.
 
 ### 2.5 Scheduler
 

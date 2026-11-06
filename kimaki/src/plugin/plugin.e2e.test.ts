@@ -77,10 +77,10 @@ test('bot start writes the plugin shim, OpenCode loads it, a restart does not re
   expect(await kimakiStatus()).toBe('active')
   // Plugin setup registers the bot's MCP server for this location.
   const mcpStatus = await waitFor({
-    label: 'the teetee MCP server',
+    label: 'the discord MCP server',
     check: async () => {
       const servers = await client.mcp.list({ location: { directory: server.projectDirectory } })
-      const status = servers.data.find((entry) => entry.name === 'teetee')?.status.status
+      const status = servers.data.find((entry) => entry.name === 'discord')?.status.status
       return status === 'connected' ? status : null
     },
   })

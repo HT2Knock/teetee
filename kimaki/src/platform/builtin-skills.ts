@@ -1,5 +1,5 @@
-// Opt-out skills Kimaki ships in skills/<id>/SKILL.md (debug, thread ops). They are
-// not in the system prompt, which keeps the rest of the CLI reference.
+// Opt-out skills Kimaki ships in skills/<id>/SKILL.md. The system prompt keeps
+// only the debug skill; the Discord actions live in the MCP tool descriptions.
 //
 //   plugin (OpenCode process) ──▶ readBuiltinSkills ──▶ ctx.skill.transform(add)
 //   bot ──▶ --disable-skills ──▶ session permissions `skill:<id>` deny
@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 
 import { ConfigError, FilesystemError } from './errors.ts'
 
-export const BUILTIN_SKILL_IDS = ['kimaki-debug', 'kimaki-thread-ops', 'kimaki-sessions'] as const
+export const BUILTIN_SKILL_IDS = ['kimaki-debug'] as const
 
 export type BuiltinSkillId = (typeof BUILTIN_SKILL_IDS)[number]
 

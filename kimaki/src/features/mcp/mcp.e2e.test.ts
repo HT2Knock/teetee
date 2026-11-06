@@ -79,13 +79,21 @@ test('the control token lists every MCP tool and the notify token a subset', asy
     {
       "control": [
         "buttons",
+        "project_add",
         "project_list",
+        "routine_create",
+        "routine_delete",
         "routine_list",
+        "routine_run",
         "send",
+        "session_abort",
         "session_archive",
+        "session_fork",
         "session_list",
         "session_read",
+        "session_title",
         "sleep",
+        "status",
         "upload",
         "user_lookup",
       ],
@@ -128,7 +136,22 @@ test('the notify token cannot start a session or call a control tool', async () 
     arguments: { channelId: twin.channelId, prompt: 'notify start' },
   })
   const listed = await mcp(bot.lock.tokens.notify, 'tools/list')
-  const controlOnly = ['project_list', 'session_list', 'session_read', 'session_archive', 'sleep', 'routine_list']
+  const controlOnly = [
+    'project_add',
+    'project_list',
+    'routine_create',
+    'routine_delete',
+    'routine_list',
+    'routine_run',
+    'session_abort',
+    'session_archive',
+    'session_fork',
+    'session_list',
+    'session_read',
+    'session_title',
+    'sleep',
+    'status',
+  ]
   const rejected: Record<string, boolean> = {}
   for (const name of controlOnly) {
     const call = await mcp(bot.lock.tokens.notify, 'tools/call', { name, arguments: {} })

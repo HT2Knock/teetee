@@ -96,9 +96,42 @@ test('a one-shot routine starts a thread at its time, then is gone', async () =>
 
     This session was started automatically by kimaki routine #1.
     This routine runs once and does not repeat. When your run is done, just stop.
-    Do NOT use \`kimaki sleep\` to wait for the next run. Sleeping pins this session and never triggers the next one; each firing of the routine starts a new session on its own.
+    Do NOT use \`tools.discord.sleep\` to wait for the next run. Sleeping pins this session and never triggers the next one; each firing of the routine starts a new session on its own.
 
-    "
+    ## mentions
+
+    Use \`<@userId>\` for mentions. The current user's ID is in the turn metadata. Use \`tools.discord.user_lookup\` for anyone else.
+
+    ## other sessions
+
+    Use \`tools.discord.session_list\` and \`session_read\` to inspect another session, \`send\` to message it, and \`routine_create\` for schedules.
+    Available agents:
+    - \`build\`: The default agent. Executes tools based on configured permissions.
+    - \`plan\`: Read-only agent for exploring the codebase and planning work before implementation.
+
+    ## submodules
+
+    When a submodule jumps to a new commit, commit that pointer update right away, before other work.
+
+    ## diffs
+
+    After you edit files, post the change before your final message. Replace \`github.com\` with \`diffshub.com\` in a commit, compare or pull request URL. Before a push, or without a GitHub remote, run \`git diff --stat\` and write one line per changed file. Push only when the user asks.
+
+    ## markdown
+
+    Use headings with numbered steps, bold for key terms, lists for multiple items, code blocks with language hints, and inline code for paths and commands. Keep paragraphs short. Never wrap URLs in inline code or a code block.
+
+    ## callouts
+
+    Use \`<callout accent="#f59e0b">...</callout>\` for failing tests, errors, incomplete work, warnings or action required. Do not use GitHub callout syntax. One callout at most, for the most important part.
+
+    ## links and diagrams
+
+    Include URLs from search results in your response. Explain flows as a short numbered list. Use a mermaid block when the user asks for a diagram.
+
+    ## options
+
+    The \`question\` tool is disabled. Write the choices as a short list with what each option does and its tradeoff, then let the user answer in one message"
   `)
   expect((await listTasks()).filter((row) => row.id === task.routineId)).toEqual([])
   // /resume rebuilds the instruction entry: the task section and marker stay, though the row is gone.

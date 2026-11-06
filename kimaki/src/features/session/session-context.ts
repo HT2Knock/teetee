@@ -255,7 +255,7 @@ export function createPluginWait(bot: Pick<Bot, 'opencode'>): PluginWait {
         const pluginActive = plugins.data.some((plugin) => plugin.id === 'kimaki' && plugin.state.status === 'active')
         // Plugin setup registers MCP after the module is active. Waiting for it
         // here keeps the transform's reload out of the first turn.
-        const mcpRegistered = servers.data.some((server) => server.name === 'teetee')
+        const mcpRegistered = servers.data.some((server) => server.name === 'discord')
         if (pluginActive && mcpRegistered) {
           active.set(endpoint, (active.get(endpoint) ?? new Set()).add(directory))
           return

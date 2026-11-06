@@ -86,7 +86,7 @@ src/features/
 - `features/transcript/effects.ts`: the only Discord writer for session output. `features/transcript/format-parts.ts`, `features/transcript/markdown/`: formatting.
 - `adapters/http/rpc.ts`, `adapters/http/routes.ts`, `features/mcp/mcp.ts`: single-instance lock, the local RPC used by CLI subcommands, and `/mcp` for agents.
 - `cli.ts`, `adapters/cli/*.ts`: goke CLI. `plugin/`: code that runs inside the OpenCode process.
-- `features/session/system-prompt.ts` holds the session instruction entry. the long session CLI reference lives in opt-out skills, not in the entry: `kimaki-debug`, `kimaki-thread-ops` and `kimaki-sessions` (`skills/<id>/SKILL.md`, `platform/builtin-skills.ts`), registered by the `kimaki` plugin through `ctx.skill.transform` and hidden from Discord slash commands. `kimaki --disable-skills all|id,id` denies them per session with `skill:<id>` permission rules (`disabledSkillRules`).
+- `features/session/system-prompt.ts` holds the session instruction entry. the opt-out debug skill lives in `skills/kimaki-debug/SKILL.md` (`platform/builtin-skills.ts`); the Discord actions live in the MCP tool descriptions, not in the prompt, registered by the `kimaki` plugin through `ctx.skill.transform` and hidden from Discord slash commands. `kimaki --disable-skills all|id,id` denies them per session with `skill:<id>` permission rules (`disabledSkillRules`).
 - `platform/autostart.ts`: the bot writes `<dataDir>/autostart.command`; the plugin opens it in the default terminal when OpenCode starts and no bot answers on the lock port.
 ## opencode SDK
 
