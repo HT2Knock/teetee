@@ -80,6 +80,13 @@ const mcpTools: readonly McpTool[] = [
             description: 'Discord user IDs to add to the thread',
           },
           notifyOnly: { type: 'boolean', description: 'Post without starting an AI session' },
+          sendAt: {
+            type: 'string',
+            description:
+              'Schedule the prompt instead of sending it now: UTC ISO time ending in Z, or a cron expression',
+          },
+          preRun: { type: 'string', description: 'Scheduled only: shell command that gates the run' },
+          allowConcurrency: { type: 'boolean', description: 'Scheduled only: allow overlapping runs' },
           files: {
             type: 'array',
             items: {
@@ -190,6 +197,51 @@ const mcpTools: readonly McpTool[] = [
       properties: sessionTarget,
     },
   }),
+  routeTool('session_fork', 'Fork a session into a new thread, optionally before a user message.', {
+    scope: 'control',
+    route: 'session.fork',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...sessionTarget,
+        before: { type: 'string', description: 'User message ID to fork before' },
+        name: { type: 'string', description: 'New thread name' },
+      },
+    },
+  }),
+  routeTool('session_title', 'Rename a session and its Discord thread.', {
+    scope: 'control',
+    route: 'session.title',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...sessionTarget,
+        text: { type: 'string', description: 'New title' },
+      },
+      required: ['text'],
+    },
+  }),
+  routeTool('session_abort', 'Stop the current run and clear its queue.', {
+    scope: 'control',
+    route: 'session.abort',
+    inputSchema: {
+      type: 'object',
+      properties: sessionTarget,
+    },
+  }),
+  routeTool('project_add', 'Add a project channel for a directory.', {
+    scope: 'control',
+    route: 'project.add',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        directory: { type: 'string', description: 'Project directory' },
+        guild: { type: 'string', description: 'Guild ID when the bot is in several guilds' },
+        machine: { type: 'string', description: 'Machine name' },
+      },
+      required: ['directory'],
+    },
+  }),
   routeTool('sleep', 'Wake this session later.', {
     scope: 'control',
     route: 'sleep',
@@ -211,6 +263,46 @@ const mcpTools: readonly McpTool[] = [
       properties: { all: { type: 'boolean', description: 'Include finished routines' } },
     },
   }),
+  routeTool('routine_create', 'Schedule a prompt to run later or on a cron.', {
+    scope: 'control',
+    route: 'send',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: 'Message text' },
+        sendAt: { type: 'string', description: 'UTC ISO time ending in Z, or a cron expression' },
+        ...optionalTarget,
+        agent: { type: 'string', description: 'Agent ID' },
+        model: { type: 'string', description: 'provider/model' },
+        preRun: { type: 'string', description: 'Shell command that gates the run' },
+        allowConcurrency: { type: 'boolean', description: 'Allow overlapping runs' },
+      },
+      required: ['prompt', 'sendAt'],
+    },
+  }),
+  routeTool('routine_delete', 'Delete a planned routine.', {
+    scope: 'control',
+    route: 'task.delete',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'number', description: 'Routine ID' } },
+      required: ['id'],
+    },
+  }),
+  routeTool('routine_run', 'Run a routine now.', {
+    scope: 'control',
+    route: 'task.run',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'number', description: 'Routine ID' } },
+      required: ['id'],
+    },
+  }),
+  routeTool('status', 'Bot and OpenCode health, version and guilds.', {
+    scope: 'control',
+    route: 'status',
+    inputSchema: { type: 'object', properties: {} },
+  }),
 ]
 
 const toolByName = new Map(mcpTools.map((tool) => [tool.name, tool]))
@@ -219,7 +311,7 @@ export type McpRequest = { jsonrpc?: string; id?: number | string | null; method
 
 export type McpResponse = { status: number; body: unknown }
 
-const SERVER_INFO = { name: 'teetee', version: '1.0.0' }
+const SERVER_INFO = { name: 'discord', version: '1.0.0' }
 // Streamable HTTP, the spec OpenCode's `legacy` protocol speaks.
 const PROTOCOL_VERSION = '2025-03-26'
 

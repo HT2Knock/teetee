@@ -40,10 +40,13 @@ export default Plugin.define({
     if (state) {
       await ctx.mcp
         .transform((editor) => {
+          // The server was called teetee before the MCP-first rename. Remove
+          // that entry so an upgrade does not leave a duplicate server.
+          if (editor.get('teetee')) editor.remove('teetee')
           // A new location inherits the entry from the global config; setting
           // the same value again would reload that location mid-turn.
-          if (editor.get('teetee')) return
-          editor.set('teetee', {
+          if (editor.get('discord')) return
+          editor.set('discord', {
             type: 'remote',
             url: state.url,
             headers: { authorization: `Bearer ${state.token}` },

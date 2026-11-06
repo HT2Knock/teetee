@@ -375,7 +375,7 @@ test('CLI help documents the supported P7 commands', async () => {
       --restart-onboarding     Choose credentials again
       --worktrees              Use a fresh Git worktree for new sessions unless the channel overrides it
       --allow-all-users        Every server member can use the bot (role "no-kimaki" still denies; provider login stays admin-only)
-      --disable-skills <list>  Built-in Kimaki skills to turn off: "all" or a comma separated list (kimaki-debug,kimaki-thread-ops,kimaki-sessions)
+      --disable-skills <list>  Built-in Kimaki skills to turn off: "all" or a comma separated list (kimaki-debug)
       --if-not-running         Start only if no bot runs; never stop the running one (used by autostart)
       -h, --help               Display this message
     "
