@@ -1,5 +1,7 @@
 this repo is the bot workspace: `kimaki/` (the Kimaki Discord bot and `kimaki` CLI, built on OpenCode V2) plus the two packages its tests need, `discord-digital-twin/` (fake Discord) and `opencode-deterministic-provider/` (canned model replies). it was split out of the upstream monorepo, which also held the website, the Slack bridge and the Rust gateway; none of those are here. this branch supports OpenCode V2 only.
 
+instruction files: this root file covers the whole repo. `discord-digital-twin/AGENTS.md` and `opencode-deterministic-provider/AGENTS.md` add the rules of those packages. when two files conflict, the explicit request of the user wins, then the nearest `AGENTS.md`, then this file.
+
 deploy: `git push`, then on the bot host `git pull && bun install && bun run build`, then restart the user service. `bun run build` builds `kimaki`; the OpenCode plugin autostarts the bot from `kimaki/dist/cli.js`.
 
 after every change and every feature run `bun run build` inside `kimaki`. it runs `tsc` and then `scripts/bundle.ts`: the OpenCode plugin autostarts the bot from `dist/cli.js` (`src/autostart.ts`), so a stale dist starts old code. try to never use `as any`.
@@ -20,7 +22,7 @@ for checkout validation requests, prefer non-recursive checks unless the user as
 
 ## lint, types and complexity
 
-run `bun run verify` before you say a change is done: `bun check` (tsc), `oxlint --type-aware --deny-warnings`, `oxfmt --check`, `fallow dead-code`, `fallow architecture`, the complexity gate, then the build.
+run `bun run verify` from the repo root before you say a change is done. `package.json` owns the list of gates it runs, so read it there instead of keeping a second copy here.
 
 the linter runs with type information (`oxlint-tsgolint`), so promise and union mistakes surface without a test. the rules exist to stop the shortcuts that make generated code look correct:
 
@@ -74,7 +76,7 @@ OpenCode events ──▶ adapters/opencode ──▶ event-loop.ts ──▶ th
 - `effects.ts`: the only Discord writer for session output. `format-parts.ts`, `markdown/`: formatting.
 - `adapters/http/rpc.ts`, `routes.ts`, `mcp.ts`: single-instance lock, the local RPC used by CLI subcommands, and `/mcp` for agents.
 - `cli.ts`, `adapters/cli/*.ts`: goke CLI. `plugin/`: code that runs inside the OpenCode process.
-- `system-prompt.ts` holds the session instruction entry (the whole agent-facing CLI reference). Only two parts are opt-out skills: `kimaki-debug` and `kimaki-thread-ops` (`skills/<id>/SKILL.md`, `builtin-skills.ts`), registered by the `kimaki` plugin through `ctx.skill.transform` and hidden from Discord slash commands. `kimaki --disable-skills all|id,id` denies them per session with `skill:<id>` permission rules (`disabledSkillRules`).
+- `system-prompt.ts` holds the session instruction entry. the long session CLI reference lives in opt-out skills, not in the entry: `kimaki-debug`, `kimaki-thread-ops` and `kimaki-sessions` (`skills/<id>/SKILL.md`, `builtin-skills.ts`), registered by the `kimaki` plugin through `ctx.skill.transform` and hidden from Discord slash commands. `kimaki --disable-skills all|id,id` denies them per session with `skill:<id>` permission rules (`disabledSkillRules`).
 - `autostart.ts`: the bot writes `<dataDir>/autostart.command`; the plugin opens it in the default terminal when OpenCode starts and no bot answers on the lock port.
 ## opencode SDK
 
