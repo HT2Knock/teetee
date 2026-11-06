@@ -14,8 +14,8 @@ import path from 'node:path'
 import type { OpenCodeClient } from '@opencode/client'
 import { ChannelType } from 'discord-api-types/v10'
 
-import { canonicalPath } from '../../file-edit-log.ts'
-import { readSessionMarkdown, waitForSessionReady } from '../../session-events.ts'
+import { canonicalPath } from '../../features/agent/file-edit-log.ts'
+import { readSessionMarkdown, waitForSessionReady } from '../../features/session/session-events.ts'
 import type { LockRouteInput, LockRouteName } from '../http/routes.ts'
 import { callBot } from '../http/rpc.ts'
 import { resolveOpencode } from '../opencode/index.ts'
@@ -110,8 +110,8 @@ export async function waitAndPrintSession({
 // the token of the running bot. Both paths avoid kimaki.db.
 export async function discordApi(dataDir: string | undefined) {
   const [{ envCredentials }, { createApi }] = await Promise.all([
-    import('../../credentials.ts'),
-    import('../../project.ts'),
+    import('../../features/auth/credentials.ts'),
+    import('../../features/projects/project.ts'),
   ])
   const fromEnv = envCredentials()
   if (fromEnv instanceof Error) fail(fromEnv)

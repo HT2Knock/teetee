@@ -8,7 +8,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import type { Goke } from 'goke'
 import dedent from 'string-dedent'
 
-import { parseDuration } from '../../duration.ts'
+import { parseDuration } from '../../platform/duration.ts'
 import { callBot } from '../http/rpc.ts'
 
 import { action, DATA_DIR_HELP, dataDirOrDefault, discordApi, fail, printJson } from './shared.ts'

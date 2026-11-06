@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url'
 
 import { wrapJsonSchema, type Goke } from 'goke'
 
-import { BotNotRunningError } from '../../errors.ts'
+import { BotNotRunningError } from '../../platform/errors.ts'
 import { callBot } from '../http/rpc.ts'
 
 import {
@@ -110,8 +110,8 @@ export function registerSendCommand(cli: Goke) {
           fail(new Error('Kimaki bot is not running here. --send-at and --wait need a local bot.'))
         }
         const [{ sendInput }, { sendWithoutBot }] = await Promise.all([
-          import('../../send-command.ts'),
-          import('../../remote-send.ts'),
+          import('../../features/session/send-command.ts'),
+          import('../../features/session/remote-send.ts'),
         ])
         const parsed = sendInput.safeParse(input)
         if (!parsed.success) fail(new Error(parsed.error.issues.map((issue) => issue.message).join('; ')))

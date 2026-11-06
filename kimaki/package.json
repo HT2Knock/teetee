@@ -2,7 +2,7 @@
   "name": "kimaki",
   "version": "1.2.0",
   "description": "A collaborative agent orchestrator for OpenCode, inside Discord",
-  "repository": "https://github.com/remorses/kimaki",
+  "repository": "https://github.com/HT2Knock/teetee",
   "bin": {
     "kimaki": "./dist/cli.js"
   },

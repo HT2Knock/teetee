@@ -14,10 +14,14 @@ You can try the bot in the [Kimaki Discord Server](https://discord.gg/qz3hapKcMM
 ## Quick Start
 
 ```bash
-npx -y kimaki@latest
+git clone https://github.com/HT2Knock/teetee.git
+cd teetee
+bun install
+bun run build
+bun kimaki/src/cli.ts
 ```
 
-The CLI walks you through everything. Setup takes about 1 minute: you install the Kimaki bot to your Discord server with one click, and Kimaki opens an onboarding thread. There the agent asks which projects you want and creates a channel for each one.
+The CLI walks you through everything. It opens an onboarding thread in Discord. There the agent asks which projects you want and creates a channel for each one.
 
 Kimaki needs **OpenCode 2**. If no OpenCode is installed, Kimaki installs it for you with `curl -fsSL https://opencode.ai/v2/install | bash`. If you have OpenCode 1, install OpenCode 2 first with the same command.
 
@@ -54,7 +58,7 @@ I'm Tommy, the creator of Kimaki. I do **all of my development** through it: eve
 
 Kimaki gives you access to **every model OpenCode supports**: Anthropic, OpenAI, Google, and more. The best part: you can use your existing **Claude Pro/Max** and **ChatGPT/Codex** subscriptions instead of paying per token.
 
-Run `/login`, pick a provider, choose OAuth, and authenticate with your subscription. Logins are stored by OpenCode, so the same accounts work in Discord and in the OpenCode TUI. Kimaki adds the Claude Pro/Max login to OpenCode with a small plugin.
+Run `/login`, pick a provider, choose OAuth, and authenticate with your subscription. Logins are stored by OpenCode, so the same accounts work in Discord and in the OpenCode TUI.
 
 See [Models & Subscriptions](https://kimaki.dev/docs/getting-started/subscriptions) and [Model & Agent Switching](https://kimaki.dev/docs/getting-started/model-switching).
 
@@ -67,12 +71,10 @@ Kimaki adds a layer of orchestration features on top of OpenCode. The ones worth
 - **[btw](https://kimaki.dev/docs/features/btw)**: fork the current context into a new thread to ask a clarifying question in parallel while the agent keeps working. End a message with `. btw` or run `/btw`.
 - **[Worktrees](https://kimaki.dev/docs/features/worktrees)**: `/new-worktree` starts a session in an isolated Git worktree so it never touches your main checkout. In a thread it forks the current context. `/merge-worktree` merges the commits into a local branch with rebase or squash.
 - **[Diff viewer](https://kimaki.dev/docs/features/diff-viewer)**: `/diff` generates a shareable URL to review changes in a real diff viewer from your phone or browser.
-- **[Voice messages](https://kimaki.dev/docs/features/voice)**: record a voice note; Kimaki transcribes it using your project's file tree for accuracy.
-- **[Voice calls](https://kimaki.dev/docs/features/voice-calls)**: join the **Kimaki voice** channel and talk; GPT-Live answers on your ChatGPT subscription and a fast backend model starts and reads threads for you. The default voice is `cove`. Run `kimaki --voice juniper` once to change it: Kimaki saves it in SQLite, so restarts, reboots and autostart keep it. `--voice default` resets it.
 - **[Images](https://kimaki.dev/docs/features/images)**: attach images and files to your message. The agent can upload screenshots and other files to the thread.
 - **[OpenCode commands](https://kimaki.dev/docs/features/opencode-commands)**: your OpenCode commands and skills become Discord slash commands.
 - **[Shell commands](https://kimaki.dev/docs/features/shell-commands)**: prefix any message with `!` to run a shell command in the session folder.
-- **[Tunnels](https://kimaki.dev/docs/remote-access/tunnels)**: expose a local dev server to a public URL so you can view it on your phone or another machine.
+- **[Discord MCP](https://kimaki.dev/docs/reference/mcp)**: the bot exposes its Discord actions as an MCP server. OpenCode agents call `send`, `buttons`, `upload`, `session`, `project`, `routine`, `sleep`, `status` and `user_lookup` through Code Mode instead of a long CLI manual in the system prompt.
 - **[Quick agent switching](https://kimaki.dev/docs/getting-started/model-switching)**: instantly change model or system prompt with a `/<name>-agent` command.
 - **[Same sessions in the OpenCode TUI](https://kimaki.dev/docs/remote-access/opencode-server)**: Kimaki uses your OpenCode 2 background service, so every Kimaki session also opens in the OpenCode TUI. `/session-id` prints the command.
 
@@ -82,20 +84,15 @@ A message you send during an active run **interrupts** it. Kimaki cancels pendin
 
 ## Setup
 
-Run the CLI and follow the interactive prompts:
+Run the CLI from the repository root and follow the interactive prompts:
 
 ```bash
-npx -y kimaki@latest
+bun kimaki/src/cli.ts
 ```
 
-The setup wizard gives you two options:
+This fork is self-hosted only. Create your own Discord bot at [discord.com/developers](https://discord.com/developers/applications), then let the wizard install it in your server. Setup takes 5-10 minutes.
 
-- **Gateway mode (default)**: uses Kimaki's pre-built Discord bot. No Discord Developer Portal setup needed. Click one install link, authorize the bot in your server, and you're running. Recommended.
-- **Self-hosted mode**: create your own Discord bot at [discord.com/developers](https://discord.com/developers/applications). Takes 5-10 minutes. Useful if you want full control over the bot identity.
-
-Both modes work identically after setup. Keep the CLI running; it's the bridge between Discord and your machine.
-
-Agents installing Kimaki on a laptop or VPS should follow [Set up Kimaki from an agent](https://kimaki.dev/docs/guides/agent-machine-setup) instead of cloning this repo.
+Keep the CLI running. It is the bridge between Discord and your machine.
 
 ## Commands
 
@@ -141,7 +138,7 @@ The "Kimaki" role is the recommended approach for team access. Messages from use
 
 If sessions stop responding or fail to start, restart the OpenCode service with `opencode service restart`. Kimaki reconnects by itself.
 
-If the issue is with the bot itself (messages not picked up, threads not created), run `kimaki restart`. To update Kimaki, install the latest version with `bun add -g kimaki@latest`, then run `kimaki restart`. Run `kimaki logs` to find the log file.
+If the issue is with the bot itself (messages not picked up, threads not created), run `kimaki restart`. To update this fork, run `git pull`, `bun install` and `bun run build`, then run `kimaki restart`. Run `kimaki logs` to find the log file.
 
 See the full [Troubleshooting guide](https://kimaki.dev/docs/guides/troubleshooting).
 

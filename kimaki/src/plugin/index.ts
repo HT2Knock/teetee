@@ -6,10 +6,10 @@ import { Plugin, Skill } from '@opencode/plugin'
 import { Schema } from 'effect'
 
 import { readMcpState } from '../adapters/opencode/config-dir.ts'
-import { autostartBot } from '../autostart.ts'
-import { readBuiltinSkills } from '../builtin-skills.ts'
-import { fileEditTool, recordToolEdits } from '../file-edit-log.ts'
-import { turnContext } from '../system-prompt.ts'
+import { fileEditTool, recordToolEdits } from '../features/agent/file-edit-log.ts'
+import { turnContext } from '../features/session/system-prompt.ts'
+import { autostartBot } from '../platform/autostart.ts'
+import { readBuiltinSkills } from '../platform/builtin-skills.ts'
 
 const exec = promisify(execFile)
 

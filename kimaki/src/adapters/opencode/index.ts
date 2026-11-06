@@ -38,8 +38,8 @@ import {
   OpenCodeV1Error,
   OpenCodeVersionError,
   attempt,
-} from '../../errors.ts'
-import { createLogger } from '../../logger.ts'
+} from '../../platform/errors.ts'
+import { createLogger } from '../../platform/logger.ts'
 
 export { opencodeConfigDir } from './config-dir.ts'
 

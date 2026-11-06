@@ -12,13 +12,46 @@ import v8 from 'node:v8'
 import { Effect } from 'effect'
 import { z } from 'zod'
 
-import { parseButton } from '../../agent-ui.ts'
 import { fetchThread, oc, projectOf, type Bot } from '../../bot.ts'
-import { credential, loginCli } from '../../commands/login-commands.ts'
-import { setChannelAgent, setChannelModel, setGlobalModel, setVerbosity } from '../../commands/preference-commands.ts'
-import { channelWorktrees, manageWorktree, newWorktree, setAutoWorktrees } from '../../commands/worktree-commands.ts'
-import { envCredentials, installUrlFor, readSavedCredentials } from '../../credentials.ts'
-import { runResult } from '../../effect-bridge.ts'
+import { parseRows, type ThreadSessionRow } from '../../db/rows.ts'
+import { parseButton } from '../../features/agent-ui/agent-ui.ts'
+import { credential, loginCli } from '../../features/auth/commands/login-commands.ts'
+import { envCredentials, installUrlFor, readSavedCredentials } from '../../features/auth/credentials.ts'
+import {
+  addProjectChannel,
+  createApi,
+  defaultMachineName,
+  listProjects,
+  resolveGuildId,
+} from '../../features/projects/project.ts'
+import { createTask, deleteTask, editTask, listTasks, runTaskNow } from '../../features/routines/scheduler.ts'
+import { createSleep } from '../../features/routines/sleeps.ts'
+import { send } from '../../features/session/input.ts'
+import { abort, cancelQueuedPrompt, clearQueue, shell, upload } from '../../features/session/prompt.ts'
+import { checkSend, sendFields } from '../../features/session/send-command.ts'
+import { sessionCwd } from '../../features/session/session-context.ts'
+import {
+  allMessages,
+  allSessions,
+  readSessionMarkdown,
+  resolveSession,
+  type ResolvedSession,
+} from '../../features/session/session-events.ts'
+import { channelForDirectory, channelForSession, fork, resume } from '../../features/session/sessions.ts'
+import {
+  setChannelAgent,
+  setChannelModel,
+  setGlobalModel,
+  setVerbosity,
+} from '../../features/settings/commands/preference-commands.ts'
+import { parseModel } from '../../features/settings/model-choice.ts'
+import {
+  channelWorktrees,
+  manageWorktree,
+  newWorktree,
+  setAutoWorktrees,
+} from '../../features/worktrees/commands/worktree-commands.ts'
+import { runResult } from '../../platform/effect-bridge.ts'
 import {
   ConfigError,
   DbError,
@@ -27,26 +60,9 @@ import {
   OpenCodeError,
   OpenCodeUnavailableError,
   attempt,
-} from '../../errors.ts'
-import { send } from '../../input.ts'
-import { parseModel } from '../../model-choice.ts'
-import { addProjectChannel, createApi, defaultMachineName, listProjects, resolveGuildId } from '../../project.ts'
-import { abort, cancelQueuedPrompt, clearQueue, shell, upload } from '../../prompt.ts'
-import { parseRows, type ThreadSessionRow } from '../../rows.ts'
-import { RUNTIME_NAME } from '../../runtime.ts'
-import { createTask, deleteTask, editTask, listTasks, runTaskNow } from '../../scheduler.ts'
-import { checkSend, sendFields } from '../../send-command.ts'
-import { sessionCwd } from '../../session-context.ts'
-import {
-  allMessages,
-  allSessions,
-  readSessionMarkdown,
-  resolveSession,
-  type ResolvedSession,
-} from '../../session-events.ts'
-import { channelForDirectory, channelForSession, fork, resume } from '../../sessions.ts'
-import { createSleep } from '../../sleeps.ts'
-import { text } from '../../zod-fields.ts'
+} from '../../platform/errors.ts'
+import { RUNTIME_NAME } from '../../platform/runtime.ts'
+import { text } from '../../platform/zod-fields.ts'
 
 import { RESTART_EXIT_CODE } from './rpc.ts'
 
