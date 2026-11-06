@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 
 import { ConfigError, FilesystemError } from './errors.ts'
 
-export const BUILTIN_SKILL_IDS = ['kimaki-debug', 'kimaki-thread-ops'] as const
+export const BUILTIN_SKILL_IDS = ['kimaki-debug', 'kimaki-thread-ops', 'kimaki-sessions'] as const
 
 export type BuiltinSkillId = (typeof BUILTIN_SKILL_IDS)[number]
 
