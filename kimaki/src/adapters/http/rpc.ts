@@ -15,9 +15,9 @@ import http from 'node:http'
 import path from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-import { DEFAULT_LOCK_PORT } from '../../autostart.ts'
-import { BotNotRunningError, ConfigError, LockPortError, attempt } from '../../errors.ts'
-import { createLogger } from '../../logger.ts'
+import { DEFAULT_LOCK_PORT } from '../../platform/autostart.ts'
+import { BotNotRunningError, ConfigError, LockPortError, attempt } from '../../platform/errors.ts'
+import { createLogger } from '../../platform/logger.ts'
 
 import type { LockRouteInput, LockRouteName, LockRouteOutput } from './routes.ts'
 import { mcpScopeFor, type BotTokens, type McpScope } from './tokens.ts'

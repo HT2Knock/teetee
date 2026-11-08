@@ -1,8 +1,7 @@
 # Teetee migration plan
 
-Status: draft for confirmation. This plan supersedes
-`docs/kimaki-v2-rebuild-spec.md` for future work. The rebuild spec stays as
-history until Phase 1 deletes it.
+Status: updated 2026-11-07 after the feature-layout and MCP-first decisions.
+This plan supersedes `docs/kimaki-v2-rebuild-spec.md` for future work.
 
 ## 1. Decisions
 
@@ -14,26 +13,28 @@ history until Phase 1 deletes it.
 | Analytics | Remove Strada. |
 | Voice | Remove voice messages and voice calls. |
 | Anthropic plugin | Remove. `/login` stays. |
-| Order | Cleanup, then Effect, then cutover, then rename. |
-| Agent surface | MCP endpoint, not plugin tools and not a CLI manual. |
-| Client/server | Core with adapters. Two tokens: `control` and `notify`. |
+| Client reference | Copy the OpenCode app's session state and controls, not its layout. |
+| Session IA | Keep channels as projects and threads as sessions. No forum migration now. |
+| v1 scope | Minimal. Keep routines. Defer worktrees and btw. |
+| Order | Feature hygiene, then MCP-first, then v1 UI, then Effect, then cutover, then rename. |
+| Agent surface | Discord MCP through Code Mode, not a CLI manual in the system prompt. |
+| Client/server | Feature modules with adapters. Two tokens: `control` and `notify`. |
 | Remote sessions | Out of scope now. Future session router. |
 | Scheduler | Effect service over SQLite. No Temporal. |
 | Strictness | Zero warnings, zero cycles, zero dead code, no duplicate budget. |
 
 ## 2. Target architecture
 
-### 2.1 Core and adapters
+### 2.1 Features and adapters
 
 ```
-                      ┌──────────────────────────────────┐
-Discord ◀── adapter ──┤ core (Effect services)           ├── adapter ──▶ OpenCode HTTP
-                      │ sessions   scheduler   views      │
-CLI     ◀── RPC ──────┤ effects    registry    settings   │
-                      │                                  │
-MCP     ◀── HTTP ─────┤ ports: Discord, Opencode,         │
-                      │        Persistence, Notifier      │
-                      └──────────────────────────────────┘
+                    ┌─────────────────────────────────────────┐
+Discord ◀── adapter ┤ features: session, transcript, queue,    ├── adapter ──▶ OpenCode HTTP
+                    │ questions, permissions, agent-ui,        │
+CLI     ◀── RPC ────┤ projects, routines, worktrees, settings, │
+                    │ auth, mcp, commands                      │
+MCP     ◀── HTTP ───┤ shared: db, platform                     │
+                    └─────────────────────────────────────────┘
                                     ▲
                        OpenCode plugin (context + MCP registration)
 ```
@@ -41,28 +42,30 @@ MCP     ◀── HTTP ─────┤ ports: Discord, Opencode,         │
 Directory layout:
 
 ```
-src/core/            no discord.js, no HTTP, no process I/O
-src/adapters/discord/
-src/adapters/opencode/
-src/adapters/http/   local RPC and MCP
-src/adapters/cli/
-src/plugin/          runs inside OpenCode
-src/main.ts          Layer composition only
+src/features/<feature>/   one feature per folder: pure slice, routes, commands, tests
+src/adapters/discord/     the only module that imports discord.js
+src/adapters/opencode/    service discovery, client, event stream, plugin shim
+src/adapters/http/        local RPC and the shared token store
+src/adapters/cli/         the CLI client
+src/db/                   schema, migrations, queries
+src/platform/             runtime, logger, errors, autostart, skills
+src/plugin/               runs inside OpenCode
+src/test/                 harness, fixtures, replay
+src/main.ts               composition only
 ```
 
 ### 2.2 Rules
 
-1. The core imports no `discord.js`. The Discord adapter owns every Discord
-   type. Fallow enforces the boundary on `src/core/**`.
-2. Modules depend on service tags, never on another module's functions. This
-   removes the 27 cycles.
-3. `thread-reducer.ts` stays pure: `(view, event) => [view, effects]`. It moves
-   to `src/core/` unchanged in behavior.
-4. `errors.ts` keeps its `Data.TaggedError` classes. Functions return
+1. A feature imports `discord.js` only through `adapters/discord`. The adapter
+   owns every Discord type, and `boundary.test.ts` enforces the rule.
+2. `features/transcript/thread-reducer.ts` stays pure:
+   `(view, event) => [view, effects]`. `reducer-boundary.test.ts` keeps its
+   runtime closure free of Discord, SQLite and `node:fs`.
+3. `platform/errors.ts` keeps its `Data.TaggedError` classes. Functions return
    `Effect<T, AppError>`. Replace `attempt()` and `instanceof` checks with
-   `catchTag`.
-5. `main.ts` composes Layers and runs the program. Nothing else composes.
-6. The OpenCode plugin stays plain TypeScript. It must not import the core.
+   `catchTag` as each module is touched.
+4. `main.ts` composes Layers and runs the program. Nothing else composes.
+5. The OpenCode plugin stays plain TypeScript. It must not import a feature.
 
 ### 2.3 MCP surface and tokens
 
@@ -90,7 +93,7 @@ Two tokens:
 A `notify` token must never start a session, read transcripts, or run shell
 commands. Starting a session runs code on the bot host, so it stays local.
 
-MCP tools, first version:
+MCP tools, v1:
 
 | Tool | Scope | Purpose |
 | --- | --- | --- |
@@ -98,29 +101,30 @@ MCP tools, first version:
 | `upload` | control, notify | attach files to a thread |
 | `buttons` | control, notify | end a turn with action buttons |
 | `user_lookup` | control, notify | resolve a Discord user ID |
-| `project_list` | control | list project channels |
-| `session_list` | control | list sessions and status |
-| `session_read` | control | read a session as markdown |
-| `session_archive` | control | archive a session |
+| `session` | control | list, read, fork, title, archive, abort |
+| `project` | control | list and add project channels |
+| `routine` | control | list, create and delete routines |
+| `status` | control | bot and OpenCode health |
 | `sleep` | control | wake this session later |
-| `routine_list` | control | list scheduled routines |
 
-Code mode exposes these as `tools.teetee.<tool>`, so the agent can batch
+Code mode exposes these as `tools.discord.<tool>`, so the agent can batch
 several calls in one `execute` block.
 
 ### 2.4 Agent instructions: prompt to tools
 
-`system-prompt.ts` is 849 lines and most of it is a CLI manual. Phase 5
-replaces that with the MCP tools above.
+`features/session/system-prompt.ts` was 268 lines and most of it was a CLI manual.
+Phase 5 replaced the commands with the MCP tools above.
 
 - Keep in the prompt: identity, channel and thread IDs, output style, commit
   trailer, permission rules, and the "you are in Discord" framing.
+- Add one rule: the assistant text is already posted to Discord, so the MCP is
+  only for actions outside the current reply.
 - Move to tool schemas: every command name, flag, quoting rule, and ordering
   rule.
 - The CLI stays for humans, scripts, and CI. The agent may still call it, but
-  the prompt does not document it at length.
+  the prompt does not document it.
 
-Target: the prompt drops from about 849 to about 150 lines.
+Result: 171 file lines, about 110 lines of prompt text. Keep it under 120.
 
 ### 2.5 Scheduler
 
@@ -144,7 +148,7 @@ to `kimaki.db`. Revisit only if multi-machine workers become a requirement.
 | `threads` | previous `ThreadView` per thread, input to the reducer |
 | `verbosity` | per-channel display mode |
 
-It has 68 `getState`/`setState` calls and one subscriber (`agent-ui.ts`). A
+It has 68 `getState`/`setState` calls and one subscriber (`features/agent-ui/agent-ui.ts`). A
 `ThreadRegistry` service with a `Ref` and an explicit listener list does the
 same job without the dependency.
 
@@ -157,7 +161,7 @@ unchanged, including columns of removed features.
 
 Done in Phase 2 as a vertical slice: the connection, the error type and the
 Layer are Effect's, and the queries still return `T | Error` promises until
-Phase 4 turns each call into `yield* sql\`...\``. `migrations.ts` stays on
+Phase 4 turns each call into `yield* sql\`...\``. `db/migrations.ts` stays on
 `bun:sqlite` because the V1 import needs `ATTACH DATABASE`.
 
 ## 3. Toolchain and gates
@@ -183,8 +187,8 @@ Hard gates, all blocking:
 - Dead files and unused exports: 0.
 - Clone groups: 0 above the configured threshold.
 - No function above 25 cognitive complexity.
-- Core purity: `src/core/**` may not import `discord.js`, `src/adapters/**`, or
-  `node:http`.
+- Feature purity: a feature reaches `discord.js` only through
+  `src/adapters/discord`, and no feature imports `src/plugin`.
 - CLI startup: `bun src/cli.ts --help` under 120 ms.
 
 Live after Phase 0: type check, zero-warning lint, format check, dead code, and
@@ -218,22 +222,22 @@ Gate changes, done:
 
 ### 4.1 Hosted gateway
 
-- 156 references in 19 files, including `credentials.ts`, `onboarding.ts`,
+- 156 references in 19 files, including `features/auth/credentials.ts`, `features/projects/onboarding.ts`,
   `cli/bot.ts` (`--gateway`, `--gateway-callback-url`), and `harness.ts`.
 - Delete `gateway-replay.e2e.test.ts` (116 lines).
 - Delete `docs/gateway-architecture.md` and the gateway section of `AGENTS.md`.
 - Remove `KIMAKI_GATEWAY_APP_ID`, `KIMAKI_GATEWAY_PROXY_URL`, and
   `KIMAKI_WEBSITE_URL`.
 - Keep the `bot_tokens` gateway columns. Write `self_hosted` only.
-- Keep `remote-send.ts`: it is a Discord envelope protocol, not gateway code.
+- Keep `features/session/remote-send.ts`: it is a Discord envelope protocol, not gateway code.
 
 ### 4.2 Strada analytics
 
 - Delete `analytics.ts` (245 lines), `analytics.test.ts`, and
   `analytics.e2e.test.ts`.
 - Remove `@strada.sh/sdk` and the four `KIMAKI_STRADA_*` variables.
-- Remove `Analytics` from `bot.ts`, `main.ts`, `event-loop.ts`, `input.ts`,
-  `onboarding.ts`, `project.ts`, `cli/project.ts`, `lock-routes.ts`, and
+- Remove `Analytics` from `bot.ts`, `main.ts`, `features/session/event-loop.ts`, `features/session/input.ts`,
+  `features/projects/onboarding.ts`, `features/projects/project.ts`, `cli/project.ts`, `lock-routes.ts`, and
   `harness.ts`.
 - Delete `docs/strada-product-analytics.md`.
 - Keep token totals in the reducer. They feed the footer.
@@ -241,7 +245,7 @@ Gate changes, done:
 ### 4.3 Anthropic OAuth plugin
 
 - Delete `src/plugin/anthropic/` (271 lines).
-- Remove its entry from `installPluginShim` and from `plugin.e2e.test.ts`.
+- Remove its entry from `installPluginShim` and from `plugin/plugin.e2e.test.ts`.
 - `/login` stays: it uses the OpenCode integration API.
 
 ### 4.4 Voice
@@ -252,9 +256,9 @@ Gate changes, done:
   `voice-call.e2e.test.ts`, and `voice-openai.e2e.test.ts`.
 - Remove `@discordjs/voice`, `werift`, `opusscript`, `prism-media`, and
   `eventsource-parser`.
-- Remove voice wiring from `main.ts`, `ingress.ts`, `bot.ts`, `sessions.ts`,
-  `prompt.ts`, `system-prompt.ts`, `cli/*`, `project.ts`, `rows.ts`,
-  `routes.ts`, `schema-sql.ts`, `event-loop.ts`, and `harness.ts`.
+- Remove voice wiring from `main.ts`, `features/session/ingress.ts`, `bot.ts`, `features/session/sessions.ts`,
+  `features/session/prompt.ts`, `features/session/system-prompt.ts`, `cli/*`, `features/projects/project.ts`, `db/rows.ts`,
+  `features/session/routes.ts`, `db/schema-sql.ts`, `features/session/event-loop.ts`, and `harness.ts`.
 - Delete the voice channel row and the Discord voice channel.
 - `scripts/bundle.ts` loses its whole `external` list. Every entry exists only
   because of voice.
@@ -308,20 +312,20 @@ Status: done. See the Phase 2 commits on `main`.
 
 - `effect@4.1.1`, with a root override so the OpenCode plugin's pinned
   `4.0.1` does not create two SchemaAST types.
-- `zustand` removed. `store.ts` is an observable with the same
+- `zustand` removed. `features/settings/store.ts` is an observable with the same
   `getState`/`setState`/`subscribe` shape, now the `ThreadRegistry` service
   over an Effect `Ref`. Call sites read it synchronously, so Phase 4 can move
   them to `Ref` effects one slice at a time.
-- `Settings` and `Clock` are service tags (`settings.ts`, `clock.ts`).
+- `Settings` and `Clock` are service tags (`features/settings/settings.ts`, `features/settings/clock.ts`).
   `main.ts` provides them in the app Layer; a test replaces them with
-  `Layer.succeed` (`services.test.ts`).
+  `Layer.succeed` (`features/settings/services.test.ts`).
 - `Database` runs every query on `@effect/sql-sqlite-bun` 4.1.1
-  (`db-client.ts`). Its peer range is `effect: ^4.1.1`, and the override makes
+  (`db/db-client.ts`). Its peer range is `effect: ^4.1.1`, and the override makes
   that the only effect in the program.
   - The handle keeps the promise shape (`db\`...\``, `db.unsafe`,
     `db.begin`, `db(list)`), so every production query keeps its call site and
     its `T | Error` return until Phase 4.
-  - `bun:sqlite` stays for `migrations.ts` only: the V1 import is
+  - `bun:sqlite` stays for `db/migrations.ts` only: the V1 import is
     `ATTACH DATABASE ... ?mode=ro` plus DDL, which the query client does not
     offer.
 - `main.ts` is one `Effect.gen` program. `appLayer()` composes settings,
@@ -374,9 +378,26 @@ Exit met: MCP contract and token-scope tests pass, and the CLI answers three
 commands while `kimaki.db` contains bytes that are not a database.
 Suite: 169 tests across 46 files.
 
+### Phase 3.5: feature hygiene
+
+Status: in progress on `refactor/feature-layout`.
+
+- Move every module into `src/features/<feature>/`, `src/adapters/`, `src/db/`,
+  `src/platform/`, `src/plugin/` or `src/test/`.
+- Keep the move behavior-preserving. One commit per feature. `bun run verify`
+  and the full suite stay green.
+- Update `README.md`, `AGENTS.md` and this plan to match the tree.
+- Delete the stale V1 document. Move the blog draft to `docs/blog/` and the
+  sample routine to `examples/routines/`.
+
+Exit met when no source file sits directly in `src/`, the docs match the tree,
+and the full suite passes.
+
 ### Phase 4: control flow
 
-Status: in progress.
+Status: paused after the sixth slice. Resume after Phase 5. Convert only the
+modules that a feature change touches, so the UI and MCP work do not add
+promise-shaped code to modules that will be converted twice.
 
 - Convert `T | Error` returns to `Effect` with tagged failures.
 - Replace `instanceof` with `catchTag`. Delete `attempt()`.
@@ -384,14 +405,14 @@ Status: in progress.
 - Delete `bot.ts`.
 
 First slice, done: the database client has an Effect-native `query`
-(`DbQuery`), and `project.ts` returns `Effect<T, DbError | DiscordError |
+(`DbQuery`), and `features/projects/project.ts` returns `Effect<T, DbError | DiscordError |
 ConfigError>` end to end. Callers that still return `T | Error` go through
-`effect-bridge.ts` `runResult`; the bridge is deleted when the last caller
-converts. `db.test.ts` covers the tagged `DbError`.
+`platform/effect-bridge.ts` `runResult`; the bridge is deleted when the last caller
+converts. `db/db.test.ts` covers the tagged `DbError`.
 
-Second slice, done: the sleep path is Effect end to end. `sleeps.ts`
-(`createSleep`, `wake`, `runDueWakes`), `sleep-store.ts` (`cancelSleep`) and
-`prompt.ts` `prompt()` return `Effect` with tagged failures, and every query
+Second slice, done: the sleep path is Effect end to end. `features/routines/sleeps.ts`
+(`createSleep`, `wake`, `runDueWakes`), `features/routines/sleep-store.ts` (`cancelSleep`) and
+`features/session/prompt.ts` `prompt()` return `Effect` with tagged failures, and every query
 yields `bot.query`. The per-session write/cancel/wake lock is now an Effect
 `Semaphore` (`SleepLock` takes an `Effect` instead of a `Promise`), so the lock
 cannot be escaped by a failure. `bot.ts` gains `ocEffect` and `fetchThread`
@@ -404,7 +425,7 @@ Third slice, done: the rest of the prompt run-control path is Effect.
 `cancelPendingUi`, `interrupt`, `steer`, `cancelQueuedPrompt`, `clearQueue`,
 `abort`, `requeueEdited`, `killShells`, `idleSession`, `undo` and `redo` return
 `Effect` and fail with tagged errors; `/abort` reads its sleep cancellation as
-a `DbError` it logs instead of a value it tests. `prompt.ts` keeps two async
+a `DbError` it logs instead of a value it tests. `features/session/prompt.ts` keeps two async
 functions on purpose: `shell` is fire and forget (the request returns when the
 command ends, output arrives as events) and `upload` waits on the effects
 runner, so both move with the `Queue` slice.
@@ -412,37 +433,58 @@ runner, so both move with the `Queue` slice.
 Fourth slice, done: the shared lookups in `bot.ts` return `Effect`. `projectOf`,
 `textChannel`, `sessionDirectory` and `globalModel` report a failure in the
 error channel instead of as a value, which removes the `instanceof` check at
-every caller. `sessions.ts`, `session-context.ts`, the slash commands and the
+every caller. `features/session/sessions.ts`, `features/session/session-context.ts`, the slash commands and the
 RPC routes are still promise-shaped and bridge these with `runResult`.
 
-Fifth slice, done: `session-context.ts` returns `Effect`. The session facts
+Fifth slice, done: `features/session/session-context.ts` returns `Effect`. The session facts
 (`threadProject`, `sessionCwd`, `bindThread`) and the agent/model switches
 (`catalogReady`, `primaryAgents`, `agentSelection`, `switchAgent`,
 `switchModel`, `putInstructions`) fail with tagged errors, and `PluginWait` is
 an Effect, so the polling loop yields `Effect.sleep` instead of a promise
-timer. `effect-bridge.ts` gains `fromResult`, the inverse of `runResult`, for
+timer. `platform/effect-bridge.ts` gains `fromResult`, the inverse of `runResult`, for
 the helpers that still report a failure as a value (`resolveWorkingDirectory`,
 `eventLoop.bind`). Its callers are promise-shaped and bridge with `runResult`.
 
-Sixth slice, done: `sessions.ts` returns `Effect`. `adoptSession`, `resume`,
+Sixth slice, done: `features/session/sessions.ts` returns `Effect`. `adoptSession`, `resume`,
 `fork`, `forkBtw`, `channelForDirectory` and `channelForSession` fail with
 tagged errors, the `thread_sessions` swap runs in `sql.withTransaction` through
 `bot.query`, and a failed adoption deletes the new thread with `tapError`
 before any old binding is touched. The Discord thread calls go through a local
-`discord()` helper, the same shape `project.ts` uses.
+`discord()` helper, the same shape `features/projects/project.ts` uses.
 
-Exit: zero cycles, core imports no `discord.js`, no `instanceof Error` in
-production code.
+Exit: zero cycles, every feature imports Discord only through
+`adapters/discord`, and no converted module uses `instanceof Error`.
 
-### Phase 5: agent surface
+### Phase 5: MCP-first agent surface
 
-- Move the agent's workflows onto the MCP tools that Phase 3 registered.
-- Shrink the system prompt to about 150 lines.
-- Add MCP workflow tests that assert Discord messages, not internal state, for
-  each workflow the prompt no longer documents.
+- Rename the MCP server to `discord`, so Code Mode reads `tools.discord.*`.
+- Expand the tools to the actions the agent uses today: `send`, `buttons`,
+  `upload`, `session` (list, read, fork, title, archive, abort), `project`
+  (list, add), `routine` (list, create, delete), `sleep`, `status` and
+  `user_lookup`.
+- Shrink `features/session/system-prompt.ts` to identity, Discord IDs, output
+  style, the commit trailer and one rule: the assistant text is already posted,
+  so use the MCP only for actions outside the current reply.
+- Remove or rewrite the three CLI skills. The tool descriptions carry the
+  procedures. Keep the CLI for humans and scripts.
+- Add one e2e test where the agent calls `tools.discord.send` through Code Mode
+  and the Discord message is asserted. This is the proof that the prompt no
+  longer has to teach the CLI.
 
-Exit: the agent completes the current workflows through MCP with no CLI
-manual in the prompt.
+Exit: the agent completes the current workflows through MCP with no CLI manual
+in the prompt, and the Code Mode e2e test passes.
+
+### Phase 5.5: minimal v1 UI
+
+- A per-turn changed-files line from `session.step.ended.files`.
+- A per-message `Revert to here` action.
+- A `/sessions` list with status.
+- Activity chips for subagents and shells, with stop.
+- A review summary with a patch file or a paginated diff.
+- Todos only after `experimental.todo` is enabled.
+
+Exit: each slice has a Discord-message e2e test. Worktrees and btw receive no
+new work in v1.
 
 ### Phase 6: self-host cutover
 
