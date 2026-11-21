@@ -6,10 +6,10 @@ import { Plugin, Skill } from '@opencode/plugin'
 import { Schema } from 'effect'
 
 import { readMcpState } from '../adapters/opencode/config-dir.ts'
-import { autostartBot } from '../autostart.ts'
-import { readBuiltinSkills } from '../builtin-skills.ts'
-import { fileEditTool, recordToolEdits } from '../file-edit-log.ts'
-import { turnContext } from '../system-prompt.ts'
+import { fileEditTool, recordToolEdits } from '../features/agent/file-edit-log.ts'
+import { turnContext } from '../features/session/system-prompt.ts'
+import { autostartBot } from '../platform/autostart.ts'
+import { readBuiltinSkills } from '../platform/builtin-skills.ts'
 
 const exec = promisify(execFile)
 
@@ -40,10 +40,13 @@ export default Plugin.define({
     if (state) {
       await ctx.mcp
         .transform((editor) => {
+          // The server was called teetee before the MCP-first rename. Remove
+          // that entry so an upgrade does not leave a duplicate server.
+          if (editor.get('teetee')) editor.remove('teetee')
           // A new location inherits the entry from the global config; setting
           // the same value again would reload that location mid-turn.
-          if (editor.get('teetee')) return
-          editor.set('teetee', {
+          if (editor.get('discord')) return
+          editor.set('discord', {
             type: 'remote',
             url: state.url,
             headers: { authorization: `Bearer ${state.token}` },

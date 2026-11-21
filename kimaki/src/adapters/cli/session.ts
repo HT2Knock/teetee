@@ -10,16 +10,16 @@ import { promisify } from 'node:util'
 
 import { wrapJsonSchema, type Goke } from 'goke'
 
-import { parseDuration } from '../../duration.ts'
-import { OpenCodeError } from '../../errors.ts'
-import { editorsForFile, loadFileEditEvents } from '../../file-edit-log.ts'
+import { editorsForFile, loadFileEditEvents } from '../../features/agent/file-edit-log.ts'
 import {
   allMessages,
   readSessionMarkdown,
   sessionEventsFile,
   syncTranscripts,
   transcriptsDir,
-} from '../../session-events.ts'
+} from '../../features/session/session-events.ts'
+import { parseDuration } from '../../platform/duration.ts'
+import { OpenCodeError } from '../../platform/errors.ts'
 import { callBot } from '../http/rpc.ts'
 
 import {

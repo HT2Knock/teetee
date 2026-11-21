@@ -8,10 +8,10 @@ import fs from 'node:fs'
 
 import type { Goke } from 'goke'
 
-import { distCliEntry, writeAutostartScript } from '../../autostart.ts'
-import { BUILTIN_SKILL_IDS, parseDisabledSkills } from '../../builtin-skills.ts'
-import { createLogger, setLogFile } from '../../logger.ts'
-import { runtimeExecutable } from '../../runtime.ts'
+import { distCliEntry, writeAutostartScript } from '../../platform/autostart.ts'
+import { BUILTIN_SKILL_IDS, parseDisabledSkills } from '../../platform/builtin-skills.ts'
+import { createLogger, setLogFile } from '../../platform/logger.ts'
+import { runtimeExecutable } from '../../platform/runtime.ts'
 import { DEFAULT_LOCK_PORT, RESTART_EXIT_CODE, startLockServer } from '../http/rpc.ts'
 
 import { DATA_DIR_HELP, dataDirOrDefault, fail } from './shared.ts'
@@ -79,11 +79,11 @@ export function registerStartCommand(cli: Goke) {
         { defaultMachineName },
       ] = await Promise.all([
         import('../../main.ts'),
-        import('../../onboarding.ts'),
-        import('../../credentials.ts'),
-        import('../../db.ts'),
+        import('../../features/projects/onboarding.ts'),
+        import('../../features/auth/credentials.ts'),
+        import('../../db/db.ts'),
         import('../opencode/index.ts'),
-        import('../../project.ts'),
+        import('../../features/projects/project.ts'),
       ])
       // Non-TTY hosts get the failure as an `error` event too (programmatic onboarding).
       // Explicit type: TS narrows after a `never` call only for annotated consts.
